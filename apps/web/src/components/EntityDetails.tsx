@@ -266,8 +266,11 @@ export function EntityDetails({
   detail,
   onSelect,
   onClose,
+  back,
 }: {
   detail: Detail;
+  /** Return to the list this record was picked from, when there is one. */
+  back?: { label: string; onBack: () => void };
   /** Open a connected record; the map follows. */
   onSelect: (selection: Selection) => void;
   onClose: () => void;
@@ -275,7 +278,14 @@ export function EntityDetails({
   return (
     <div aria-live="polite">
       <div className="flex h-8 items-center justify-between px-3">
-        <MicroLabel>Selected</MicroLabel>
+        {back ? (
+          <button type="button" className="flex items-center gap-1 text-[11px] text-accent2 hover:underline" onClick={back.onBack}>
+            <Icon name="chevronLeft" size={12} />
+            {back.label}
+          </button>
+        ) : (
+          <MicroLabel>Selected</MicroLabel>
+        )}
         <button type="button" aria-label="Close details" className="text-mute hover:text-ink" onClick={onClose}>
           <Icon name="close" size={14} />
         </button>

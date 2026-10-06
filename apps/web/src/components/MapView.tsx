@@ -17,6 +17,7 @@ export function MapView({
   data,
   enabled,
   onSelect,
+  onSelectMany,
   onCamera,
 }: {
   /** Filled once the map exists, for the camera moves the rest of the app makes. */
@@ -27,12 +28,14 @@ export function MapView({
   data: Record<string, FeatureCollection<Point>>;
   enabled: ReadonlySet<string>;
   onSelect: (layerId: string, properties: Record<string, unknown>) => void;
+  /** Several records on one spot were clicked. */
+  onSelectMany: (layerId: string, records: Record<string, unknown>[]) => void;
   onCamera: () => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   // The map is created once; these keep its listeners pointed at the latest props.
-  const latest = useRef({ onSelect, onCamera, data, enabled, basemap });
-  latest.current = { onSelect, onCamera, data, enabled, basemap };
+  const latest = useRef({ onSelect, onSelectMany, onCamera, data, enabled, basemap });
+  latest.current = { onSelect, onSelectMany, onCamera, data, enabled, basemap };
   const applied = useRef(basemap);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ export function MapView({
           color: layer.color,
           shape: layer.shape,
           onSelect: (properties) => latest.current.onSelect(layer.id, properties),
+          onSelectMany: (records) => latest.current.onSelectMany(layer.id, records),
         });
       adapter.current = map;
       // The style may have been changed while the first one was still loading.

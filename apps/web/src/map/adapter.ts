@@ -11,6 +11,11 @@ export interface PointLayerSpec {
   shape: Shape;
   /** Called with the properties of the clicked marker. */
   onSelect: (properties: Record<string, unknown>) => void;
+  /**
+   * Called when a click lands on records that share one spot and cannot be told
+   * apart by zooming, with the properties of each.
+   */
+  onSelectMany: (records: Record<string, unknown>[]) => void;
 }
 
 export interface HeatLayerSpec {

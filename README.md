@@ -66,6 +66,13 @@ published; the rest are kept as drafts with a pending review item. Addresses are
 placed through the public Nominatim geocoder (one request a second, cached in
 `data/geocode-cache.json`), and a match is kept only when it carries the building or
 street name. Add `--replace-sample` to remove the synthetic sample at the same time.
+
+A dataset with different column headings is read through `--mapping file.json`, a
+JSON object from field names (`name`, `type`, `status`, `industry`, `founded_year`,
+`premise`, `latitude`, `longitude`, `website` and the others in `DEFAULT_COLUMNS`
+in `importer.py`) to that dataset's headings. Only `name` is required. A dataset
+with no verification column loads as drafts unless `--publish-all` is given. An
+organisation already on record from another source is reported and not loaded again.
 `pnpm db:seed` refuses to run on a database that holds real records.
 
 ```sh

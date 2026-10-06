@@ -23,6 +23,7 @@ export interface OfficeProperties extends Filterable {
   types: OrgType[];
   sector: string | null;
   is_hq: boolean;
+  precision: 'address' | 'area' | 'city';
   country: string;
   valid_from: string | null;
 }

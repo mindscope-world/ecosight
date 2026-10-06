@@ -66,7 +66,7 @@ def conn():
             "insert into organisation (name, slug, types, status) values ('Sample Pay Rounds', 'sample-pay-rounds', '{startup}', 'published') returning id"
         )
         org_id = cur.fetchone()[0]
-        payload = {"import": "test_rounds_dataset", "record": 901, "row": {"Funding details": NOTE, "Funding source URL": "https://rounds.test/a; https://rounds.test/b"}}
+        payload = {"import": "test_rounds_dataset", "record": 901, "fields": {"funding_details": NOTE, "source_funding": "https://rounds.test/a; https://rounds.test/b"}}
         cur.execute(
             "insert into review_item (record_type, record_id, payload, method, status) values ('organisation', %s, %s, 'manual', 'approved')",
             (org_id, json.dumps(payload)),
@@ -121,3 +121,23 @@ def test_loading_twice_leaves_one_copy(conn, tmp_path):
             "select s.source_url from field_source s join organisation g on g.id = s.record_id where g.slug = 'example-ventures'"
         )
         assert cur.fetchall() == [("https://rounds.test/a",)]
+
+
+def test_an_organisation_already_on_record_is_not_loaded_again(conn):
+    from atlas_workers.importer import apply as load_orgs
+    from atlas_workers.importer import match_existing, parse_row
+
+    row = {"Startup / organisation": "Sample Pay Rounds (duplicate listing)", "Verification status": "verified", "Record #": "1"}
+    record = parse_row(row)
+    match_existing(conn, [record], "another_dataset")
+    assert record.existing == "Sample Pay Rounds"
+
+    load_orgs(conn, [record], "another_dataset", "2026-10-06", replace_sample=False)
+    with conn.cursor() as cur:
+        cur.execute("select count(*) from organisation where slug = 'sample-pay-rounds'")
+        assert cur.fetchone()[0] == 1
+
+    # Seen from its own import, the same record is not a duplicate of itself.
+    own = parse_row(row)
+    match_existing(conn, [own], "test_rounds_dataset")
+    assert own.existing is None

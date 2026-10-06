@@ -29,6 +29,7 @@ import { LayerControl, MapLegend } from './components/LayerControl';
 import { ActivityPanel, CityList, EcosystemOverview, TopSectors, type SectorShare } from './components/LeftPanel';
 import { MapView } from './components/MapView';
 import { SearchCommand, type SearchPick } from './components/SearchCommand';
+import { StackList, type Stack } from './components/StackList';
 import { StatusBar } from './components/StatusBar';
 import { TopNavigation } from './components/TopNavigation';
 import { Icon, MicroLabel, useMediaQuery, useStored } from './components/ui';
@@ -134,6 +135,8 @@ export function App() {
   const [selected, setSelected] = useState<Selection | undefined>(initial.selected);
   const [detail, setDetail] = useState<Detail>({ status: 'loading' });
   const [camera, setCamera] = useState(0);
+  // The list a marker opened when it stood for several records on one spot.
+  const [stack, setStack] = useState<Stack | null>(null);
 
   const [leftOpen, setLeftOpen] = useStored('ecosight-left', true);
   const [rightOpen, setRightOpen] = useStored('ecosight-right', true);
@@ -262,6 +265,7 @@ export function App() {
   // Following a connection: open the record and move the map to it once it is known.
   const follow = useCallback(
     (selection: Selection) => {
+      setStack(null);
       select(selection);
       const lookup =
         selection.kind === 'event'
@@ -275,6 +279,28 @@ export function App() {
     },
     [select, flyTo],
   );
+
+  function openStack(layerId: string, records: Record<string, unknown>[]) {
+    const layer = POINT_LAYERS.find((entry) => entry.id === layerId);
+    if (!layer) return;
+    const kind = layerId === 'events' ? 'event' : 'org';
+    const items = new Map<string, Stack['items'][number]>();
+    for (const record of records) {
+      const id = record[kind === 'event' ? 'event_id' : 'org_id'];
+      if (typeof id !== 'string' || items.has(id)) continue;
+      const meta = kind === 'event' ? record.venue : [record.sector, record.stage].filter(Boolean).join(' · ');
+      items.set(id, { selection: { kind, id }, name: String(record.name ?? ''), meta: String(meta ?? '') });
+    }
+    setStack({
+      layer,
+      items: [...items.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      cityLevel: records.every((record) => record.precision === 'city'),
+    });
+    setSelected(undefined);
+    setRightOpen(true);
+    setSheet(null);
+    setFiltersOpen(false);
+  }
 
   const toggleLayer = useCallback((id: string, on: boolean) => {
     setEnabled((current) => {
@@ -299,6 +325,7 @@ export function App() {
 
   function pickSearch(pick: SearchPick) {
     setSearchOpen(false);
+    setStack(null);
     if (pick.kind === 'sector') {
       setFilters((current) =>
         current.sectors.includes(pick.sector) ? current : { ...current, sectors: [...current.sectors, pick.sector] },
@@ -370,8 +397,18 @@ export function App() {
   ) : (
     <p className="p-3 text-mute">{failed ? 'The data could not be loaded.' : 'Loading…'}</p>
   );
-  const details = selected && (
-    <EntityDetails detail={detail} onSelect={follow} onClose={() => setSelected(undefined)} />
+  const details = selected ? (
+    <EntityDetails
+      detail={detail}
+      onSelect={follow}
+      onClose={() => {
+        setSelected(undefined);
+        setStack(null);
+      }}
+      back={stack ? { label: `${stack.items.length} at this location`, onBack: () => setSelected(undefined) } : undefined}
+    />
+  ) : (
+    stack && <StackList stack={stack} onSelect={select} onClose={() => setStack(null)} />
   );
   const layerControl = (floating: boolean) => (
     <LayerControl
@@ -422,8 +459,11 @@ export function App() {
             enabled={enabled}
             onSelect={(layerId, properties) => {
               const id = layerId === 'events' ? properties.event_id : properties.org_id;
-              if (typeof id === 'string') select({ kind: layerId === 'events' ? 'event' : 'org', id });
+              if (typeof id !== 'string') return;
+              setStack(null);
+              select({ kind: layerId === 'events' ? 'event' : 'org', id });
             }}
+            onSelectMany={openStack}
             onCamera={() => setCamera((tick) => tick + 1)}
           />
           {desktop && layerControl(true)}
@@ -455,6 +495,7 @@ export function App() {
                       setSheet(sheet === id ? null : id);
                       setFiltersOpen(false);
                       setSelected(undefined);
+                      setStack(null);
                     }}
                   >
                     <Icon name={icon} size={14} />
@@ -466,7 +507,7 @@ export function App() {
           )}
         </main>
         {desktop && (
-          <SidePanel side="right" open={rightOpen} onToggle={() => setRightOpen(!rightOpen)} label={selected ? 'Selected' : 'Intelligence'}>
+          <SidePanel side="right" open={rightOpen} onToggle={() => setRightOpen(!rightOpen)} label={selected ? 'Selected' : stack ? 'At this location' : 'Intelligence'}>
             {details || insights}
           </SidePanel>
         )}
@@ -480,18 +521,18 @@ export function App() {
             {filterPanel}
           </div>
         )}
-        {!desktop && !filtersOpen && selected && (
+        {!desktop && !filtersOpen && (selected || stack) && (
           <div className="absolute inset-x-0 bottom-0 z-30 max-h-[62%] overflow-y-auto rounded-t-lg border-t border-line bg-panel shadow-2xl shadow-black">
             {details}
           </div>
         )}
-        {!desktop && !filtersOpen && !selected && sheet === 'overview' && (
+        {!desktop && !filtersOpen && !selected && !stack && sheet === 'overview' && (
           <BottomSheet title="Ecosystem" onClose={() => setSheet(null)}>{leftContent}</BottomSheet>
         )}
-        {!desktop && !filtersOpen && !selected && sheet === 'layers' && (
+        {!desktop && !filtersOpen && !selected && !stack && sheet === 'layers' && (
           <BottomSheet title="Map layers" onClose={() => setSheet(null)}>{layerControl(false)}</BottomSheet>
         )}
-        {!desktop && !filtersOpen && !selected && sheet === 'insights' && (
+        {!desktop && !filtersOpen && !selected && !stack && sheet === 'insights' && (
           <BottomSheet title="Intelligence" onClose={() => setSheet(null)}>{insights}</BottomSheet>
         )}
       </div>
