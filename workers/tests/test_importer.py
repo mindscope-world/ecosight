@@ -288,3 +288,82 @@ def test_cleaning_services_are_not_clean_technology():
     assert read_sectors("Technology-enabled domestic cleaning services") == []
     assert read_sectors("Clean cooking / energy hardware") == ["cleantech"]
     assert read_sectors("Clean technology; environmental services") == ["cleantech"]
+
+
+def test_descriptive_categories_are_read_as_types():
+    from atlas_workers.importer import read_types
+
+    assert read_types("VC / impact investor") == (["fund"], [])
+    assert read_types("Impact investor (family-backed impact fund)") == (["fund"], [])
+    assert read_types("VC (seed fund and accelerator)") == (["fund", "accelerator"], [])
+    assert read_types("Venture capital / angel-network manager / accelerator") == (["fund", "angel_network", "accelerator"], [])
+    assert read_types("innovation hub and accelerator") == (["innovation_hub", "accelerator"], [])
+    assert read_types("Climate innovation accelerator and incubator") == (["accelerator", "incubator"], [])
+    assert read_types("venture capital / venture studio / accelerator") == (["fund", "accelerator"], [])
+    assert read_types("Accelerator / entrepreneur support organization") == (["accelerator"], [])
+    assert read_types("Law firm") == ([], ["law firm"])
+
+
+def test_sources_cell_and_own_site():
+    from atlas_workers.importer import own_site, read_sources
+
+    cell = "Listing — https://www.linkedin.com/company/sample || Sample Capital: Home — https://www.samplecapital.com/team/ || Again — https://www.samplecapital.com/team/"
+    urls = read_sources(cell)
+    assert urls == ["https://www.linkedin.com/company/sample", "https://www.samplecapital.com/team/"]
+    assert own_site("Sample Capital", urls) == ("https://samplecapital.com/", "samplecapital.com")
+    assert own_site("Other Fund", urls) == (None, None)
+    # A word as common as "Africa" does not identify a site.
+    assert own_site("Sample Africa", ["https://vban.africa/"]) == (None, None)
+
+
+def test_an_investor_row_under_other_headings():
+    columns = {"name": "name", "type": "category", "premise": "exact_location", "funding_status": "funding_size",
+               "founders": "key_people", "sources": "sources", "confidence": "confidence"}
+    record = parse_row({
+        "name": "Sample Capital", "category": "VC (seed fund and accelerator)",
+        "exact_location": "Not publicly disclosed; the official website publishes only a London address",
+        "funding_size": "US$58 million across two seed funds", "confidence": "Medium",
+        "key_people": "Jane Doe — Co-founder & Managing Partner | John Roe — Partner, Nairobi",
+        "sources": "Home — https://www.samplecapital.com/",
+    }, {**__import__("atlas_workers.importer", fromlist=["DEFAULT_COLUMNS"]).DEFAULT_COLUMNS, **columns}, publish_all=True)
+    assert record.types == ["fund", "accelerator"]
+    assert record.premise is None  # "Not publicly disclosed" is not an address
+    assert record.stage is None  # "seed funds" describes the fund, not a round it raised
+    assert record.people == [("Jane Doe", "Co-founder & Managing Partner")]
+    assert (record.domain, record.confidence, record.publish) == ("samplecapital.com", 0.6, True)
+    assert clean_address("3rd Floor, Bishop Magua Center, Ngong Road, Nairobi — third-party LinkedIn listing; unconfirmed") == "3rd Floor, Bishop Magua Center, Ngong Road, Nairobi"
+
+
+def test_people_in_a_bar_separated_cell():
+    cell = (
+        "Sam Gichuru — Founder and CEO (named on the official about page; co-founder confirmed elsewhere) | "
+        "Valerie Waweru — former CEO | Stephen Gugu — Co-Founder & Managing Director, Sample Africa; co-founder of Another. | "
+        "Yaron Cohen — Co-founder, Sample Africa"
+    )
+    assert [name for name, _ in read_people(cell)] == ["Sam Gichuru", "Stephen Gugu", "Yaron Cohen"]
+
+
+def test_a_street_with_a_direction_is_not_a_building(tmp_path):
+    geo = geocoder(tmp_path, {
+        "Mokoyeti Road West, Langata Road, Nairobi": [place("Wildebeest Eco Camp, Mokoyeti Rd W, Nairobi, Mokoyeti Road West, Karen")],
+        "Mokoyeti Road West, Nairobi": [place("Mokoyeti Road West, Karen, Nairobi", "highway")],
+    })
+    found = find_address("Mokoyeti Road West, Off Langata Road, Nairobi, Kenya", geo)
+    assert found and found[1] == "area"
+
+    # A building name that only appears deep in another place's address is not a match.
+    deep = geocoder(tmp_path / "b", {"Sample Court, Nairobi": [place("Some Cafe, Unit 4, Sample Court, Sample Road, Nairobi")]})
+    assert find_address("Sample Court, Sample Road, Nairobi", deep) is None
+
+
+def test_statuses_and_aliases_come_from_the_mapping(tmp_path):
+    from atlas_workers.importer import read_dataset
+
+    path = tmp_path / "investors.csv"
+    path.write_text("name\nSample Capital\nUnsure Partners\n")
+    sure, unsure = read_dataset(
+        path, {"name": "name"}, publish_all=True,
+        aliases={"Sample Capital": ["Sample"]}, statuses={"Unsure Partners": "partially_verified"},
+    )
+    assert (sure.publish, sure.aliases) == (True, ["Sample"])
+    assert (unsure.publish, unsure.status) == (False, "partially_verified")

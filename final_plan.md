@@ -13,7 +13,7 @@ Urgency:
 
 ## 1. What is built
 
-The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 67 TypeScript tests, 67 Python tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against the 600 KB budget.
+The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 67 TypeScript tests, 73 Python tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against the 600 KB budget.
 
 ### Data
 
@@ -21,7 +21,7 @@ The work is public at <https://github.com/mindscope-world/ecosight>. Pull reques
 - **First real dataset loaded** from `nairobi_startups_organisations_100.csv` (research snapshot Oct 6, 2026). Of 100 rows, the 69 marked verified are published. The other 31 are kept as drafts with a pending review item each: 18 not verified, 7 partially verified, 6 inactive or unclear.
 - **Placement of the 69:** 16 at a confirmed building, 23 on their street or neighbourhood, 30 at city level.
 - **Funding:** 36 rounds for 25 organisations, read by hand from the funding notes into `curation/nairobi_startups_funding_rounds.json`, each with the words it was read from. USD 112.13 million in rounds with a stated dollar amount. The file also lists 16 items deliberately not recorded as rounds, with reasons.
-- **Investors:** 35, created from those rounds. They have a name and a type only.
+- **Investors and programs:** a second dataset of 25 Nairobi venture firms, impact investors and accelerators is loaded: 23 published, 2 kept as drafts because their own evidence calls their Nairobi presence unverified. 5 placed at a confirmed building, 9 on their street or neighbourhood, 9 at city level. With the 35 investors named in funding rounds (5 of them the same organisations, merged), 53 investors and programs are on record and 23 are on the map.
 - **People:** 118 named as founders. **Sources:** every loaded field carries its source link.
 - The synthetic sample now lives only in the test database.
 
@@ -65,8 +65,9 @@ Nothing here needs new features. It makes the work safe, shared and trusted.
 | 1.1 | ~~Create a remote, push the branch, get CI green~~ | Done | Public repository, CI green on pull request 1. Still to do: merge the pull request |
 | 1.2 | ~~Decide whether the dataset files go into git~~ | Done, by default | They are organised under `datasets/` and ignored by git, because the repository is public and they hold names and contacts. Reversible if the owner decides otherwise |
 | 1.3 | Confirm the data's sources allow publishing it | Owner | Risk R6 in `plan.md`. Blocks any public deployment |
+| 1.4b | Check the investors import | Owner | `curation/nairobi_vc_accelerator_dataset_2026-10-07.mapping.json` records two judgments: "Equator Africa" is the "Equator" named in Leta's round, and two rows are held as drafts. Only people named as founders were loaded, not partners or directors |
 | 1.4 | Check the 36 curated rounds | Owner | Especially: investor types are the curator's classification, a bare "$" is read as US dollars, SunCulture is dated by announcement, Pezesha's equity and debt are one round |
-| 1.5 | Review the 31 drafts | Owner | In particular the 6 marked inactive or unclear: show, mark inactive, or keep hidden |
+| 1.5 | Review the 33 drafts | Owner | 31 from the startups dataset, in particular the 6 marked inactive or unclear; 2 from the investors dataset (The Baobab Network, Pangea Accelerator) |
 | 1.6 | Confirm the decisions listed in section 1 and ADR 0002 | Owner | They were taken on recommendation, not signed off |
 | 1.7 | Copy the reference screenshot into `docs/reference/` | Owner | The interface has never been compared with it |
 
@@ -77,9 +78,9 @@ The first real dataset exposed gaps that the synthetic sample hid. These come fi
 | # | Item | Track | Notes |
 |---|------|-------|-------|
 | 2.1 | ~~A way to see records that share one point~~ | Done | Records on one spot keep a counted marker at every zoom; clicking it lists them, and each opens with a link back to the list |
-| 2.2 | Locations for investors | Backend + data | The 35 investors have no office, so the Investors layer is empty. **Data received Oct 7:** `datasets/nairobi-investors-2026-10-07/` has 25 investors and accelerators with a Nairobi presence. Loading it is next: its column headings differ, its categories need mapping to types, and investors already on record from funding rounds must gain an office, not be skipped as duplicates |
+| 2.2 | Locations for investors | Backend + data | **Nairobi done.** The investors dataset is loaded: 19 investors, 10 accelerators and incubators and 1 hub are on the map. 5 of its rows were merged into investors already known from funding rounds, which kept their round links and gained an office. Still without a location: the 30 round investors with no Nairobi presence, most of them abroad |
 | 2.3 | Country-level view | Both | Follows from 2.2: investors abroad make the map international |
-| 2.4 | ~~Entity types from data~~ | Done in the importer | A `Type` column is read when a dataset has one. The first dataset has none, so its 100 rows remain startups until types are supplied |
+| 2.4 | ~~Entity types from data~~ | Done | Types are read from a dataset's type or category column, including descriptive ones ("VC / impact investor", "innovation hub and accelerator"). The startups dataset has no such column, so its rows remain startups |
 | 2.5 | Events | Data + backend | There are no real events, so the Events layer and its panels are empty. Needs a source: a dataset or a crawler |
 | 2.6 | ~~Importer for other datasets~~ | Done | `--mapping` reads other column headings; founded year and coordinates are read when given; an organisation already on record (same website or name) is not loaded twice. Cities other than Nairobi are reported and left without an office until 2.2 and 2.3 |
 | 2.7 | Currency conversion | Backend | One round is in Canadian dollars and is left out of dollar totals |
@@ -172,7 +173,7 @@ The landing page is built; these are what it still lacks.
 | L.1 | Privacy, Terms and Data Policy pages | Owner | Required before a public launch; belongs with 8.7. Shown as plain text in the footer today |
 | L.2 | About, Methodology and Contact pages | Owner + frontend | Methodology can be drawn from `docs/sources.md` and the import rules |
 | L.3 | Sign in and sign up from the landing page | Both | Follows step 5; "Sign in" is inactive and "Join the ecosystem" opens the repository |
-| L.4 | Real investor, program and event points | Data | Follows the investors dataset (2.2) and an events source (2.5); only startups are real today |
+| L.4 | Real event points | Data | Investors and programs are now real in Nairobi; events still need a source (2.5) |
 | L.5 | Social preview image and sharing metadata | Frontend | Once the copy is final |
 | L.6 | Lighthouse and accessibility pass on the landing page | Frontend | With 8.2 and 8.3 |
 

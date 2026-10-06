@@ -8,6 +8,7 @@ const LAYER_KIND: Record<string, PreviewKind> = {
   startups: 'startup',
   investors: 'investor',
   accelerators: 'program',
+  hubs: 'program',
 };
 
 export interface LandingData {
