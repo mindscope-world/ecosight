@@ -1,7 +1,7 @@
 import type { Camera } from '@atlas/schema';
 import type { FeatureCollection, Point } from 'geojson';
 import type { Basemap } from '../config';
-import type { Shape } from '../entities';
+import type { HeatRamp, Shape } from '../entities';
 
 export type { Camera };
 
@@ -21,6 +21,8 @@ export interface PointLayerSpec {
 export interface HeatLayerSpec {
   id: string;
   weight?: { property: string; max: number };
+  /** One hue from dark to light: sparse, typical, dense. */
+  ramp: HeatRamp;
 }
 
 /**

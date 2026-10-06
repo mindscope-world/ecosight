@@ -44,8 +44,19 @@ export interface HeatLayerDef {
   source: string;
   /** Property that sets a point's weight; every point counts the same without it. */
   weight?: { property: string; max: number };
+  /** One hue from dark to light: sparse, typical, dense. */
+  ramp: HeatRamp;
   defaultOn: false;
 }
+
+export type HeatRamp = readonly [sparse: string, typical: string, dense: string];
+
+// Each density measure has its own hue, taken from the layer it counts, so two
+// can be on together and still be told apart.
+const CYAN_RAMP: HeatRamp = ['#155e75', '#22d3ee', '#cffafe'];
+const BLUE_RAMP: HeatRamp = ['#1e3a8a', '#3987e5', '#bfdbfe'];
+const ORANGE_RAMP: HeatRamp = ['#7c2d12', '#d95926', '#fed7aa'];
+const AQUA_RAMP: HeatRamp = ['#064e3b', '#199e70', '#a7f3d0'];
 
 export type LayerDef = PointLayerDef | HeatLayerDef;
 
@@ -67,8 +78,11 @@ export const LAYERS: LayerDef[] = [
   { kind: 'points', id: 'hubs', label: 'Innovation hubs', noun: 'Innovation hub', types: ['innovation_hub'], color: VIOLET, shape: 'hub', defaultOn: true },
   { kind: 'points', id: 'universities', label: 'Universities', noun: 'University', types: ['university'], color: VIOLET, shape: 'building', defaultOn: false },
   { kind: 'points', id: 'government', label: 'Government', noun: 'Government program', types: ['government_program'], color: VIOLET, shape: 'triangle', defaultOn: false },
-  { kind: 'heat', id: 'funding-heat', label: 'Funding heatmap', source: 'startups', weight: { property: 'raised_usd', max: 5_000_000 }, defaultOn: false },
-  { kind: 'heat', id: 'density', label: 'Startup density', source: 'startups', defaultOn: false },
+  { kind: 'heat', id: 'funding-heat', label: 'Funding heatmap', source: 'startups', weight: { property: 'raised_usd', max: 5_000_000 }, ramp: CYAN_RAMP, defaultOn: false },
+  // Three separate measures of where things are: each counts one kind of organisation and nothing else.
+  { kind: 'heat', id: 'density', label: 'Startup density', source: 'startups', ramp: BLUE_RAMP, defaultOn: false },
+  { kind: 'heat', id: 'investor-density', label: 'Investor density', source: 'investors', ramp: ORANGE_RAMP, defaultOn: false },
+  { kind: 'heat', id: 'accelerator-density', label: 'Accelerator density', source: 'accelerators', ramp: AQUA_RAMP, defaultOn: false },
 ];
 
 export const POINT_LAYERS = LAYERS.filter((layer): layer is PointLayerDef => layer.kind === 'points');

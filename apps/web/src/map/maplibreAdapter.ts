@@ -31,6 +31,12 @@ type LayerState = { data: FeatureCollection<Point>; visible: boolean } & (
   | { kind: 'heat'; spec: HeatLayerSpec }
 );
 
+/** "#155e75" as the same colour fully transparent, so a ramp can fade in without a grey fringe. */
+function transparent(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+  return `rgba(${r},${g},${b},0)`;
+}
+
 /** A marker image: the shape filled with the layer colour, ringed in the map background. */
 function markerImage(spec: PointLayerSpec): ImageData {
   const canvas = document.createElement('canvas');
@@ -163,6 +169,7 @@ export class MapLibreAdapter implements MapAdapter {
     const weight: ExpressionSpecification | number = spec.weight
       ? ['interpolate', ['linear'], ['coalesce', ['get', spec.weight.property], 0], 0, 0, spec.weight.max, 1]
       : 1;
+    const [sparse, typical, dense] = spec.ramp;
     map.addSource(spec.id, { type: 'geojson', data: state.data });
     // Drawn under the markers of every point layer already on the map.
     const above = map.getStyle().layers.find((layer) => layer.id.endsWith('-clusters'))?.id;
@@ -177,14 +184,13 @@ export class MapLibreAdapter implements MapAdapter {
           'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 4, 12, 10, 28, 15, 60],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 14, 1.6],
           'heatmap-opacity': 0.75,
-          // One hue, dark to light: more is brighter.
+          // One hue, dark to light: more is brighter. It fades in from nothing at the edge.
           'heatmap-color': [
             'interpolate', ['linear'], ['heatmap-density'],
-            0, 'rgba(8,51,68,0)',
-            0.2, '#155e75',
-            0.5, '#0891b2',
-            0.8, '#22d3ee',
-            1, '#cffafe',
+            0, transparent(sparse),
+            0.2, sparse,
+            0.65, typical,
+            1, dense,
           ],
         },
       },

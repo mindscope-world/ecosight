@@ -47,7 +47,7 @@ export function MapView({
     void map.whenReady().then(() => {
       if (!alive) return;
       // Heatmaps first, so markers are drawn over them.
-      for (const layer of HEAT_LAYERS) map.addHeatLayer({ id: layer.id, weight: layer.weight });
+      for (const layer of HEAT_LAYERS) map.addHeatLayer({ id: layer.id, weight: layer.weight, ramp: layer.ramp });
       for (const layer of POINT_LAYERS)
         map.addPointLayer({
           id: layer.id,

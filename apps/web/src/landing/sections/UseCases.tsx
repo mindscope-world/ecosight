@@ -88,7 +88,7 @@ export function EcosystemBuilderSection() {
       heading="See where support exists — and where it doesn’t."
       text="Map the organizations, programs, funding, and infrastructure supporting entrepreneurship. Identify gaps and opportunities for intervention."
       cta="Explore ecosystem gaps"
-      href={`${MAP_URL}#v=1&l=startups,accelerators,ngos,hubs,density`}
+      href={`${MAP_URL}#v=1&l=startups,accelerators,density,accelerator-density`}
       visual={
         <Schematic
           seed={41}

@@ -525,7 +525,7 @@ export function App() {
             onCamera={() => setCamera((tick) => tick + 1)}
           />
           {desktop && layerControl(true)}
-          {desktop && <MapLegend heat={HEAT_LAYERS.some((layer) => enabled.has(layer.id))} />}
+          {desktop && <MapLegend heat={HEAT_LAYERS.filter((layer) => enabled.has(layer.id))} />}
           {!desktop && (
             <>
               <button

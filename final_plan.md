@@ -149,7 +149,8 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 7.3 | Time slider and deal-flow replay | Both | Rounds now carry dates and their precision |
 | 7.4 | Lines from headquarters to branches on selection | Frontend | |
 | 7.5 | Satellite style | Frontend + owner | Needs an imagery source with a suitable licence; shown disabled today |
-| 7.6 | Hex aggregates for heatmaps | Backend | Heatmaps are drawn in the browser today; needed only at larger scale |
+| 7.6 | Hex aggregates for heatmaps | Backend | Heatmaps are drawn in the browser today; needed only at larger scale. Four exist: funding, and startup, investor and accelerator density as three separate measures, each in its own colour |
+| 7.7 | Keep city-level records out of the density layers | Frontend | Records placed at a city's centre for want of an address all sit on one point, which shows as a false hot spot |
 
 ### Step 8 — Quality and launch (Medium, Critical before launch)
 
