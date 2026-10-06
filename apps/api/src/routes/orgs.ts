@@ -18,7 +18,50 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
       const [org] = await sql<OrgDetail[]>`
         select
           g.id, g.name, g.slug, g.types::text[] as types, g.sectors, g.stage,
-          g.website_domain, g.description,
+          g.website_domain, g.description, g.founded_year, g.is_active,
+          coalesce((
+            select sum(r.amount_usd) from funding_round r
+            where r.organisation_id = g.id and r.status = 'published'
+          ), 0)::float8 as raised_usd,
+          jsonb_build_object(
+            'investors', coalesce((
+              select jsonb_agg(distinct jsonb_build_object('id', i.id, 'name', i.name, 'types', i.types))
+              from funding_round r
+              join round_investor ri on ri.round_id = r.id
+              join organisation i on i.id = ri.investor_id and i.status = 'published'
+              where r.organisation_id = g.id and r.status = 'published'
+            ), '[]'::jsonb),
+            'portfolio', coalesce((
+              select jsonb_agg(distinct jsonb_build_object('id', c.id, 'name', c.name, 'types', c.types))
+              from round_investor ri
+              join funding_round r on r.id = ri.round_id and r.status = 'published'
+              join organisation c on c.id = r.organisation_id and c.status = 'published'
+              where ri.investor_id = g.id
+            ), '[]'::jsonb),
+            -- Programs this organisation runs or took part in, with the other party.
+            'programs', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'name', p.name,
+                'organisation', jsonb_build_object('id', x.id, 'name', x.name, 'types', x.types)
+              ) order by p.name, x.name)
+              from program p
+              join program_participant pp on pp.program_id = p.id
+              join organisation x
+                on x.id = case when p.organisation_id = g.id then pp.organisation_id else p.organisation_id end
+                and x.status = 'published'
+              where p.organisation_id = g.id or pp.organisation_id = g.id
+            ), '[]'::jsonb),
+            'events', coalesce((
+              select jsonb_agg(jsonb_build_object('id', e.id, 'name', e.name) order by e.starts_at)
+              from event e
+              where e.organiser_id = g.id and e.status = 'published'
+            ), '[]'::jsonb),
+            'people', coalesce((
+              select jsonb_agg(jsonb_build_object('name', pr.name, 'role', pr.role) order by pr.name)
+              from person_role pr
+              where pr.organisation_id = g.id and not pr.opted_out
+            ), '[]'::jsonb)
+          ) as connections,
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', o.id, 'is_hq', o.is_hq, 'address', o.address, 'city', o.city,
@@ -28,6 +71,14 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
             from office o
             where o.organisation_id = g.id and o.valid_to is null
           ), '[]'::jsonb) as offices,
+          coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'id', r.id, 'stage', r.stage, 'amount_usd', r.amount_usd::float8,
+              'announced_on', r.announced_on
+            ) order by r.announced_on desc nulls last)
+            from funding_round r
+            where r.organisation_id = g.id and r.status = 'published'
+          ), '[]'::jsonb) as rounds,
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'field', s.field, 'source_url', s.source_url, 'method', s.method,

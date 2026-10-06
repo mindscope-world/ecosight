@@ -2,7 +2,7 @@
 -- Organisations here are invented; only the neighbourhood locations are real.
 -- Real Nairobi records come from the researchers and the review queue.
 
-truncate organisation, event, raw_document, field_source, review_item, audit_log cascade;
+truncate organisation, event, raw_document, field_source, review_item, audit_log, submission cascade;
 
 do $$
 declare
@@ -27,7 +27,7 @@ begin
   for k in 1..4 loop
     for i in 1..counts[k] loop
       n := lpad(i::text, 2, '0');
-      insert into organisation (name, slug, types, sectors, stage, description, status)
+      insert into organisation (name, slug, types, sectors, stage, description, status, founded_year, is_active)
       values (
         format('Sample %s %s', labels[k], n),
         format('sample-%s-%s', lower(labels[k]), n),
@@ -35,7 +35,10 @@ begin
         array[sectors[1 + (i % 6)]],
         case when k = 1 then stages[1 + (i % 4)] end,
         'Synthetic record for local development.',
-        'published'
+        'published',
+        2010 + ((i * 7 + k) % 15),
+        -- Every tenth startup has stopped operating.
+        not (k = 1 and i % 10 = 0)
       )
       returning id into org;
 
@@ -80,6 +83,26 @@ begin
     end loop;
   end loop;
 
+  -- Angel networks are given a street address here on purpose: the database must
+  -- drop it and move the point to the city centroid.
+  for i in 1..2 loop
+    insert into organisation (name, slug, types, sectors, description, status)
+    values (
+      format('Sample Angel Network %s', lpad(i::text, 2, '0')),
+      format('sample-angel-network-%s', lpad(i::text, 2, '0')),
+      array['angel_network']::org_type[], array[sectors[i]],
+      'Synthetic record for local development.', 'published'
+    )
+    returning id into org;
+    insert into office (organisation_id, is_hq, address, city, country, geom)
+    values (
+      org, true, '12 Private Close, Karen', 'Nairobi', 'KE',
+      st_setsrid(st_makepoint(lons[5], lats[5]), 4326)::geography
+    );
+    insert into field_source (record_type, record_id, field, source_url, method, confidence, verified_at)
+    values ('organisation', org, 'name', 'https://example.org/seed', 'manual', 1, now());
+  end loop;
+
   -- Rounds were inserted before the funds existed; attach the lead now.
   insert into round_investor (round_id, investor_id, is_lead)
   select id, first_fund, true from funding_round;
@@ -97,4 +120,15 @@ begin
       'published'
     );
   end loop;
+
+  -- One program, one organised event and one named role, so connections can be shown.
+  insert into program (organisation_id, name, valid_from)
+  select id, 'Sample Cohort 2026', date '2026-01-15' from organisation where slug = 'sample-accelerator-01';
+  insert into program_participant (program_id, organisation_id)
+  select p.id, g.id from program p, organisation g
+  where p.name = 'Sample Cohort 2026' and g.slug in ('sample-startup-01', 'sample-startup-02');
+  update event set organiser_id = (select id from organisation where slug = 'sample-accelerator-01')
+  where name = 'Sample Meetup 01';
+  insert into person_role (organisation_id, name, role)
+  select id, 'Sample Founder', 'Co-founder' from organisation where slug = 'sample-startup-01';
 end $$;

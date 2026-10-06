@@ -1,0 +1,502 @@
+import {
+  countActive,
+  decodeUrlState,
+  encodeUrlState,
+  matches,
+  NO_FILTERS,
+  type Filters,
+  type MapStyle,
+  type Selection,
+  type View,
+} from '@atlas/schema';
+import type { FeatureCollection, Point } from 'geojson';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  fetchEvent,
+  fetchEvents,
+  fetchOffices,
+  fetchOrg,
+  fetchStats,
+  type CityStat,
+  type EventCollection,
+  type OfficeCollection,
+  type Stats,
+} from './api';
+import { AnalyticsPanel } from './components/AnalyticsPanel';
+import { EntityDetails, type Detail } from './components/EntityDetails';
+import { FilterPanel } from './components/FilterPanel';
+import { LayerControl, MapLegend } from './components/LayerControl';
+import { ActivityPanel, CityList, EcosystemOverview, TopSectors, type SectorShare } from './components/LeftPanel';
+import { MapView } from './components/MapView';
+import { SearchCommand, type SearchPick } from './components/SearchCommand';
+import { StatusBar } from './components/StatusBar';
+import { TopNavigation } from './components/TopNavigation';
+import { Icon, MicroLabel, useMediaQuery, useStored } from './components/ui';
+import { BASEMAPS, DEFAULT_CAMERA } from './config';
+import { HEAT_LAYERS, POINT_LAYERS, VIEW_LAYERS } from './entities';
+import { buildSignals } from './lib/signals';
+import type { MapAdapter } from './map/adapter';
+
+const initial = decodeUrlState(location.hash);
+const CITY_ZOOM = 11;
+const RECORD_ZOOM = 14;
+
+type Sheet = 'overview' | 'layers' | 'insights' | null;
+
+/** A side column on desktop: full height, scrollable, collapsible to a rail. */
+function SidePanel({
+  side,
+  open,
+  onToggle,
+  label,
+  children,
+}: {
+  side: 'left' | 'right';
+  open: boolean;
+  onToggle: () => void;
+  label: string;
+  children: ReactNode;
+}) {
+  const border = side === 'left' ? 'border-r' : 'border-l';
+  const collapseIcon = (side === 'left') === open ? 'chevronLeft' : 'chevronRight';
+  if (!open)
+    return (
+      <aside className={`flex w-7 shrink-0 flex-col items-center bg-panel ${border} border-line`}>
+        <button
+          type="button"
+          className="grid h-8 w-full place-items-center text-mute hover:bg-raised hover:text-ink"
+          aria-label={`Open ${label}`}
+          title={`Open ${label}`}
+          onClick={onToggle}
+        >
+          <Icon name={collapseIcon} size={14} />
+        </button>
+        <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-mute [writing-mode:vertical-rl]">
+          {label}
+        </span>
+      </aside>
+    );
+  return (
+    <aside className={`flex shrink-0 flex-col bg-panel ${border} border-line ${side === 'left' ? 'w-64' : 'w-80'}`}>
+      <div className={`flex h-7 shrink-0 items-center border-b border-line px-1 ${side === 'left' ? 'justify-end' : 'justify-start'}`}>
+        <button
+          type="button"
+          className="grid h-6 w-6 place-items-center rounded text-mute hover:bg-raised hover:text-ink"
+          aria-label={`Collapse ${label}`}
+          title={`Collapse ${label}`}
+          onClick={onToggle}
+        >
+          <Icon name={collapseIcon} size={14} />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+    </aside>
+  );
+}
+
+/** A panel that slides up from the bottom on small screens. */
+function BottomSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="absolute inset-x-0 bottom-0 z-30 flex max-h-[62%] flex-col rounded-t-lg border-t border-line bg-panel shadow-2xl shadow-black">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3">
+        <MicroLabel>{title}</MicroLabel>
+        <button type="button" aria-label={`Close ${title}`} className="text-mute hover:text-ink" onClick={onClose}>
+          <Icon name="close" size={14} />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+    </div>
+  );
+}
+
+function distinctOrgs(features: OfficeCollection['features']) {
+  const seen = new Map<string, OfficeCollection['features'][number]['properties']>();
+  for (const feature of features)
+    if (!seen.has(feature.properties.org_id)) seen.set(feature.properties.org_id, feature.properties);
+  return [...seen.values()];
+}
+
+export function App() {
+  const desktop = useMediaQuery('(min-width: 1024px)');
+  const map = useRef<MapAdapter | null>(null);
+
+  const [offices, setOffices] = useState<OfficeCollection | null>(null);
+  const [events, setEvents] = useState<EventCollection | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const [view, setView] = useState<View>(initial.view ?? 'map');
+  const [enabled, setEnabled] = useState<ReadonlySet<string>>(
+    () => new Set(initial.layers ?? VIEW_LAYERS[initial.view ?? 'map']),
+  );
+  const [filters, setFilters] = useState<Filters>(initial.filters ?? NO_FILTERS);
+  const [mapStyle, setMapStyle] = useState<MapStyle>(initial.mapStyle ?? 'dark');
+  const [selected, setSelected] = useState<Selection | undefined>(initial.selected);
+  const [detail, setDetail] = useState<Detail>({ status: 'loading' });
+  const [camera, setCamera] = useState(0);
+
+  const [leftOpen, setLeftOpen] = useStored('ecosight-left', true);
+  const [rightOpen, setRightOpen] = useStored('ecosight-right', true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sheet, setSheet] = useState<Sheet>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      fetchOffices(controller.signal).then(setOffices),
+      fetchEvents(controller.signal).then(setEvents),
+      fetchStats(controller.signal).then(setStats),
+    ]).catch(() => {
+      if (!controller.signal.aborted) setFailed(true);
+    });
+    return () => controller.abort();
+  }, []);
+
+  // Everything on screen that counts or draws organisations starts from this list.
+  const visible = useMemo(
+    () => (offices?.features ?? []).filter((feature) => matches(feature.properties, filters)),
+    [offices, filters],
+  );
+
+  const layerData = useMemo(() => {
+    const data: Record<string, FeatureCollection<Point>> = {};
+    for (const layer of POINT_LAYERS)
+      data[layer.id] =
+        layer.id === 'events'
+          ? (events ?? { type: 'FeatureCollection', features: [] })
+          : {
+              type: 'FeatureCollection',
+              features: visible.filter((feature) =>
+                layer.types.some((type) => feature.properties.types.includes(type)),
+              ),
+            };
+    return data;
+  }, [visible, events]);
+
+  const counts = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const layer of POINT_LAYERS)
+      result[layer.id] =
+        layer.id === 'events'
+          ? (events?.features.length ?? 0)
+          : new Set(layerData[layer.id]!.features.map((feature) => feature.properties!.org_id)).size;
+    return result;
+  }, [layerData, events]);
+
+  const orgs = useMemo(() => distinctOrgs(visible), [visible]);
+
+  const sectors = useMemo<SectorShare[]>(() => {
+    const tally = new Map<string, number>();
+    for (const org of orgs) for (const sector of org.sectors) tally.set(sector, (tally.get(sector) ?? 0) + 1);
+    return [...tally]
+      .map(([sector, count]) => ({ sector, count, share: count / orgs.length }))
+      .sort((a, b) => b.count - a.count || a.sector.localeCompare(b.sector));
+  }, [orgs]);
+
+  // Filter choices come from the whole dataset, so picking one never hides the others.
+  const options = useMemo(() => {
+    const all = distinctOrgs(offices?.features ?? []);
+    const sorted = (values: Iterable<string>) => [...new Set(values)].sort((a, b) => a.localeCompare(b));
+    return {
+      sectors: sorted(all.flatMap((org) => org.sectors)),
+      stages: sorted(all.flatMap((org) => (org.stage ? [org.stage] : []))),
+      cities: sorted((offices?.features ?? []).map((feature) => feature.properties.city)),
+    };
+  }, [offices]);
+
+  const signals = useMemo(() => (stats ? buildSignals(stats, sectors) : []), [stats, sectors]);
+  const emerging = useMemo(
+    () =>
+      [...(stats?.cities ?? [])].sort(
+        (a, b) =>
+          (b.rounds_12m + b.upcoming_events) / b.organisations -
+          (a.rounds_12m + a.upcoming_events) / a.organisations,
+      ),
+    [stats],
+  );
+
+  // Share link: the address always describes what is on screen.
+  useEffect(() => {
+    const hash = encodeUrlState({
+      view,
+      mapStyle,
+      filters,
+      camera: map.current?.getCamera() ?? initial.camera,
+      layers: [...POINT_LAYERS, ...HEAT_LAYERS].map((layer) => layer.id).filter((id) => enabled.has(id)),
+      selected,
+    });
+    history.replaceState(null, '', '#' + hash);
+  }, [view, mapStyle, filters, enabled, selected, camera]);
+
+  // Load the selected record. A newer selection cancels an older request.
+  useEffect(() => {
+    if (!selected) return;
+    const controller = new AbortController();
+    setDetail({ status: 'loading' });
+    const request =
+      selected.kind === 'event'
+        ? fetchEvent(selected.id, controller.signal).then((event): Detail => ({ status: 'event', event }))
+        : fetchOrg(selected.id, controller.signal).then((org): Detail => ({ status: 'org', org }));
+    request.then(setDetail).catch(() => {
+      if (!controller.signal.aborted) setDetail({ status: 'error' });
+    });
+    return () => controller.abort();
+  }, [selected]);
+
+  const flyTo = useCallback((lon: number, lat: number, zoom: number) => {
+    const current = map.current?.getCamera().zoom ?? 0;
+    map.current?.flyTo({ lon, lat, zoom: Math.max(current, zoom) });
+  }, []);
+
+  const select = useCallback(
+    (selection: Selection) => {
+      setSelected(selection);
+      setRightOpen(true);
+      setSheet(null);
+      setFiltersOpen(false);
+    },
+    [setRightOpen],
+  );
+
+  // Following a connection: open the record and move the map to it once it is known.
+  const follow = useCallback(
+    (selection: Selection) => {
+      select(selection);
+      const lookup =
+        selection.kind === 'event'
+          ? fetchEvent(selection.id).then((event) => ({ lon: event.lon, lat: event.lat }))
+          : fetchOrg(selection.id).then((org) => ({ lon: org.offices[0]?.lon ?? null, lat: org.offices[0]?.lat ?? null }));
+      lookup
+        .then(({ lon, lat }) => {
+          if (lon != null && lat != null) flyTo(lon, lat, RECORD_ZOOM);
+        })
+        .catch(() => {});
+    },
+    [select, flyTo],
+  );
+
+  const toggleLayer = useCallback((id: string, on: boolean) => {
+    setEnabled((current) => {
+      const next = new Set(current);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  function changeView(next: View) {
+    setView(next);
+    setEnabled(new Set(VIEW_LAYERS[next]));
+    if (next === 'discover') setFiltersOpen(true);
+    if (next === 'ecosystems' && offices?.features.length) {
+      // Pull back to show every place that has records.
+      const lons = offices.features.map((feature) => feature.geometry.coordinates[0]!);
+      const lats = offices.features.map((feature) => feature.geometry.coordinates[1]!);
+      map.current?.fitBounds([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
+    }
+  }
+
+  function pickSearch(pick: SearchPick) {
+    setSearchOpen(false);
+    if (pick.kind === 'sector') {
+      setFilters((current) =>
+        current.sectors.includes(pick.sector) ? current : { ...current, sectors: [...current.sectors, pick.sector] },
+      );
+      return;
+    }
+    if (pick.kind === 'location') {
+      flyTo(pick.lon, pick.lat, CITY_ZOOM);
+      return;
+    }
+    // Make sure the layer the result sits on is showing.
+    if (pick.kind === 'event') toggleLayer('events', true);
+    select({ kind: pick.kind, id: pick.id });
+    if (pick.lon != null && pick.lat != null) flyTo(pick.lon, pick.lat, RECORD_ZOOM);
+  }
+
+  const goToCity = (city: CityStat) => flyTo(city.lon, city.lat, CITY_ZOOM);
+
+  // Ctrl or Cmd + K, or a bare slash outside a text field, opens search.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((event.target as HTMLElement).tagName);
+      if ((event.key === 'k' && (event.ctrlKey || event.metaKey)) || (event.key === '/' && !typing)) {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, []);
+
+  const filtered = countActive(filters) > 0;
+  const overview = (
+    <EcosystemOverview
+      counts={{
+        startups: counts.startups ?? 0,
+        investors: counts.investors ?? 0,
+        accelerators: counts.accelerators ?? 0,
+        events: counts.events ?? 0,
+      }}
+      filtered={filtered}
+    />
+  );
+  const leftContent = stats ? (
+    <>
+      {overview}
+      <ActivityPanel stats={stats} />
+      <TopSectors sectors={sectors} onPick={(sector) => setFilters({ ...filters, sectors: [sector] })} />
+      <CityList
+        id="markets"
+        title="Market activity"
+        cities={stats.cities}
+        value={(city) => String(city.score)}
+        hint="Activity score: organisations, plus 3 per funding round announced in the last 12 months, plus 2 per upcoming event, scaled so the busiest city is 100."
+        onPick={goToCity}
+      />
+    </>
+  ) : (
+    <p className="p-3 text-mute">{failed ? 'The data could not be loaded.' : 'Loading…'}</p>
+  );
+  const insights = stats ? (
+    <AnalyticsPanel
+      stats={stats}
+      signals={signals}
+      emerging={emerging}
+      onCity={goToCity}
+      onRecent={(item) => follow({ kind: item.kind === 'event' ? 'event' : 'org', id: item.id })}
+    />
+  ) : (
+    <p className="p-3 text-mute">{failed ? 'The data could not be loaded.' : 'Loading…'}</p>
+  );
+  const details = selected && (
+    <EntityDetails detail={detail} onSelect={follow} onClose={() => setSelected(undefined)} />
+  );
+  const layerControl = (floating: boolean) => (
+    <LayerControl
+      floating={floating}
+      enabled={enabled}
+      counts={counts}
+      onToggle={toggleLayer}
+      mapStyle={mapStyle}
+      onMapStyle={setMapStyle}
+    />
+  );
+  const filterPanel = (
+    <FilterPanel
+      filters={filters}
+      onChange={setFilters}
+      options={options}
+      enabled={enabled}
+      onToggleLayer={toggleLayer}
+      matching={orgs.length}
+      onClose={() => setFiltersOpen(false)}
+    />
+  );
+
+  return (
+    <div className="flex h-full flex-col">
+      <TopNavigation
+        view={view}
+        onView={changeView}
+        onSearch={() => setSearchOpen(true)}
+        onFilters={() => {
+          setFiltersOpen(!filtersOpen);
+          setSheet(null);
+        }}
+        activeFilters={countActive(filters)}
+      />
+      <div className="relative flex min-h-0 flex-1">
+        {desktop && (
+          <SidePanel side="left" open={leftOpen} onToggle={() => setLeftOpen(!leftOpen)} label="Ecosystem">
+            {leftContent}
+          </SidePanel>
+        )}
+        <main className="relative min-w-0 flex-1">
+          <MapView
+            adapter={map}
+            basemap={BASEMAPS[mapStyle]}
+            initialCamera={initial.camera ?? DEFAULT_CAMERA}
+            data={layerData}
+            enabled={enabled}
+            onSelect={(layerId, properties) => {
+              const id = layerId === 'events' ? properties.event_id : properties.org_id;
+              if (typeof id === 'string') select({ kind: layerId === 'events' ? 'event' : 'org', id });
+            }}
+            onCamera={() => setCamera((tick) => tick + 1)}
+          />
+          {desktop && layerControl(true)}
+          {desktop && <MapLegend heat={HEAT_LAYERS.some((layer) => enabled.has(layer.id))} />}
+          {!desktop && (
+            <>
+              <button
+                type="button"
+                aria-label="Search"
+                className="absolute right-3 top-3 z-10 grid h-11 w-11 place-items-center rounded-full border border-line bg-panel text-accent shadow-lg shadow-black/50"
+                onClick={() => setSearchOpen(true)}
+              >
+                <Icon name="search" size={18} />
+              </button>
+              <div className="absolute bottom-9 left-1/2 z-10 flex -translate-x-1/2 overflow-hidden rounded-full border border-line bg-panel shadow-lg shadow-black/50">
+                {(
+                  [
+                    ['overview', 'grid', 'Overview'],
+                    ['layers', 'layers', 'Layers'],
+                    ['insights', 'chart', 'Insights'],
+                  ] as const
+                ).map(([id, icon, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`flex h-10 items-center gap-1.5 px-3.5 text-xs ${sheet === id ? 'text-accent' : 'text-ink'}`}
+                    aria-pressed={sheet === id}
+                    onClick={() => {
+                      setSheet(sheet === id ? null : id);
+                      setFiltersOpen(false);
+                      setSelected(undefined);
+                    }}
+                  >
+                    <Icon name={icon} size={14} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </main>
+        {desktop && (
+          <SidePanel side="right" open={rightOpen} onToggle={() => setRightOpen(!rightOpen)} label={selected ? 'Selected' : 'Intelligence'}>
+            {details || insights}
+          </SidePanel>
+        )}
+        {desktop && filtersOpen && (
+          <div className="absolute inset-y-0 right-0 z-20 w-80 border-l border-line bg-panel shadow-2xl shadow-black">
+            {filterPanel}
+          </div>
+        )}
+        {!desktop && filtersOpen && (
+          <div className="absolute inset-x-0 bottom-0 z-30 h-[70%] rounded-t-lg border-t border-line bg-panel shadow-2xl shadow-black">
+            {filterPanel}
+          </div>
+        )}
+        {!desktop && !filtersOpen && selected && (
+          <div className="absolute inset-x-0 bottom-0 z-30 max-h-[62%] overflow-y-auto rounded-t-lg border-t border-line bg-panel shadow-2xl shadow-black">
+            {details}
+          </div>
+        )}
+        {!desktop && !filtersOpen && !selected && sheet === 'overview' && (
+          <BottomSheet title="Ecosystem" onClose={() => setSheet(null)}>{leftContent}</BottomSheet>
+        )}
+        {!desktop && !filtersOpen && !selected && sheet === 'layers' && (
+          <BottomSheet title="Map layers" onClose={() => setSheet(null)}>{layerControl(false)}</BottomSheet>
+        )}
+        {!desktop && !filtersOpen && !selected && sheet === 'insights' && (
+          <BottomSheet title="Intelligence" onClose={() => setSheet(null)}>{insights}</BottomSheet>
+        )}
+      </div>
+      <StatusBar stats={stats} failed={failed} inView={orgs.length + (events?.features.length ?? 0)} filtered={filtered} />
+      {searchOpen && <SearchCommand onPick={pickSearch} onClose={() => setSearchOpen(false)} />}
+    </div>
+  );
+}

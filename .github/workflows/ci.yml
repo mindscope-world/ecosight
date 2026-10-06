@@ -24,3 +24,8 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm check:bundle
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+        working-directory: workers
+      - run: uv run pytest
+        working-directory: workers

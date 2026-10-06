@@ -1,7 +1,13 @@
-# Capital Atlas
+# ecoSight
 
-A web map of the startup ecosystem, starting with Nairobi. See `plan.md` for the
-implementation plan and `docs/fork-audit.md` for how this relates to God's Eye View.
+*See where innovation happens.* A map-first intelligence platform for the startup
+ecosystem, starting with Nairobi. The repository and its packages still carry the
+working name Capital Atlas.
+
+- `final_plan.md` — what is left to build, in order.
+- `frontend_plan.md` — the interface specification.
+- `plan.md` — the original implementation plan and risk list.
+- `docs/fork-audit.md` — how this relates to God's Eye View.
 
 ## Run locally
 
@@ -30,7 +36,28 @@ pnpm check:bundle # fails if first-load JavaScript exceeds 600 KB compressed
 
 ## Layout
 
-- `apps/web` — Vite, TypeScript and MapLibre. Layers reach the map only through `src/map/adapter.ts`.
+- `apps/web` — Vite, React, Tailwind and MapLibre. The app reaches the map only through `src/map/adapter.ts`.
+  Put the logo at `apps/web/public/logo.png`; the header shows the wordmark alone until it is there.
 - `apps/api` — Fastify. Route schemas generate the OpenAPI document.
+- `packages/schema` — share-link state and filter rules shared by the web app and, later, the API.
 - `db` — SQL migrations, seed data and their runners.
+- `workers` — Python pipeline: feed crawlers, raw document store, extraction, eval harness.
+- `eval` — labelled set for extraction accuracy. See `eval/README.md`.
 - `infra` — Docker Compose for local development.
+- `docs` — fork audit, decision records, crawled sources.
+
+## Pipeline
+
+Needs [uv](https://docs.astral.sh/uv/). Run from `workers/`:
+
+```sh
+uv sync
+uv run pytest
+uv run atlas crawl                 # fetch the news feeds into data/raw and raw_document
+uv run atlas extract <file.json>   # extract one stored article with the rule-based baseline
+uv run atlas eval                  # per-field accuracy on eval/labelled.jsonl
+```
+
+Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on
+[Groq](https://console.groq.com) through LangChain and needs `GROQ_API_KEY` in
+`.env`. `GROQ_MODEL` changes the model (default `llama-3.3-70b-versatile`).

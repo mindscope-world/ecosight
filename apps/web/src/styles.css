@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@theme {
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-bg: #071018;
+  --color-panel: #0b151e;
+  --color-raised: #101d28;
+  --color-line: #1a2a35;
+  --color-accent: #22d3ee;
+  --color-accent2: #3b82f6;
+  --color-ink: #e6edf3;
+  --color-mute: #8b9aa7;
+  --color-good: #34d399;
+  --color-warn: #f59e0b;
+  --color-crit: #ef4444;
+}
+
+/* In the base layer so utility classes on an element can override these. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  /* Thin scrollbars, so dense panels do not lose width to them. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
+}
+
+/* MapLibre's own controls are light only; restyle them to match the panels. */
+.maplibregl-ctrl-group,
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-scale {
+  background: var(--color-panel) !important;
+  color: var(--color-mute) !important;
+  border-color: var(--color-line) !important;
+  box-shadow: none !important;
+}
+
+.maplibregl-ctrl-group {
+  border: 1px solid var(--color-line);
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--color-line);
+}
+
+.maplibregl-ctrl-icon,
+.maplibregl-ctrl-attrib-button {
+  filter: invert(1) brightness(0.8);
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--color-mute);
+}
+
+.maplibregl-ctrl-scale {
+  border-color: var(--color-mute) !important;
+  font-size: 10px;
+}
