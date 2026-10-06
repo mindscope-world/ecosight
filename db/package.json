@@ -1,0 +1,18 @@
+{
+  "name": "@atlas/db",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "migrate": "tsx --env-file-if-exists=../.env migrate.ts",
+    "seed": "tsx --env-file-if-exists=../.env seed.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
