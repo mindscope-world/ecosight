@@ -33,7 +33,23 @@ Phases 2, 3 and 4 below were built ahead of phase 1, on the synthetic sample. Th
 | 0.3 | Add the Groq key to `.env` and run the model extractor once | Backend | Confirms the default model name is still offered |
 | 0.4 | Copy the reference screenshot into `docs/reference/` | Frontend | It could not be read from outside the project |
 
-## Phase 1 — Real data in (Critical)
+## Phase 1 — Real data in (Critical) — first dataset loaded
+
+Loaded on Oct 7, 2026 from `nairobi_startups_organisations_100.csv` (research snapshot Oct 6, 2026):
+
+- 100 rows read. The 69 marked verified are published; the other 31 (18 not verified, 7 partially verified, 6 inactive or unclear) are drafts with pending review items.
+- Of the 69: 16 are placed at a confirmed building, 23 on their street or neighbourhood, 30 at city level.
+- 118 people named as founders, 403 field sources. All 100 are typed as startups.
+- Not loaded: funding as round rows (the disclosure text is kept as a note, and a stage where the status names one), business emails and phone numbers, investors named in funding text.
+- The synthetic sample now lives only in the test database (`pnpm db:test`).
+
+Done: 1.1 except logo URL, 1.2, 1.3, 1.4 (within the dataset), 1.5, 1.7, 1.8. Remaining in this phase:
+
+- Review the 31 drafts, in particular the 6 marked inactive or unclear.
+- Turn the funding notes into round rows, with investors, by a person reading each one. About 25 verified rows state an amount.
+- Decide whether business emails and phones should be stored and shown.
+- City-level records all sit on one point in the city centre; the map needs a way to list them (30 today).
+- Entity types beyond startup, when a dataset carries them.
 
 The real startup dataset replaces the synthetic sample. This comes before the redesign so every later screen is built and judged on real records.
 

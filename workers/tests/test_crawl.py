@@ -56,7 +56,7 @@ def store(tmp_path):
     from atlas_workers import config
 
     try:
-        conn = psycopg.connect(config.database_url(), connect_timeout=3)
+        conn = psycopg.connect(config.test_database_url(), connect_timeout=3)
     except Exception as error:
         pytest.skip(f"database not available: {error}")
     yield RawStore(conn, LocalStorage(tmp_path))

@@ -12,6 +12,13 @@ if (!['localhost', '127.0.0.1'].includes(host) && process.env.ATLAS_ALLOW_SEED !
 
 const sql = postgres(url, { onnotice: () => {} });
 try {
+  // The sample replaces everything, so it must not land on a database holding real records.
+  const [real] = await sql`select count(*)::int as n from organisation where slug not like 'sample-%'`;
+  if (real!.n > 0 && process.env.ATLAS_SEED_OVER_REAL !== '1')
+    throw new Error(
+      `Refusing to seed: ${real!.n} organisations here are not sample records. ` +
+        'Use pnpm db:test for the test database, or set ATLAS_SEED_OVER_REAL=1 to replace them.',
+    );
   for (const name of (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort()) {
     await sql.unsafe(await readFile(dir + name, 'utf8'));
     console.log(`seeded ${name}`);
