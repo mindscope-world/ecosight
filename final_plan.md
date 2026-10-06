@@ -85,11 +85,11 @@ The first demo outside this machine.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 3.1 | Choose the free hosts | Owner + backend | Supabase for the database; static hosting for the web app; a host for the API and the scheduled workers is still undecided (open question in ADR 0002) |
-| 3.2 | Staging deployment | Backend | Database, API and web app |
-| 3.3 | Public layer build job | Backend | Write layer GeoJSON to static files, so the map does not depend on the API being up |
-| 3.4 | Rate limits on the public API | Backend | |
-| 3.5 | Error reporting and an uptime check | Backend | Including the public basemap, which has no uptime commitment |
+| 3.1 | Choose the free hosts | Owner | Supabase for the database; any static host for the web app (GitHub Pages works without another account); scheduled jobs on GitHub Actions. A container host for the API is still to choose |
+| 3.2 | Staging deployment | Owner + backend | Prepared, not deployed: the API runs as a container (`infra/api/Dockerfile`), the web build reads static data and supports a sub-path, and `docs/deploy.md` has the steps. Needs the accounts from 3.1, and 1.3 before anything is public |
+| 3.3 | ~~Public layer build job~~ | Done | `pnpm layers:build` writes the map's data as static files; checked that the map loads with the API stopped. Scheduling it waits on 3.1 |
+| 3.4 | ~~Rate limits on the public API~~ | Done | 120 requests a minute per visitor, a quarter of that for search; also a setting for which sites may call the API |
+| 3.5 | Error reporting and an uptime check | Backend + owner | Uptime check written (site, map data, API, basemap, every half hour); it starts once the addresses are set as repository variables. Error reporting needs an account with a reporting service |
 | 3.6 | Set the crawler and geocoder contact address | Owner | `CRAWLER_USER_AGENT`; required by the services' usage policies before regular use |
 
 **First external demo after this step:** real Nairobi data, click from a startup to its investors and on to their portfolio.

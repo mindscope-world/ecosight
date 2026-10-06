@@ -35,6 +35,12 @@ pnpm build
 pnpm check:bundle # fails if first-load JavaScript exceeds 600 KB compressed
 ```
 
+## Deploying
+
+`docs/deploy.md` has the steps. In short: `pnpm layers:build` writes the map's data
+as static files so the map loads without the API, the web app is a static build,
+and the API runs as a container from `infra/api/Dockerfile`.
+
 ## Layout
 
 - `apps/web` — Vite, React, Tailwind and MapLibre. The app reaches the map only through `src/map/adapter.ts`.

@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+data
+workers
+curation
+*.csv
+*.xlsx
+*.pdf
+apps/web

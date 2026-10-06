@@ -1,6 +1,6 @@
 import type { Filterable } from '@atlas/schema';
 import type { FeatureCollection, Point } from 'geojson';
-import { API_URL } from './config';
+import { API_URL, DATA_URL } from './config';
 
 export type OrgType =
   | 'startup'
@@ -169,11 +169,19 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** The map's own data: from the static build when one is configured, the API otherwise. */
+async function getData<T>(file: string, apiPath: string, signal?: AbortSignal): Promise<T> {
+  if (!DATA_URL) return getJson<T>(apiPath, signal);
+  const res = await fetch(`${DATA_URL}/${file}`, { signal });
+  if (!res.ok) throw new Error(`${file} responded ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
 export const fetchOffices = (signal?: AbortSignal) =>
-  getJson<OfficeCollection>('/layers/offices.geojson', signal);
+  getData<OfficeCollection>('offices.geojson', '/layers/offices.geojson', signal);
 
 export const fetchEvents = (signal?: AbortSignal) =>
-  getJson<EventCollection>('/layers/events.geojson', signal);
+  getData<EventCollection>('events.geojson', '/layers/events.geojson', signal);
 
 export const fetchOrg = (id: string, signal?: AbortSignal) =>
   getJson<OrgDetail>(`/orgs/${encodeURIComponent(id)}`, signal);
@@ -184,4 +192,4 @@ export const fetchEvent = (id: string, signal?: AbortSignal) =>
 export const search = (query: string, signal?: AbortSignal) =>
   getJson<SearchResponse>(`/search?q=${encodeURIComponent(query)}&limit=12`, signal);
 
-export const fetchStats = (signal?: AbortSignal) => getJson<Stats>('/stats', signal);
+export const fetchStats = (signal?: AbortSignal) => getData<Stats>('stats.json', '/stats', signal);

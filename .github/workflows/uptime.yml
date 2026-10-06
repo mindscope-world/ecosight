@@ -1,0 +1,30 @@
+name: Uptime
+# Checks every half hour that the deployed site, the API and the public basemap
+# answer. A failed run emails the repository's owners. Each check is skipped
+# until its address is set under Settings > Secrets and variables > Variables.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      WEB_URL: ${{ vars.WEB_URL }}
+      API_URL: ${{ vars.API_URL }}
+      BASEMAP_URL: https://tiles.openfreemap.org/styles/dark
+    steps:
+      - name: Web app
+        if: env.WEB_URL != ''
+        run: curl --fail --silent --show-error --max-time 20 --output /dev/null "$WEB_URL"
+      - name: Map data
+        if: env.WEB_URL != ''
+        run: curl --fail --silent --show-error --max-time 20 --output /dev/null "$WEB_URL/data/manifest.json"
+      - name: API
+        if: env.API_URL != ''
+        run: curl --fail --silent --show-error --max-time 20 "$API_URL/health"
+      - name: Basemap
+        # A public service with no uptime commitment; the map is blank without it.
+        if: env.WEB_URL != ''
+        run: curl --fail --silent --show-error --max-time 20 --output /dev/null "$BASEMAP_URL"
