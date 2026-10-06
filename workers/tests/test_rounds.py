@@ -76,8 +76,8 @@ def conn():
     connection.rollback()
     with connection.cursor() as cur:
         cur.execute("delete from field_source where source_url like 'https://rounds.test/%'")
-        cur.execute("delete from organisation where slug in ('sample-pay-rounds', 'example-ventures')")
-        cur.execute("delete from review_item where payload->>'import' like 'test_rounds_dataset%'")
+        cur.execute("delete from organisation where slug in ('sample-pay-rounds', 'example-ventures', 'example-ventures-africa')")
+        cur.execute("delete from review_item where payload->>'import' like 'test_rounds_dataset%' or payload->>'import' = 'another_dataset'")
     connection.commit()
     connection.close()
 
@@ -123,21 +123,59 @@ def test_loading_twice_leaves_one_copy(conn, tmp_path):
         assert cur.fetchall() == [("https://rounds.test/a",)]
 
 
-def test_an_organisation_already_on_record_is_not_loaded_again(conn):
+def test_an_organisation_already_on_record_is_merged_not_duplicated(conn, tmp_path):
+    from atlas_workers.geocode import Place
     from atlas_workers.importer import apply as load_orgs
     from atlas_workers.importer import match_existing, parse_row
 
-    row = {"Startup / organisation": "Sample Pay Rounds (duplicate listing)", "Verification status": "verified", "Record #": "1"}
-    record = parse_row(row)
-    match_existing(conn, [record], "another_dataset")
-    assert record.existing == "Sample Pay Rounds"
+    # An investor known only from a funding round ...
+    doc, rounds, _ = read_file(write(tmp_path))
+    orgs, _ = check_against_database(conn, doc["dataset"], rounds)
+    apply(conn, doc, rounds, orgs)
 
-    load_orgs(conn, [record], "another_dataset", "2026-10-06", replace_sample=False)
+    # ... then listed by a later dataset under a fuller name, with an office.
+    row = {
+        "Startup / organisation": "Example Ventures Africa", "Type": "VC / accelerator", "Record #": "1",
+        "Verification status": "verified", "Industry": "Fintech and logistics investor.",
+        "Founders and public roles": "Ada Example — Co-founder and Partner | Ben Sample — Partner",
+        "Sources": "Team — https://rounds.test/team || Contact — https://rounds.test/contact",
+    }
+
+    def load():
+        record = parse_row(row)
+        record.aliases = ["Example Ventures"]
+        match_existing(conn, [record], "another_dataset")
+        record.place, record.precision, record.address = Place(36.8, -1.26, "address", "x"), "address", "Sample House"
+        load_orgs(conn, [record], "another_dataset", "2026-10-06", replace_sample=False)
+        return record
+
+    assert load().existing == "Example Ventures"
+    load()  # a second run must not add a second office or person
+
     with conn.cursor() as cur:
-        cur.execute("select count(*) from organisation where slug = 'sample-pay-rounds'")
-        assert cur.fetchone()[0] == 1
+        cur.execute(
+            """
+            select g.name, g.aliases, g.types::text, g.sectors, g.description,
+              (select count(*) from office o where o.organisation_id = g.id),
+              (select array_agg(name) from person_role p where p.organisation_id = g.id),
+              (select count(*) from round_investor ri where ri.investor_id = g.id),
+              (select count(*) from field_source s where s.record_id = g.id)
+            from organisation g where g.slug in ('example-ventures', 'example-ventures-africa')
+            """
+        )
+        found = cur.fetchall()
+    assert len(found) == 1  # one organisation, not two
+    name, aliases, types, sectors, description, offices, people, links, sources = found[0]
+    assert (name, aliases) == ("Example Ventures Africa", ["Example Ventures"])
+    assert set(types.strip("{}").split(",")) == {"fund", "accelerator"}
+    assert sectors == ["fintech", "logistics"] and description == "Fintech and logistics investor."
+    assert (offices, people, links) == (1, ["Ada Example"], 1)  # the round link survived
+    assert sources == 3  # the round's source for its name, plus the dataset's two
 
-    # Seen from its own import, the same record is not a duplicate of itself.
-    own = parse_row(row)
-    match_existing(conn, [own], "test_rounds_dataset")
-    assert own.existing is None
+    # Loading the rounds again finds it by its old name and leaves the office alone.
+    apply(conn, doc, rounds, orgs)
+    with conn.cursor() as cur:
+        cur.execute("select count(*) from organisation where 'Example Ventures' = any(aliases) or slug = 'example-ventures'")
+        assert cur.fetchone()[0] == 1
+        cur.execute("select count(*) from office o join organisation g on g.id = o.organisation_id where g.slug = 'example-ventures-africa'")
+        assert cur.fetchone()[0] == 1

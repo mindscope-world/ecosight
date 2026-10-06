@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .importer import slugify
+from .importer import INVESTOR_PLACEHOLDER, slugify
 
 STAGES = {
     "pre-seed", "seed", "pre-series-a", "series-a", "series-b", "series-c", "bridge", "debt", "grant",
@@ -150,6 +150,13 @@ def apply(conn, doc: dict, rounds: list[Round], orgs: dict[int, dict]) -> None:
         previous = cur.fetchall()
         old_rounds = [record_id for kind, record_id in previous if kind == "funding_round"]
         old_investors = [record_id for kind, record_id in previous if kind == "organisation"]
+        # An investor that another import has since added to is no longer this one's to remove.
+        cur.execute(
+            "select distinct record_id from review_item where record_id = any(%s) and payload->>'import' <> %s",
+            (old_investors, key),
+        )
+        shared = {row[0] for row in cur.fetchall()}
+        old_investors = [org_id for org_id in old_investors if org_id not in shared]
         cur.execute("delete from field_source where record_id = any(%s)", (old_rounds + old_investors,))
         cur.execute("delete from review_item where payload->>'import' = %s", (key,))
         cur.execute("delete from funding_round where id = any(%s)", (old_rounds,))
@@ -162,7 +169,8 @@ def apply(conn, doc: dict, rounds: list[Round], orgs: dict[int, dict]) -> None:
                 named_in.setdefault(name, item.source or first_url(orgs[item.record]["source"]))
         investor_ids: dict[str, str] = {}
         for name, kind in doc["investors"].items():
-            cur.execute("select id from organisation where slug = %s", (slugify(name),))
+            # By its name or any other name it goes by.
+            cur.execute("select id from organisation where slug = %s or %s = any(aliases)", (slugify(name), name))
             row = cur.fetchone()
             if row:  # Already on record from elsewhere: use it, and leave it alone on re-runs.
                 investor_ids[name] = row[0]
@@ -172,7 +180,7 @@ def apply(conn, doc: dict, rounds: list[Round], orgs: dict[int, dict]) -> None:
                 insert into organisation (name, slug, types, status, description)
                 values (%s, %s, array[%s]::org_type[], 'published', %s) returning id
                 """,
-                (name, slugify(name), kind, "Named as an investor in a funding round on record."),
+                (name, slugify(name), kind, INVESTOR_PLACEHOLDER),
             )
             investor_ids[name] = cur.fetchone()[0]
             cur.execute(

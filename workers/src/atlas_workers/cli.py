@@ -72,8 +72,10 @@ def cmd_import(args: argparse.Namespace) -> int:
     from .importer import apply, build_report, locate, match_existing, read_dataset
 
     path = Path(args.dataset)
-    columns = json.loads(Path(args.mapping).read_text()) if args.mapping else None
-    records = read_dataset(path, columns, args.publish_all)
+    mapping = json.loads(Path(args.mapping).read_text()) if args.mapping else {}
+    # A mapping file is either the columns alone, or columns with aliases beside them.
+    columns = mapping.get("columns", mapping) or None
+    records = read_dataset(path, columns, args.publish_all, mapping.get("aliases"), mapping.get("statuses"))
     # Checked on a dry run too, so the report shows what would be skipped.
     try:
         with psycopg.connect(config.database_url(), connect_timeout=5) as conn:

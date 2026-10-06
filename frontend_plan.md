@@ -375,7 +375,7 @@ How the brief's open points were settled:
 | Pages behind the footer: About, Methodology, Contact, Privacy, Terms, Data Policy | Content and legal text need the owner; Privacy and Terms are required before a public launch |
 | Sign in, and "Join the ecosystem" as a sign-up | Needs accounts (step 5 of `final_plan.md`) |
 | Hoverable city labels on the hero map | The preview maps are non-interactive by design; the explore section's controls are the interaction |
-| Real points for investors, programs and events | The investors dataset is not loaded yet, and there are no events |
+| Real points for events | Investors and programs in Nairobi are now real records; there are no events yet |
 | A social preview image and page metadata for sharing | Small; best done once the copy is final |
 | A design review against a reference | The page follows the written brief; no visual reference was supplied for it |
 
