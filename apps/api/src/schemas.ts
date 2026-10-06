@@ -29,7 +29,7 @@ export const Office = Type.Object({
   address: Nullable(Type.String()),
   city: Type.String(),
   country: Type.String(),
-  precision: Type.Union([Type.Literal('address'), Type.Literal('city')]),
+  precision: Type.Union([Type.Literal('address'), Type.Literal('area'), Type.Literal('city')]),
   lon: Type.Number(),
   lat: Type.Number(),
 });
@@ -54,6 +54,8 @@ export const OrgDetail = Type.Object({
   founded_year: Nullable(Type.Integer()),
   is_active: Type.Boolean(),
   raised_usd: Type.Number(),
+  // Funding as the research words it, for records with no round rows.
+  funding_note: Nullable(Type.String()),
   rounds: Type.Array(
     Type.Object({
       id: Type.String({ format: 'uuid' }),

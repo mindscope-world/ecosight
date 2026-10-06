@@ -1,9 +1,10 @@
-"""Command line for the pipeline steps: `atlas crawl`, `atlas extract`, `atlas eval`."""
+"""Command line for the pipeline steps: `atlas crawl`, `atlas extract`, `atlas eval`, `atlas import-orgs`."""
 
 import argparse
 import json
 import sys
 from dataclasses import asdict
+from datetime import date
 from pathlib import Path
 
 from . import config
@@ -64,6 +65,34 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import(args: argparse.Namespace) -> int:
+    from .geocode import Geocoder
+    from .importer import apply, build_report, locate, read_dataset
+
+    path = Path(args.dataset)
+    records = read_dataset(path)
+    geocoder = Geocoder(config.geocode_cache())
+    for record in records:
+        locate(record, geocoder)
+    report = build_report(records, path.name)
+    report_path = Path(args.report)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report)
+    published = sum(record.publish for record in records)
+    print(f"{len(records)} rows read, {published} to publish, {len(records) - published} drafts")
+    print(f"{geocoder.requests} geocoding requests made; report written to {report_path}")
+    if not args.apply:
+        print("Dry run: nothing was written to the database. Add --apply to load.")
+        return 0
+
+    import psycopg
+
+    with psycopg.connect(config.database_url()) as conn:
+        apply(conn, records, path.stem, args.snapshot, args.replace_sample)
+    print("Loaded.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="atlas")
     commands = parser.add_subparsers(required=True)
@@ -84,6 +113,14 @@ def main() -> int:
     evaluate.add_argument("--json", action="store_true", help="print the report as JSON")
     evaluate.add_argument("--failures", action="store_true", help="list each wrong field")
     evaluate.set_defaults(run=cmd_eval)
+
+    load = commands.add_parser("import-orgs", help="load a researched organisations CSV (dry run unless --apply)")
+    load.add_argument("dataset")
+    load.add_argument("--apply", action="store_true", help="write to the database")
+    load.add_argument("--replace-sample", action="store_true", help="also remove the synthetic sample records")
+    load.add_argument("--snapshot", default=date.today().isoformat(), help="date the research was done (YYYY-MM-DD)")
+    load.add_argument("--report", default=str(config.REPO_ROOT / "data" / "import-report.md"))
+    load.set_defaults(run=cmd_import)
 
     args = parser.parse_args()
     return args.run(args)

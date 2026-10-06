@@ -29,7 +29,8 @@ Open <http://localhost:5173>. The API's OpenAPI document is at
 
 ```sh
 pnpm typecheck
-pnpm test         # API tests need the seeded database
+pnpm db:test      # build the separate test database with the synthetic sample
+pnpm test         # API tests run against that test database
 pnpm build
 pnpm check:bundle # fails if first-load JavaScript exceeds 600 KB compressed
 ```
@@ -56,7 +57,16 @@ uv run pytest
 uv run atlas crawl                 # fetch the news feeds into data/raw and raw_document
 uv run atlas extract <file.json>   # extract one stored article with the rule-based baseline
 uv run atlas eval                  # per-field accuracy on eval/labelled.jsonl
+uv run atlas import-orgs <file.csv>          # dry run: writes data/import-report.md, changes nothing
+uv run atlas import-orgs <file.csv> --apply  # load it; re-running replaces what it loaded before
 ```
+
+`import-orgs` reads a researched organisations CSV. Only rows marked `verified` are
+published; the rest are kept as drafts with a pending review item. Addresses are
+placed through the public Nominatim geocoder (one request a second, cached in
+`data/geocode-cache.json`), and a match is kept only when it carries the building or
+street name. Add `--replace-sample` to remove the synthetic sample at the same time.
+`pnpm db:seed` refuses to run on a database that holds real records.
 
 Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on
 [Groq](https://console.groq.com) through LangChain and needs `GROQ_API_KEY` in

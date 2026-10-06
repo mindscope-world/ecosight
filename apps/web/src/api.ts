@@ -47,13 +47,14 @@ export interface OrgDetail {
   founded_year: number | null;
   is_active: boolean;
   raised_usd: number;
+  funding_note: string | null;
   offices: {
     id: string;
     is_hq: boolean;
     address: string | null;
     city: string;
     country: string;
-    precision: 'address' | 'city';
+    precision: 'address' | 'area' | 'city';
     lon: number;
     lat: number;
   }[];

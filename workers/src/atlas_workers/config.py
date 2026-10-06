@@ -25,14 +25,23 @@ def database_url() -> str:
     return url
 
 
+def test_database_url() -> str:
+    """The database tests may write to: the separate test database when one is set."""
+    return os.environ.get("TEST_DATABASE_URL") or database_url()
+
+
 def raw_store_dir() -> Path:
     return Path(os.environ.get("RAW_STORE_DIR", REPO_ROOT / "data" / "raw"))
 
 
-# Identifies the crawler to site owners, with a way to reach us.
-USER_AGENT = os.environ.get(
-    "CRAWLER_USER_AGENT", "CapitalAtlasBot/0.1 (+https://github.com/capital-atlas; ecosystem map)"
-)
+# Identifies our requests to site owners and to Nominatim. Set CRAWLER_USER_AGENT
+# to a string with a working contact address before anything runs on a schedule.
+USER_AGENT = os.environ.get("CRAWLER_USER_AGENT", "ecoSight/0.1 (startup ecosystem map; research import)")
+
+
+def geocode_cache() -> Path:
+    return Path(os.environ.get("GEOCODE_CACHE", REPO_ROOT / "data" / "geocode-cache.json"))
+
 
 # Extraction model on Groq, called through LangChain. Groq has a free tier.
 GROQ_MODEL = os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile"

@@ -88,7 +88,7 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
         )}
         <div className="mt-3 grid grid-cols-3 gap-2">
           <Fact label="Founded" value={org.founded_year ?? '—'} />
-          <Fact label="Funding" value={org.raised_usd > 0 ? formatUsd(org.raised_usd) : '—'} />
+          <Fact label={org.raised_usd > 0 ? 'Funding' : 'Stage'} value={org.raised_usd > 0 ? formatUsd(org.raised_usd) : (org.stage ?? '—')} />
           <Fact
             label="Status"
             value={
@@ -108,6 +108,13 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
               <SourceLink url={`https://${org.website_domain}`} />
             </p>
           )}
+        </Block>
+      )}
+
+      {org.rounds.length === 0 && (org.funding_note || org.stage) && (
+        <Block title="Funding">
+          {org.stage && <Fact label="Stage" value={org.stage} />}
+          {org.funding_note && <p className="m-0 mt-1.5 leading-snug text-mute">{org.funding_note}</p>}
         </Block>
       )}
 
@@ -136,10 +143,12 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
         <ul>
           {org.offices.map((office) => (
             <li key={office.id} className="flex justify-between gap-2">
-              <span>{[office.address, office.city].filter(Boolean).join(', ')}</span>
+              {/* Researched addresses usually name the city already. */}
+              <span>{office.address?.includes(office.city) ? office.address : [office.address, office.city].filter(Boolean).join(', ')}</span>
               <span className="text-[11px] text-mute">
                 {office.is_hq ? 'HQ' : 'Branch'}
                 {office.precision === 'city' && ' · city level'}
+                {office.precision === 'area' && ' · area level'}
               </span>
             </li>
           ))}

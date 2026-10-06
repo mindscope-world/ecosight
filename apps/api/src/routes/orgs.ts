@@ -18,7 +18,7 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
       const [org] = await sql<OrgDetail[]>`
         select
           g.id, g.name, g.slug, g.types::text[] as types, g.sectors, g.stage,
-          g.website_domain, g.description, g.founded_year, g.is_active,
+          g.website_domain, g.description, g.founded_year, g.is_active, g.funding_note,
           coalesce((
             select sum(r.amount_usd) from funding_round r
             where r.organisation_id = g.id and r.status = 'published'

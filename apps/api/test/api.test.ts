@@ -3,7 +3,7 @@ import { buildApp, type App } from '../src/app.js';
 import { connect, withFund, type Sql } from '../src/db.js';
 import { parseQuery } from '../src/routes/search.js';
 
-// Runs against the seeded local database (pnpm db:up && db:migrate && db:seed).
+// Runs against the seeded test database (pnpm db:up && pnpm db:test).
 let sql: Sql;
 let app: App;
 
