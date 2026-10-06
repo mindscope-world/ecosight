@@ -22,6 +22,9 @@ setWorkerUrl(workerUrl);
 const EMPTY: FeatureCollection<Point> = { type: 'FeatureCollection', features: [] };
 const POINT_SUFFIXES = ['clusters', 'cluster-count', 'points'];
 const ICON_PIXELS = 48;
+// Past this zoom a cluster is records on the same spot: zooming will not part them.
+const STACK_ZOOM = 17;
+const STACK_LIMIT = 500;
 
 type LayerState = { data: FeatureCollection<Point>; visible: boolean } & (
   | { kind: 'points'; spec: PointLayerSpec }
@@ -127,8 +130,14 @@ export class MapLibreAdapter implements MapAdapter {
       const feature = event.features?.[0];
       const clusterId = feature?.properties?.cluster_id;
       if (!feature || clusterId == null || feature.geometry.type !== 'Point') return;
-      const zoom = await map.getSource<GeoJSONSource>(id)?.getClusterExpansionZoom(clusterId);
-      if (zoom == null) return;
+      const source = map.getSource<GeoJSONSource>(id);
+      const zoom = await source?.getClusterExpansionZoom(clusterId);
+      if (!source || zoom == null) return;
+      if (zoom > STACK_ZOOM) {
+        const leaves = await source.getClusterLeaves(clusterId, STACK_LIMIT, 0);
+        spec.onSelectMany(leaves.map((leaf) => leaf.properties ?? {}));
+        return;
+      }
       map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom });
     });
     for (const layer of [`${id}-points`, `${id}-clusters`]) {
@@ -190,12 +199,14 @@ export class MapLibreAdapter implements MapAdapter {
     if (!map.hasImage(`${id}-marker`))
       map.addImage(`${id}-marker`, markerImage(spec), { pixelRatio: 2 });
     // Clustering runs in the browser so counts stay correct when data is filtered.
+    // It stays on at every zoom, so records on the same spot keep a counted marker
+    // instead of hiding under one another.
     map.addSource(id, {
       type: 'geojson',
       data: state.data,
       cluster: true,
       clusterRadius: 36,
-      clusterMaxZoom: 12,
+      clusterMaxZoom: 22,
     });
     map.addLayer({
       id: `${id}-clusters`,

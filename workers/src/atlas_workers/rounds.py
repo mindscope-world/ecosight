@@ -98,8 +98,8 @@ def check_against_database(conn, dataset: str, rounds: list[Round]) -> tuple[dic
     with conn.cursor() as cur:
         cur.execute(
             """
-            select (payload->>'record')::int, record_id, payload->'row'->>'Funding details',
-                   payload->'row'->>'Funding source URL', g.status::text
+            select (payload->>'record')::int, record_id, payload->'fields'->>'funding_details',
+                   payload->'fields'->>'source_funding', g.status::text
             from review_item r join organisation g on g.id = r.record_id
             where r.record_type = 'organisation' and payload->>'import' = %s
             """,

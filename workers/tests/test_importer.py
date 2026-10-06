@@ -235,3 +235,56 @@ def test_matches_outside_nairobi_are_refused(tmp_path):
     assert classify("highway", "residential") == "area"
     assert classify("place", "house") == "address"
     assert classify("office", "company") == "address"
+
+
+def test_types_are_read_from_a_type_column():
+    from atlas_workers.importer import read_types
+
+    assert read_types("Investor; Accelerator") == (["fund", "accelerator"], [])
+    assert read_types("Startups") == (["startup"], [])
+    assert read_types("VC / innovation hub") == (["fund", "innovation_hub"], [])
+    assert read_types("Bank") == ([], ["bank"])
+    assert read_types("") == ([], [])
+
+    record = parse_row({**ROW, "Type": "Investor, Bank"})
+    assert record.types == ["fund"]
+    assert "type not recognised: bank" in record.notes
+    assert parse_row(ROW).types == ["startup"]
+
+
+def test_a_dataset_with_other_headings_is_read_through_a_mapping(tmp_path):
+    from atlas_workers.importer import read_dataset
+
+    path = tmp_path / "other.csv"
+    path.write_text(
+        "Company,Kind,Year,Lat,Lng,Site\n"
+        "Sample Hub,Innovation hub,2019,-1.26,36.80,https://hub.example.org\n"
+        "Far Away Ltd,Startup,nineteen,-4.04,39.66,\n"
+    )
+    columns = {"name": "Company", "type": "Kind", "founded_year": "Year", "latitude": "Lat", "longitude": "Lng", "website": "Site"}
+
+    drafts = read_dataset(path, columns)
+    assert [record.publish for record in drafts] == [False, False]  # no verification column
+
+    hub, far = read_dataset(path, columns, publish_all=True)
+    assert (hub.name, hub.types, hub.founded_year, hub.publish, hub.number) == ("Sample Hub", ["innovation_hub"], 2019, True, 1)
+    locate(hub, geocoder(tmp_path, {}))
+    assert (hub.precision, hub.place.lon, hub.place.lat) == ("address", 36.80, -1.26)
+    assert "founded year not read: 'nineteen'" in far.notes
+    assert "coordinates are outside the covered area" in far.notes
+
+    with pytest.raises(ValueError, match="missing columns: Startup / organisation"):
+        read_dataset(path)
+
+
+def test_records_in_cities_not_yet_covered_get_no_office(tmp_path):
+    record = parse_row({**ROW, "City": "Mombasa"})
+    locate(record, geocoder(tmp_path, {"Sample House, Nairobi": [BUILDING]}))
+    assert record.precision is None
+    assert "city not covered yet: Mombasa" in record.notes
+
+
+def test_cleaning_services_are_not_clean_technology():
+    assert read_sectors("Technology-enabled domestic cleaning services") == []
+    assert read_sectors("Clean cooking / energy hardware") == ["cleantech"]
+    assert read_sectors("Clean technology; environmental services") == ["cleantech"]

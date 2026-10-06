@@ -12,6 +12,9 @@ reliably and leaves the rest as text for a person:
 
 Running without `apply` changes nothing in the database: it builds the plan and
 the report, which is what gets reviewed first.
+
+Other datasets are read through a column mapping: a JSON object from the field
+names in `DEFAULT_COLUMNS` to that dataset's own column headings.
 """
 
 import csv
@@ -22,23 +25,49 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .geocode import Geocoder, Place
+from .geocode import Geocoder, Place, in_nairobi
 
 NAIROBI = ("Nairobi", "KE")
 
-REQUIRED_COLUMNS = (
-    "Record #",
-    "Startup / organisation",
-    "Verification status",
-    "Industry",
-    "Nairobi basis",
-    "Exact public building / premise",
-    "Location verification",
-    "Funding level / status",
-    "Funding details",
-    "Founders and public roles",
-    "Official website",
-)
+# Field name to column heading, as in the first dataset loaded. A mapping file
+# overrides any of these for a dataset with different headings.
+DEFAULT_COLUMNS = {
+    "record": "Record #",
+    "name": "Startup / organisation",
+    "status": "Verification status",
+    "type": "Type",
+    "industry": "Industry",
+    "founded_year": "Founded year",
+    "location_basis": "Nairobi basis",
+    "premise": "Exact public building / premise",
+    "location_verification": "Location verification",
+    "city": "City",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "funding_status": "Funding level / status",
+    "funding_details": "Funding details",
+    "founders": "Founders and public roles",
+    "website": "Official website",
+    "source_name": "Identity / Nairobi source URL",
+    "source_office": "Location source URL",
+    "source_funding": "Funding source URL",
+    "source_people": "Founder source URL",
+}
+# Only a name is indispensable. Everything else has a safe reading when absent.
+REQUIRED_FIELDS = ("name",)
+
+# Words a dataset may use for each kind of organisation.
+TYPE_WORDS = {
+    "startup": "startup", "company": "startup", "scaleup": "startup",
+    "investor": "fund", "vc": "fund", "venture capital": "fund", "fund": "fund", "pe": "fund",
+    "angel network": "angel_network", "angel": "angel_network",
+    "accelerator": "accelerator", "incubator": "incubator",
+    "ngo": "ngo", "non-profit": "ngo", "nonprofit": "ngo",
+    "development funder": "development_funder", "dfi": "development_funder", "foundation": "development_funder",
+    "hub": "innovation_hub", "innovation hub": "innovation_hub", "coworking": "innovation_hub",
+    "university": "university", "government": "government_program", "government program": "government_program",
+    "corporate": "corporate",
+}
 STATUSES = {"verified", "partially_verified", "not_verified", "inactive_or_unclear"}
 LOCATION_LEVELS = {
     "exact_public_address_verified",
@@ -55,7 +84,8 @@ SECTOR_RULES: tuple[tuple[str, str], ...] = (
     ("edtech", r"ed-?tech|education|learning|assistive"),
     ("mobility", r"mobility|ride-hailing|electric[- ]motorcycle|\bev\b|fleet"),
     ("logistics", r"logistic|freight|trucking|deliver|parcel|fulfil|transport|supply chain"),
-    ("cleantech", r"clean|climate|energy|solar|waste|circular|recycl"),
+    # Not bare "clean": a cleaning service is not clean technology.
+    ("cleantech", r"clean ?tech|clean (?:cooking|energy)|climate|energy|solar|waste|circular|recycl"),
     ("e-commerce", r"e-commerce|retail|marketplace"),
     ("ai", r"\bai\b|artificial intelligence|machine learning"),
     ("software", r"software|saas|it services|digital products|data infrastructure|blockchain|\biot\b|game"),
@@ -124,11 +154,20 @@ class Record:
     premise: str | None
     area: str | None
     place: Place | None = None
+    types: list[str] = field(default_factory=lambda: ["startup"])
+    founded_year: int | None = None
+    city: str = "Nairobi"
+    # Coordinates given by the dataset itself, which take precedence over a lookup.
+    given: tuple[float, float] | None = None
+    # Set when the organisation is already on record from another source.
+    existing: str | None = None
     precision: str | None = None
     address: str | None = None
     sources: dict[str, str] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     raw: dict[str, str] = field(default_factory=dict)
+    # The row keyed by field name, kept so later steps need not know the dataset's headings.
+    fields: dict[str, str] = field(default_factory=dict)
 
 
 def slugify(text: str) -> str:
@@ -262,67 +301,127 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
     return None
 
 
-def parse_row(row: dict[str, str]) -> Record:
-    raw_name = row["Startup / organisation"].strip()
+def read_types(text: str) -> tuple[list[str], list[str]]:
+    """Organisation types named in a cell, and any words that were not understood."""
+    types: list[str] = []
+    unknown: list[str] = []
+    for word in re.split(r"[;,/|]| and ", text.lower()):
+        word = word.strip()
+        if not word:
+            continue
+        kind = TYPE_WORDS.get(word) or TYPE_WORDS.get(word.rstrip("s"))
+        if kind is None:
+            unknown.append(word)
+        elif kind not in types:
+            types.append(kind)
+    return types, unknown
+
+
+def to_fields(row: dict[str, str], columns: dict[str, str]) -> dict[str, str]:
+    """A dataset row keyed by field name, whatever its own headings are. Absent columns read as empty."""
+    return {name: (row.get(column) or "").strip() for name, column in columns.items()}
+
+
+def parse_row(
+    row: dict[str, str],
+    columns: dict[str, str] = DEFAULT_COLUMNS,
+    position: int = 0,
+    publish_all: bool = False,
+) -> Record:
+    fields = to_fields(row, columns)
+    raw_name = fields["name"]
     name = display_name(raw_name)
-    status = row["Verification status"].strip()
-    website, domain, website_noted = read_website(row.get("Official website", ""))
-    premise = row["Exact public building / premise"].strip()
+    # A dataset with no verification column is unverified unless the person loading it vouches for it.
+    status = fields["status"] or ("verified" if publish_all else "not_verified")
+    website, domain, website_noted = read_website(fields["website"])
+    premise = fields["premise"]
     has_premise = bool(premise) and not premise.lower().startswith("not publicly verified")
-    area = _AREA_IN_TEXT.search(row["Nairobi basis"])
-    funding = row["Funding details"].strip()
-    people_text = row["Founders and public roles"].strip()
+    area = _AREA_IN_TEXT.search(fields["location_basis"])
+    funding = fields["funding_details"]
+    funding_status = fields["funding_status"].rstrip(".")
+    people_text = fields["founders"]
+    types, unknown_types = read_types(fields["type"])
+    # With no stated level, an address in the row is taken as the address.
+    level = fields["location_verification"] or (
+        "exact_public_address_verified" if has_premise else "not_publicly_verified"
+    )
 
     record = Record(
-        number=int(row["Record #"]),
+        number=int(fields["record"]) if fields["record"].isdigit() else position,
         raw_name=raw_name,
         name=name,
         slug=slugify(name),
         status=status,
         publish=status == "verified",
-        description=row["Industry"].strip(),
-        sectors=read_sectors(row["Industry"]),
-        stage=read_stage(row["Funding level / status"]),
-        funding_note=f"{row['Funding level / status'].strip().rstrip('.')}. {funding}" if funding else None,
+        description=fields["industry"],
+        sectors=read_sectors(fields["industry"]),
+        stage=read_stage(fields["funding_status"]),
+        funding_note=". ".join(part for part in (funding_status, funding) if part) or None,
         website=website,
         domain=domain,
+        types=types or ["startup"],
+        city=fields["city"] or "Nairobi",
         people=read_people(people_text),
-        location_level=row["Location verification"].strip(),
+        location_level=level,
         premise=premise if has_premise else None,
         area=area[1] if area else None,
         sources={
-            key: row.get(column, "").strip()
-            for key, column in (
-                ("name", "Identity / Nairobi source URL"),
-                ("office", "Location source URL"),
-                ("funding", "Funding source URL"),
-                ("people", "Founder source URL"),
-                ("website", "Official website"),
+            key: fields[source]
+            for key, source in (
+                ("name", "source_name"),
+                ("office", "source_office"),
+                ("funding", "source_funding"),
+                ("people", "source_people"),
+                ("website", "website"),
             )
-            if row.get(column, "").strip().startswith("http")
+            if fields[source].startswith("http")
         },
         raw=dict(row),
     )
+    record.fields = fields
+    if not name:
+        record.notes.append("no name")
     if status not in STATUSES:
         record.notes.append(f"unknown verification status {status!r}")
     if record.location_level not in LOCATION_LEVELS:
         record.notes.append(f"unknown location verification {record.location_level!r}")
+    if unknown_types:
+        record.notes.append(f"type not recognised: {', '.join(unknown_types)}")
+    if fields["founded_year"]:
+        year = fields["founded_year"]
+        if year.isdigit() and 1800 <= int(year) <= 2100:
+            record.founded_year = int(year)
+        else:
+            record.notes.append(f"founded year not read: {year!r}")
+    if fields["latitude"] or fields["longitude"]:
+        try:
+            lon, lat = float(fields["longitude"]), float(fields["latitude"])
+        except ValueError:
+            record.notes.append("coordinates not read")
+        else:
+            if in_nairobi(lon, lat):
+                record.given = (lon, lat)
+            else:
+                record.notes.append("coordinates are outside the covered area")
+    if record.city.casefold() != "nairobi":
+        record.notes.append(f"city not covered yet: {record.city}")
     if not record.sectors:
         record.notes.append("no sector recognised")
     if website_noted:
         record.notes.append("website cell has a note; first URL used")
-    if not record.people and not re.match(r"(no founders|founder\(s\) not|not publicly)", people_text, re.I):
+    if people_text and not record.people and not re.match(r"(no founders|founder\(s\) not|not publicly)", people_text, re.I):
         record.notes.append("founder text not read")
     return record
 
 
-def read_dataset(path: Path) -> list[Record]:
+def read_dataset(path: Path, columns: dict[str, str] | None = None, publish_all: bool = False) -> list[Record]:
+    columns = {**DEFAULT_COLUMNS, **(columns or {})}
     with path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
-        missing = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
+        missing = [columns[name] for name in REQUIRED_FIELDS if columns[name] not in (reader.fieldnames or [])]
         if missing:
             raise ValueError(f"{path.name} is missing columns: {', '.join(missing)}")
-        records = [parse_row(row) for row in reader]
+        records = [parse_row(row, columns, position, publish_all) for position, row in enumerate(reader, 1)]
     for key, label in (("slug", "name"), ("domain", "website domain")):
         seen = Counter(getattr(record, key) for record in records if getattr(record, key))
         for record in records:
@@ -331,8 +430,42 @@ def read_dataset(path: Path) -> list[Record]:
     return records
 
 
+def match_existing(conn, records: list[Record], import_key: str) -> None:
+    """Mark records that are already on record from somewhere other than this import.
+
+    Matching is by website domain, then by name. A match is not loaded again: one
+    organisation must not appear twice because two datasets both list it.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select g.slug, g.website_domain, g.name from organisation g
+            where not exists (
+              select 1 from review_item r
+              where r.record_id = g.id and r.payload->>'import' = %s
+            )
+            """,
+            (import_key,),
+        )
+        existing = cur.fetchall()
+    by_domain = {domain: name for _, domain, name in existing if domain}
+    by_slug = {slug: name for slug, _, name in existing}
+    for record in records:
+        found = (record.domain and by_domain.get(record.domain)) or by_slug.get(record.slug)
+        if found:
+            record.existing = found
+            record.notes.append(f"already on record as {found}; not loaded again")
+
+
 def locate(record: Record, geocoder: Geocoder) -> None:
     """Place a record as precisely as the public evidence and the geocoder allow."""
+    if record.city.casefold() != "nairobi":
+        return  # Kept without an office until that city is covered.
+    if record.given:
+        lon, lat = record.given
+        record.place = Place(lon, lat, "address", "coordinates given in the dataset")
+        record.precision, record.address = "address", clean_address(record.premise) if record.premise else None
+        return
     if record.location_level == "not_publicly_verified" and not record.publish:
         return  # No confirmed Nairobi location: the draft is kept without an office.
     if record.premise and record.location_level == "exact_public_address_verified":
@@ -359,6 +492,12 @@ def build_report(records: list[Record], source: str) -> str:
         f"- Rows read: {len(records)}",
         f"- Published (verified): {len(published)}",
         f"- Loaded as drafts for review: {len(records) - len(published)}",
+        "",
+        f"- Already on record, not loaded again: {sum(bool(r.existing) for r in records)}",
+        "",
+        "## Types",
+        "",
+        *[f"- {kind}: {count}" for kind, count in Counter(r.types[0] for r in records).most_common()],
         "",
         "## Verification status",
         "",
@@ -417,16 +556,20 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
             cur.execute("delete from organisation where id = any(%s)", (previous,))
 
         for record in records:
+            if record.existing or not record.name:
+                continue
             cur.execute(
                 """
                 insert into organisation
-                  (name, slug, types, sectors, stage, website_domain, description, status, funding_note)
-                values (%s, %s, '{startup}', %s, %s, %s, %s, %s, %s)
+                  (name, slug, types, sectors, stage, website_domain, description, status,
+                   funding_note, founded_year)
+                values (%s, %s, %s::org_type[], %s, %s, %s, %s, %s, %s, %s)
                 returning id
                 """,
                 (
-                    record.name, record.slug, record.sectors, record.stage, record.domain,
-                    record.description, "published" if record.publish else "draft", record.funding_note,
+                    record.name, record.slug, record.types, record.sectors, record.stage, record.domain,
+                    record.description, "published" if record.publish else "draft",
+                    record.funding_note, record.founded_year,
                 ),
             )
             org_id = cur.fetchone()[0]
@@ -460,7 +603,7 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                 """,
                 (
                     org_id,
-                    json.dumps({"import": import_key, "record": record.number, "row": record.raw}),
+                    json.dumps({"import": import_key, "record": record.number, "row": record.raw, "fields": record.fields}),
                     "approved" if record.publish else "pending",
                     None if record.publish else f"Dataset marks this row {record.status}",
                     snapshot if record.publish else None,

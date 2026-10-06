@@ -13,7 +13,7 @@ Urgency:
 
 ## 1. What is built
 
-Everything below is committed on the `sprint-2-foundations` branch and passes its checks locally: 41 TypeScript tests, 62 Python tests, typecheck, build, and first-load JavaScript of 354 KB against the 600 KB budget.
+The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 41 TypeScript tests, 67 Python tests, typecheck, build, and first-load JavaScript of 354 KB against the 600 KB budget.
 
 ### Data
 
@@ -55,7 +55,7 @@ Nothing here needs new features. It makes the work safe, shared and trusted.
 
 | # | Item | Who | Notes |
 |---|------|-----|-------|
-| 1.1 | Create a remote, push the branch, get CI green | Owner + backend | There is no remote, so CI has never run |
+| 1.1 | ~~Create a remote, push the branch, get CI green~~ | Done | Public repository, CI green on pull request 1. Still to do: merge the pull request |
 | 1.2 | Decide whether the three dataset files go into git | Owner | They hold founder names and business contacts, and are untracked today |
 | 1.3 | Confirm the data's sources allow publishing it | Owner | Risk R6 in `plan.md`. Blocks any public deployment |
 | 1.4 | Check the 36 curated rounds | Owner | Especially: investor types are the curator's classification, a bare "$" is read as US dollars, one company is dated by announcement, Another company's equity and debt are one round |
@@ -69,12 +69,12 @@ The first real dataset exposed gaps that the synthetic sample hid. These come fi
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 2.1 | A way to see records that share one point | Frontend | 30 city-level organisations sit on one spot in the city centre; only the top one can be clicked |
+| 2.1 | ~~A way to see records that share one point~~ | Done | Records on one spot keep a counted marker at every zoom; clicking it lists them, and each opens with a link back to the list |
 | 2.2 | Locations for investors | Backend + data | The 35 investors have no office, so the Investors layer is empty. Most are outside Kenya: needs a city per investor and centroids for those cities |
 | 2.3 | Country-level view | Both | Follows from 2.2: investors abroad make the map international |
-| 2.4 | Entity types from data | Backend | Every imported row is typed as a startup. The importer needs a type column or a reviewed mapping |
+| 2.4 | ~~Entity types from data~~ | Done in the importer | A `Type` column is read when a dataset has one. The first dataset has none, so its 100 rows remain startups until types are supplied |
 | 2.5 | Events | Data + backend | There are no real events, so the Events layer and its panels are empty. Needs a source: a dataset or a crawler |
-| 2.6 | Importer for other datasets | Backend | It expects this dataset's column names. Add a column mapping and matching against existing records by website and name |
+| 2.6 | ~~Importer for other datasets~~ | Done | `--mapping` reads other column headings; founded year and coordinates are read when given; an organisation already on record (same website or name) is not loaded twice. Cities other than Nairobi are reported and left without an office until 2.2 and 2.3 |
 | 2.7 | Currency conversion | Backend | One round is in Canadian dollars and is left out of dollar totals |
 | 2.8 | Business contacts and logo | Backend + owner | Decide whether public business emails and phones are stored and shown; add a logo field |
 | 2.9 | Founded year | Data | The filter and the card support it; the dataset has no such column |
