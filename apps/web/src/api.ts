@@ -159,6 +159,14 @@ export interface Stats {
   recent: { kind: 'organisation' | 'round' | 'event'; id: string; label: string; at: string }[];
   by_type: { type: OrgType; count: number }[];
   top_sectors: { sector: string; count: number }[];
+  recent_rounds: {
+    id: string;
+    organisation_id: string;
+    name: string;
+    stage: string | null;
+    amount_usd: number | null;
+    announced_on: string | null;
+  }[];
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {

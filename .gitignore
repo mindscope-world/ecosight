@@ -9,3 +9,5 @@ __pycache__/
 coverage/
 data/
 apps/web/public/data/
+# Dataset files stay out of git; only the index page is tracked. See datasets/README.md.
+datasets/*/

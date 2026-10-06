@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
@@ -9,6 +10,15 @@ export default defineConfig(({ mode }) => {
     envDir: '../..',
     plugins: [react(), tailwindcss()],
     worker: { format: 'es' },
+    build: {
+      rollupOptions: {
+        // Two pages: the landing page at the site root and the map app under /map/.
+        input: {
+          landing: fileURLToPath(new URL('index.html', import.meta.url)),
+          map: fileURLToPath(new URL('map/index.html', import.meta.url)),
+        },
+      },
+    },
     server: {
       port: Number(env.WEB_PORT ?? 5173),
       strictPort: true,

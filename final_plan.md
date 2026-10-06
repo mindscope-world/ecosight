@@ -13,10 +13,11 @@ Urgency:
 
 ## 1. What is built
 
-The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 41 TypeScript tests, 67 Python tests, typecheck, build, and first-load JavaScript of 354 KB against the 600 KB budget.
+The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 67 TypeScript tests, 67 Python tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against the 600 KB budget.
 
 ### Data
 
+- **Datasets live in `datasets/`**, one dated folder each, kept out of git (see `datasets/README.md`).
 - **First real dataset loaded** from `nairobi_startups_organisations_100.csv` (research snapshot Oct 6, 2026). Of 100 rows, the 69 marked verified are published. The other 31 are kept as drafts with a pending review item each: 18 not verified, 7 partially verified, 6 inactive or unclear.
 - **Placement of the 69:** 16 at a confirmed building, 23 on their street or neighbourhood, 30 at city level.
 - **Funding:** 36 rounds for 25 organisations, read by hand from the funding notes into `curation/nairobi_startups_funding_rounds.json`, each with the words it was read from. USD 112.13 million in rounds with a stated dollar amount. The file also lists 16 items deliberately not recorded as rounds, with reasons.
@@ -33,6 +34,12 @@ Organisations with eleven entity types, founded year, active status and funding 
 Office and event layers; organisation detail with funding and connections; event and round detail; search grouped into organisations, events, cities and sectors, which reads type, sector and city words; stats with period comparison, city scores, funding by month and a recent feed; OpenAPI document.
 
 ### Web (React, Tailwind, MapLibre)
+
+Two pages: the landing page at `/` and the map app at `/map/`.
+
+**Landing page.** Hero over a live world map with figures from the product's own records, audience bar, problem section (a table beside the same records on a map), layer cards, an explore preview that travels from the world to Nairobi, three use cases, the relationship chain, example signals marked as demo data, a globe with connections, closing call to action and footer. Specified and reported in `frontend_plan.md` section 14.
+
+**Map app.**
 
 The ecoSight interface: top navigation with six lenses, logo, navy map with a marker shape per entity type, clustering, floating layer control, funding heatmap, startup density, dark, light and terrain styles, collapsible left and right intelligence panels, entity details with funding and one-click graph navigation, search command palette, filter drawer, status bar, share links, and bottom sheets on small screens.
 
@@ -56,7 +63,7 @@ Nothing here needs new features. It makes the work safe, shared and trusted.
 | # | Item | Who | Notes |
 |---|------|-----|-------|
 | 1.1 | ~~Create a remote, push the branch, get CI green~~ | Done | Public repository, CI green on pull request 1. Still to do: merge the pull request |
-| 1.2 | Decide whether the three dataset files go into git | Owner | They hold founder names and business contacts, and are untracked today |
+| 1.2 | ~~Decide whether the dataset files go into git~~ | Done, by default | They are organised under `datasets/` and ignored by git, because the repository is public and they hold names and contacts. Reversible if the owner decides otherwise |
 | 1.3 | Confirm the data's sources allow publishing it | Owner | Risk R6 in `plan.md`. Blocks any public deployment |
 | 1.4 | Check the 36 curated rounds | Owner | Especially: investor types are the curator's classification, a bare "$" is read as US dollars, one company is dated by announcement, Another company's equity and debt are one round |
 | 1.5 | Review the 31 drafts | Owner | In particular the 6 marked inactive or unclear: show, mark inactive, or keep hidden |
@@ -70,7 +77,7 @@ The first real dataset exposed gaps that the synthetic sample hid. These come fi
 | # | Item | Track | Notes |
 |---|------|-------|-------|
 | 2.1 | ~~A way to see records that share one point~~ | Done | Records on one spot keep a counted marker at every zoom; clicking it lists them, and each opens with a link back to the list |
-| 2.2 | Locations for investors | Backend + data | The 35 investors have no office, so the Investors layer is empty. Most are outside Kenya: needs a city per investor and centroids for those cities |
+| 2.2 | Locations for investors | Backend + data | The 35 investors have no office, so the Investors layer is empty. **Data received Oct 7:** `datasets/nairobi-investors-2026-10-07/` has 25 investors and accelerators with a Nairobi presence. Loading it is next: its column headings differ, its categories need mapping to types, and investors already on record from funding rounds must gain an office, not be skipped as duplicates |
 | 2.3 | Country-level view | Both | Follows from 2.2: investors abroad make the map international |
 | 2.4 | ~~Entity types from data~~ | Done in the importer | A `Type` column is read when a dataset has one. The first dataset has none, so its 100 rows remain startups until types are supplied |
 | 2.5 | Events | Data + backend | There are no real events, so the Events layer and its panels are empty. Needs a source: a dataset or a crawler |
@@ -156,6 +163,19 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 8.8 | Offline caching | Frontend | |
 | 8.9 | Production cutover | Backend | |
 
+### Landing page follow-ups (Medium)
+
+The landing page is built; these are what it still lacks.
+
+| # | Item | Track | Notes |
+|---|------|-------|-------|
+| L.1 | Privacy, Terms and Data Policy pages | Owner | Required before a public launch; belongs with 8.7. Shown as plain text in the footer today |
+| L.2 | About, Methodology and Contact pages | Owner + frontend | Methodology can be drawn from `docs/sources.md` and the import rules |
+| L.3 | Sign in and sign up from the landing page | Both | Follows step 5; "Sign in" is inactive and "Join the ecosystem" opens the repository |
+| L.4 | Real investor, program and event points | Data | Follows the investors dataset (2.2) and an events source (2.5); only startups are real today |
+| L.5 | Social preview image and sharing metadata | Frontend | Once the copy is final |
+| L.6 | Lighthouse and accessibility pass on the landing page | Frontend | With 8.2 and 8.3 |
+
 ### Later (Low)
 
 - 3D globe.
@@ -175,6 +195,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 6 | Fresh data | — | Extraction to review queue, matching, scheduler | Medium |
 | 7 | Advanced map | Selection, time, lines, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility | Backups, security, legal | Medium, then Critical |
+| L | Landing page follow-ups | Missing pages, sharing metadata | — | Medium |
 
 Steps 1 and 2 are the priority. Step 6 does not depend on any frontend work and can start as soon as 6.1 to 6.3 are done. Step 8.7 has the longest lead time and should start no later than step 3.
 
