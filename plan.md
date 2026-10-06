@@ -2,7 +2,7 @@
 
 Oct 6, 2026 · derived from the Technical Proposal (@Kakumi)
 
-> **Status, Oct 6, 2026.** The fork audit is done and the answer is no-go on a wholesale fork (risk R3): upstream is about 195,000 lines with 215 Cesium-coupled modules. The web app is a clean MapLibre build that reuses upstream's patterns. See `docs/fork-audit.md`. The buildable parts of sprints 1 and 2 are done across all three tracks, with some sprint 3 to 5 map work pulled forward. Every component uses a free tier or a free self-run option, see `docs/adr/0002-zero-cost-stack.md`. Section 8 lists what is done and what is pending.
+> **Status, Oct 7, 2026.** This is the original plan derived from the technical proposal, kept for its reasoning, data model and risk list. The product has since been named ecoSight, rebuilt around a new interface brief, and loaded with real data. **`final_plan.md` is the current record of what is built and the order of what is left**; `frontend_plan.md` has the interface specification. The sprint table and milestones below no longer describe the order of work. Section 8 summarises where each part of this plan ended up.
 
 This plan turns the technical proposal into an ordered build: what to resolve first, how the repo is laid out, what ships in each sprint, and how we know each piece is done. Scope is the MVP (Nairobi, four views, 21 weeks). Phase 2 and 3 items (watchlists, alerts, voice, paid API) are out of scope except where the MVP must leave room for them.
 
@@ -133,92 +133,45 @@ Tests by layer: unit tests for layer modules, filters and URL encoding; API test
 | R7 | Self-hosted Nominatim is heavy for one city. | Use the public Nominatim service at 1 request per second with cached results (ADR 0002). Self-host a Kenya-only extract only if a backfill outgrows that. |
 | R8 | Legal lead time on ODPC registration and residency. | Started week 1; production region blocked on it in sprint 8. |
 
-## 8. Status: done and pending
+## 8. Where this plan stands
 
-As of Oct 6, 2026 (sprint 1, week 1). Checked on this date: `pnpm typecheck`, `pnpm test` (19 API tests against the seeded database, 6 schema tests, 2 web tests), `pnpm build`, `pnpm check:bundle` and `uv run pytest` in `workers/` (26 tests) all pass locally. First-load JavaScript is 276.6 KB against the 600 KB budget. The work after the first commit is on the `sprint-2-foundations` branch, not yet committed.
+As of Oct 7, 2026. For the full list of what is built and what is left, see `final_plan.md`.
 
-### Done
+### Section 1, the things to resolve
 
-Decisions (section 1):
+| # | Item | Outcome |
+|---|------|---------|
+| 1 | Fork or build clean | Built clean (`docs/fork-audit.md`) |
+| 2 | Supabase or RDS and Clerk | Supabase intended; not set up yet. The local database is plain Postgres with the same extensions |
+| 3 | React for non-map screens | React and Tailwind for the whole interface; the map engine stays vanilla TypeScript behind an adapter |
+| 4 | Clusters on public layers | GeoJSON per layer, clustered in the browser, also writable as static files |
+| 5 | Private rows and row-level security | Built and tested: reached only through the API as a restricted role |
+| 6 | Cesium 3D in the MVP | Dropped from the MVP |
+| 7 | Data residency, ODPC registration | Not started |
+| 8 | LLM provider | Groq through LangChain, behind a provider-neutral interface; not yet run or compared on a labelled set |
 
-- Item 1, fork or build clean: build clean (`docs/fork-audit.md`).
-- Item 4, clustering: GeoJSON per layer, clustered in the browser.
-- Item 5, private rows and RLS: through the API as a restricted role.
-- Cost: every component is free at MVP scale (`docs/adr/0002-zero-cost-stack.md`).
+### Section 4, the sprint plan
 
-Platform and database:
+The work did not follow the sprints. In terms of the milestones:
 
-- Monorepo with pnpm workspaces (`apps/web`, `apps/api`, `packages/schema`, `db`) and a uv project (`workers`).
-- CI workflow: database, migrate, seed, typecheck, tests, build, bundle budget, worker tests. Never run, see pending.
-- Local Postgres through Docker Compose with PostGIS, pgvector and pg_trgm, on port 5433.
-- Migration 0001: `organisation`, `office`, `funding_round`, `round_investor`, `program`, `program_participant`, `event`, `person_role`, `raw_document`, `field_source`, `review_item`, `audit_log`, the `public_office` view.
-- Migration 0002: full-text search column, 384-dimension name embedding column, `city` centroids, the angel snapping trigger, `submission`, `claim`, `fund_private_portfolio`, `fund_private_pipeline` with forced RLS, the `atlas_app` role, `hex_aggregate`, the `public_event` view.
-- Synthetic Nairobi seed: 48 invented organisations (30 startups, 8 funds, 4 NGOs, 4 accelerators, 2 angel networks), 6 rounds, 6 events.
+- **M0, foundations:** met.
+- **M1, clickable Nairobi:** met on real data, except that nothing is deployed to staging.
+- **M2, four views:** layers, cross-layer filters, search and share links are built. The daily pipeline into the review queue is not.
+- **M3, contribution loop:** not started. The tables and the row-level security exist.
+- **M4, feature complete:** heatmaps exist; the time slider, list view and offline caching do not.
+- **M5, launch:** not started.
 
-API (`apps/api`, Fastify):
+### Section 6, verification
 
-- `/layers/offices.geojson`, `/layers/events.geojson`, `/orgs/{id}` (with funding rounds), `/events/{id}`, `/rounds/{id}`, `/search` (full-text plus trigram, tolerant of typos), `/stats`, `/health`, `/openapi.json`.
-- `withFund` helper for per-fund queries under RLS.
+In place: the bundle budget for both pages, the cross-fund row-level security test, a test that the API and the browser filter identically, and the extraction eval harness. Not in place: Lighthouse, end-to-end browser tests in CI, the 10 times scale test, and uptime checks against a deployed site.
 
-Shared schema (`packages/schema`):
+### Section 7, the risks
 
-- Versioned share-link state (`v=1`) for camera, layers and a selected organisation or event. Links made before versioning still open.
-
-Web (`apps/web`, Vite, vanilla TypeScript, MapLibre):
-
-- `MapAdapter` and the MapLibre adapter; layers reach the map only through the adapter.
-- Six layers with clustering: startups, investors, NGOs, accelerators, angel networks, events.
-- Top menu with three screens: Map, Dashboard (totals, organisations by type, top sectors, recent rounds, from `/stats`) and Settings (theme, restore panels). Dashboard and settings load on first use.
-- Four minimisable windows docked beside the map: Layers and Overview on the left, Details and Upcoming events on the right. Minimised state is remembered.
-- Search box with fly-to; details for organisations (offices, funding, sources, verified date) and events.
-- Share links, including the open screen; light and dark themes with matching basemaps; phone layout; a gutter between the map and the right edge.
-
-Data pipeline (`workers`, Python):
-
-- Raw document store: content-addressed files under `data/raw` plus `raw_document` rows; the same content at the same URL is stored once.
-- Two feed crawlers, TechCabal and Disrupt Africa: RSS only, robots.txt checked on every run. Run against the live feeds on Oct 6: 20 articles stored, a second run added none. Terms noted in `docs/sources.md`.
-- Extraction behind one interface with a fixed schema and a quote per value; any value whose quote is not in the article is dropped. Two providers: a rule-based baseline, and a model on Groq called through LangChain. The Groq path is unit-tested with a stand-in model but has not been run against Groq yet: it needs `GROQ_API_KEY` in `.env`.
-- Eval harness reporting per-field accuracy (`uv run atlas eval`), and the labelled-set format (`eval/README.md`).
-
-### Pending in sprint 1 and 2
-
-Needs a person or an account, so not started:
-
-1. Commit the branch and push to a remote. There is still no remote, so CI has never run.
-2. Labelled set: 50 of 200 announcements. `eval/labelled.jsonl` does not exist; only four invented examples do. No accuracy figure exists until it does.
-3. Real seed data: about 50 Nairobi organisations from the researchers, to replace the synthetic sample.
-4. Supabase project (free tier). The migrations use only extensions Supabase offers.
-5. Read each publisher's terms of use and record the result in `docs/sources.md` before the crawler runs daily. Set `CRAWLER_USER_AGENT` to a string with a contact address.
-6. Open the legal conversation on data residency and ODPC registration.
-7. Agree the non-functional targets and the per-layer coverage targets as a team (coverage targets are due by week 4, risk R5).
-8. Agree items 2, 3 and 6 in section 1 and ADR 0002, which are still proposals. Items 2, 3, 6 and 7 have no ADR yet.
-9. Choose a free host for the API and the daily workers (open question in ADR 0002). M1 needs staging by week 6.
-
-Buildable next:
-
-10. Public layer build job: write the layer GeoJSON to static files for the CDN (sprint 3). Layers are served live by the API with a 60 second cache for now.
-11. Layer interface: `load(filters)`, `toUrl()`, `fromUrl()` and cross-layer filters (sprint 4).
-12. Pipeline: match and dedupe, geocoding, review-queue writes, confidence scoring (sprints 3 and 4). Extraction results are printed, not yet written to `review_item`.
-13. Name embeddings: the column exists, nothing fills it.
-
-### What the first real run showed
-
-Both extractors were run on the 20 crawled articles as a smoke test. This is not an accuracy measurement.
-
-- Three of the 20 reported a funding amount in the headline. The rule-based baseline read the two single-company rounds correctly and skipped the market summary.
-- The model run used `gemma3:4b` through Ollama, before the switch to Groq. On this laptop's CPU it took 80 to 160 seconds per article. It found more investors than the rules did, and it wrongly treated the market summary ("58 African tech startups raise $583m") as one company's round.
-- The comparison between providers has to wait for the labelled set.
-
-### Remaining sprints
-
-The sprint table in section 4 still stands. What is already done from later sprints:
-
-| Sprint | Already done | Still to do |
-|--------|--------------|-------------|
-| 3 | Startups and offices layers, detail card, `/search` | Layer panel restyle, public layer build job, match and dedupe, geocoding, staging deploy for the week 6 demo |
-| 4 | Investors, NGOs, accelerators and events layers | Cross-layer filters, rate limits, confidence scoring, review-queue writes, labelled set to 200, provider choice |
-| 5 | Share links for camera, layers and selection; search with fly-to | Filters and time range in share links, HQ-to-branch lines, auth, roles, audit log writes, scheduler, remaining crawlers, CSV import |
-| 7 | RLS policies and the cross-fund test | Everything else in the sprint |
-| 6, 8 to 11 | Nothing | Everything as planned |
-
-Verification (section 6): the bundle-size check, the cross-fund RLS test and the eval harness exist. Lighthouse CI, Playwright, the filter timing test, the synthetic 10 times dataset and uptime checks are still to build in their listed sprints.
+- **R1** (clusters and filters): settled as planned; counts stay correct under filters.
+- **R2** (shared role bypasses row-level security): mitigated and tested.
+- **R3** (fork not reusable): happened; absorbed.
+- **R4** (one adapter for two renderers): not tested, since 3D was dropped.
+- **R5** (data coverage decides launch quality): still the main risk. Coverage is 69 startups and 40 investors and programs, with no events.
+- **R6** (crawling and data terms): open. Publishers' terms are unread, and the owner has not confirmed that the loaded datasets may be published.
+- **R7** (self-hosted Nominatim): avoided by using the public service with a cache.
+- **R8** (legal lead time): open; nothing started.

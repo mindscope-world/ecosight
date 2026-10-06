@@ -2,6 +2,8 @@
 
 Oct 6, 2026 · Status: proposed, in use in the repo
 
+> **Note, Oct 7, 2026.** ADR 0003 proposes Memgraph on Railway for the graph features. That is a paid host and a departure from the rule below; see that record for the cost and the reasons.
+
 ## Decision
 
 Every component of the MVP uses a free tier or a free self-run option, chosen so

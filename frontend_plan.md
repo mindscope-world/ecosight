@@ -6,7 +6,7 @@ Oct 6, 2026 · drafted from the UI/UX brief
 
 This document turns the UI/UX brief into a build plan for the web app in `apps/web`. Sections 1 to 8 restate the brief as a specification. Sections 9 to 12 say how it maps onto the code that exists, what each panel needs from the API, the order to build it in, and the decisions that are still open. The combined frontend and backend order is in `final_plan.md`.
 
-> **Status, Oct 7, 2026.** The map app (sections 1 to 13) has build-order phases 1 to 6 and 8 implemented, with parts of 7; section 13 lists what is built and what is not. The landing page (section 14) is built. Sections 9 and 10 describe the state before this work and are kept for reference.
+> **Status, Oct 7, 2026.** The map app (sections 1 to 13) and the landing page (section 14) are both built and run on real data. The graph explorer (section 15) is specified and not yet built. Section 13 and the end of section 14 list what is built and what is not. Sections 9 to 11 describe the state and the build order before this work and are kept for reference; `final_plan.md` has the current order.
 
 > **Reference screenshot.** The brief refers to an attached reference screenshot. It has not been seen while writing this plan: it sits outside the project folder, which the session could not read. The design language below comes from the brief's written description only. Copy the image into `docs/reference/` before the design-system work starts.
 
@@ -277,7 +277,7 @@ Each phase leaves a working app. Details and the matching backend work are in `f
 
 ## 13. Implementation status
 
-Built on Oct 6, 2026 in `apps/web` (React, Tailwind, MapLibre) with matching API additions. Checked in a headless browser at desktop and phone sizes. First-load JavaScript is 353 KB of the 600 KB budget.
+Updated Oct 7, 2026. The map app is built in `apps/web` (React, Tailwind, MapLibre) and lives at `/map/`. It was checked in a headless browser at desktop and phone sizes. Its first-load JavaScript is 356 KB of the 600 KB budget. It runs on real data: 109 organisations on the map in 10 countries.
 
 Decisions taken from section 12: React and Tailwind for the interface (1), Fastify kept (2), UI renamed to ecoSight (3), dark only with light as a map style (5), hand-built SVG chart (7), score and signals as fixed rules (8), structured search words (9), dashboard and settings screens removed (11).
 
@@ -285,18 +285,20 @@ Decisions taken from section 12: React and Tailwind for the interface (1), Fasti
 
 | Component | What it does |
 |-----------|--------------|
-| TopNavigation | Wordmark and logo slot, six lenses (MAP, DISCOVER, ECOSYSTEMS, INVESTORS, STARTUPS, EVENTS) that switch layers on one map, search trigger, filters button with a count |
-| MapView | Navy-tinted dark basemap, marker shapes per entity type, clustering, light and terrain styles, scale bar |
-| LayerControl | Floating, minimisable; eight entity layers with counts, funding heatmap, startup density, map style switcher |
-| MapLegend | HQ and branch size, cluster, heat ramp when a heatmap is on |
-| Left panel | Ecosystem overview, ecosystem activity with period comparison, top sectors with shares, market activity with a documented score |
+| TopNavigation | Logo and wordmark linking to the landing page, six lenses (MAP, DISCOVER, ECOSYSTEMS, INVESTORS, STARTUPS, EVENTS) that switch layers on one map, search trigger, filters button with a count |
+| MapView | Navy-tinted dark basemap, marker shapes per entity type, clustering at every zoom, light and terrain styles, scale bar |
+| Stacked records | Records on one spot keep a counted marker; clicking it lists them, and each opens with a link back to the list |
+| LayerControl | Floating, minimisable; eight entity layers with counts; four heatmaps (funding, and startup, investor and accelerator density, each in its own colour); map style switcher |
+| MapLegend | HQ and branch size, cluster, and a named ramp for each heatmap that is on |
+| Left panel | Ecosystem overview, ecosystem activity with period comparison, top sectors with shares, market activity with a documented score, across every city with records |
 | AnalyticsPanel | Ecosystem signal (rules over counted figures), capital activity line chart with hover readout, emerging cities, recent activity feed |
-| EntityDetails | Header facts, company, funding summary and rounds, locations, connections (investors, portfolio, programs, events, people), sources |
-| Graph navigation | Any connection opens that record and moves the map to it |
-| SearchCommand | Ctrl or Cmd + K, or `/`; grouped results with counts; reads type, sector and city words; arrow keys and Enter |
-| FilterPanel | Entity type, sector, funding stage, funding raised, city, founded range, status; updates markers, overview, sectors and status bar together |
+| EntityDetails | Header facts, company, funding rounds in their own currency with dates as precise as known, or the research's funding note; investors shown by portfolio and capital; locations with their precision; connections; sources with their stated basis |
+| Graph navigation | Any connection opens that record and moves the map to it. Arcs join the selected organisation to its investors, its portfolio and its branches |
+| SearchCommand | Ctrl or Cmd + K, or `/`; results grouped into organisations, people, events, locations and sectors; reads type, sector and city words; arrow keys and Enter |
+| FilterPanel | Entity type, sector, funding stage, funding raised, country, city, founded range, year of a funding round, investor activity, event dates, status |
+| Filters everywhere | Markers, layer counts, every panel and the status bar follow the filters. The API applies the same rules as the browser |
 | StatusBar | Data status, entities, locations, countries, last updated, wordmark |
-| Share links | Lens, map style, filters, camera, layers and selection |
+| Share links | Lens, map style, filters, camera, layers and selection. Links made before the app moved to `/map/` are forwarded |
 | Responsive | Below 1024px: full-screen map, floating search button, bottom sheets for overview, layers, insights, filters and details |
 
 Every panel has a minimise control, and both side columns collapse to a rail.
@@ -306,19 +308,20 @@ Every panel has a minimise control, and both side columns collapse to a rail.
 | Item | Why |
 |------|-----|
 | Satellite style | No imagery source with a suitable licence is chosen. The option is shown disabled |
-| Polygon and radius selection, country-level view | Phase 7 |
-| Recent Activity map layer | Phase 7 |
-| Region filter, funding-date and event-date filters, investor-activity filters | Need data or endpoints that do not exist yet |
+| Polygon and radius selection, region and radius filters | Step 7 of `final_plan.md` |
+| Per-country summary | Records in any country are drawn and can be filtered by country; a summary per country is step 4 |
+| Recent Activity map layer, time slider | Step 7 |
 | Notifications, saved locations, profile | Need sign-in. The icons are shown disabled |
 | Model-parsed search queries | Structured words only for now |
-| Universities, government and hub layers | The layers exist and are empty until such records are loaded |
+| Events, universities and government layers | The layers exist and are empty until such records are loaded |
 
 ### Things to know
 
-- The data is still the synthetic sample, and the status bar says "Demo data". Set `VITE_DEMO_DATA=false` once real data is loaded.
 - Trend percentages show a dash when the earlier period is empty, which is most of them on freshly loaded data.
-- The activity panels (activity, signals, chart, cities, feed) describe the whole dataset; only the overview, top sectors, layer counts and status bar follow the filters.
+- Organisations with no public address sit on one point at their city's centre. They open as a list, and the heatmaps leave them out.
+- If the API cannot be reached, the map keeps filtering by itself and the panels keep the all-records figures and say so.
 - The colour palette for entity types passes colour-blind checks for neighbouring pairs but not for every pair, so shape carries identity alongside colour.
+- The interface has not been compared with the reference screenshot, which was never available in the repository.
 
 ## 14. Landing page
 
@@ -362,8 +365,8 @@ Built in `apps/web/src/landing/` with React, Tailwind, Motion, Lucide icons and 
 
 How the brief's open points were settled:
 
-- **Real figures where they exist.** The hero cards, the problem section's table and its map, and the Nairobi view of the explore preview read the product's own records. Today that means 69 organisations, 36 funding rounds and the largest sector.
-- **Everything else is marked.** Points outside Nairobi, the connections between cities and the small schematic maps are illustrative, and each says so in a caption. The signals cards carry a "Demo data" tag, as the brief requires. If the product's records cannot be loaded, the hero falls back to the brief's example figures, tagged as demo data.
+- **Real figures where they exist.** The hero cards, the problem section's table and its map, and the Nairobi view of the explore preview read the product's own records. Today that means 92 organisations in Nairobi, 36 funding rounds, the largest sector, and investors in 10 countries.
+- **Everything else is marked.** Apart from Nairobi and the investors placed in other cities, points on the maps are illustrative, as are the connections between cities and the small schematic maps, and each says so in a caption. A city's illustrative points give way to real ones once it has ten real records. The signals cards carry a "Demo data" tag, as the brief requires. If the product's records cannot be loaded, the hero falls back to the brief's example figures, tagged as demo data.
 - **Nothing links nowhere.** "Sign in" is shown but inactive, since there are no accounts yet. "Join the ecosystem" opens the public repository. Footer entries for pages that do not exist (About, Methodology, Contact, Privacy, Terms, Data Policy) are plain text, not links.
 - **Old share links still work.** A link to the map made before the move is forwarded from `/` to `/map/` with its state.
 - **Recharts is not used.** The page has no chart that needs it.
@@ -378,4 +381,98 @@ How the brief's open points were settled:
 | Real points for events | Investors and programs in Nairobi are now real records; there are no events yet |
 | A social preview image and page metadata for sharing | Small; best done once the copy is final |
 | A design review against a reference | The page follows the written brief; no visual reference was supplied for it |
+
+## 15. Graph explorer page
+
+Added Oct 7, 2026. Not built. This is the interface for step 3 of `final_plan.md`; the engine behind it is described in `docs/adr/0003-graph-engine.md`.
+
+### What it is for
+
+The map answers "what is where". This page answers "who is connected to whom": which investors back a company, what else they back, who they invest alongside, and how two organisations are linked. A visitor starts from one organisation and walks outward.
+
+It is a third page, at `/graph/`, beside the landing page and the map app, and it shares their look: the same navy surfaces, micro-labels, marker shapes and colours per kind of organisation.
+
+### Layout
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│ TopNavigation: logo · MAP … GRAPH · search · filters                  │
+├──────────────┬─────────────────────────────────────────┬──────────────┤
+│ Controls     │                                         │ Details      │
+│ (collapsible)│              Graph canvas               │ (the map     │
+│              │                                         │  app's panel)│
+├──────────────┴─────────────────────────────────────────┴──────────────┤
+│ StatusBar: nodes shown · relationships shown · depth · last updated   │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+`GRAPH` joins the lenses in the top navigation of the map app, and the landing page's navigation and footer link to it.
+
+### Components
+
+| Component | What it does |
+|-----------|--------------|
+| `GraphCanvas` | Nodes and links, drawn with the map's shapes and colours so a startup, an investor and an accelerator look the same on both pages. Pan, zoom, drag a node, hover for a name and one line of facts |
+| `GraphStart` | What the page shows before anything is chosen: a search box, and the most connected organisations as starting points |
+| `GraphSearch` | The existing command palette. Picking a result centres the graph on it |
+| `ExpandControl` | Click a node to select it; double-click, or a button, to bring in its neighbours. A node shows how many more connections it has before it is expanded |
+| `RelationshipFilter` | Switch kinds of link on and off: invested in, went through a programme at, organised, founded or leads, located in, works in a sector |
+| `GraphFilters` | The map app's filters, applied to nodes: sector, stage, country, year of a round, investor activity |
+| `PathFinder` | Choose two organisations and see the shortest chain of links between them, or be told there is none |
+| `InsightList` | Lists read from the graph: co-investors of the selected investor, companies that share an investor with the selected company, the most connected organisations in view |
+| `EntityDetails` | The map app's details panel, unchanged, with one addition: "Show on map" |
+| `GraphLegend` | Shapes for kinds of organisation and line styles for kinds of link |
+| `LinkDetails` | Selecting a link shows what it stands for: for an investment, the round's stage, amount, date and source |
+
+### Interactions
+
+- **Start anywhere.** From search on this page, from "View connections" in the map app's details panel, or from a share link.
+- **Expand by choice.** The graph grows only where the visitor asks. Nothing loads a whole network at once.
+- **Follow money.** From a company to its investors, to their other companies, to those companies' investors, each step one click.
+- **Find a path.** Two organisations in, the chain between them out.
+- **Go to the map.** Any node can be opened on the map, and any organisation on the map can be opened here.
+- **Share.** The address holds the starting organisation, what has been expanded, the filters and the selection, in the same versioned form as the map app's links.
+
+### What it needs from the API
+
+| Need | Request |
+|------|---------|
+| An organisation's neighbours, to a depth, by kind of link | Neighbourhood |
+| More neighbours of one node already on screen | Expand |
+| The chain between two organisations | Shortest path |
+| Who invests alongside an investor; who shares an investor with a company | Co-investment |
+| Starting points and the insight list | Most connected |
+| Finding an organisation to start from | The existing search |
+
+Every answer carries only published records, and each link can be traced to its source, as on the map.
+
+### Rules
+
+- **No hairballs.** A cap on nodes shown at once, with a clear message when a node has more neighbours than are drawn and a way to page through them.
+- **Honest about gaps.** The graph today is small and mostly investment links. A node with no connections on record says so; it is not hidden, and it is not padded with invented links.
+- **People.** A person appears only as a role at an organisation, as everywhere else. People are off by default in the relationship filter, and no node shows personal details beyond name and role.
+- **The same in a list.** Everything on the canvas is also reachable as a list in the side panel, for keyboard and screen-reader use.
+- **Lazy.** The graph library is loaded only on this page, which has its own first-load budget of 600 KB like the other two.
+
+### Small screens
+
+The canvas fills the screen. Controls and details become bottom sheets, as in the map app. The path finder and insight lists move into a sheet of their own.
+
+### Open choices
+
+| Question | Recommendation |
+|----------|----------------|
+| Graph drawing library | Choose between Cytoscape.js and Sigma.js by trying both on the real data: both are free. Decide on legibility at 200 nodes and on bundle size |
+| Layout | Force-directed by default, with a radial option centred on the selected node, which reads better for "who backs this company" |
+| Geography on this page | A toggle that pins nodes to their place on a small map was considered. Leave it out: the map app is the place for geography, and the two views say more side by side than merged |
+
+### Acceptance checks
+
+- Opening the page from a startup's details panel shows that startup with its investors in under a second on the current data.
+- Expanding an investor brings in its portfolio, and no node appears twice.
+- The path finder returns a chain for two organisations that share an investor, and says "no connection on record" for two that do not.
+- Switching a kind of link off removes those links and any node left with none.
+- A share link reopens the same graph, expanded the same way, with the same node selected.
+- A draft organisation never appears, and neither does a link to one.
+- Every link shown can be opened to see where it came from.
 
