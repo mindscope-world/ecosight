@@ -1,6 +1,7 @@
 import { countActive, NO_FILTERS, type Filters, type InvestorFilter } from '@atlas/schema';
 import type { ReactNode } from 'react';
 import { POINT_LAYERS } from '../entities';
+import { countryName } from '../lib/format';
 import { Chip, Icon, MicroLabel, ShapeIcon } from './ui';
 
 const RAISED_STEPS = [
@@ -171,7 +172,7 @@ export function FilterPanel({
             >
               <option value="">All countries</option>
               {options.countries.map((country) => (
-                <option key={country}>{country}</option>
+                <option key={country} value={country}>{countryName(country)}</option>
               ))}
             </select>
           )}

@@ -27,11 +27,11 @@ function Card({ children, className, delay }: { children: ReactNode; className: 
  * and marked examples when they are not. They are never a mix of the two.
  */
 function HeroCards({ data }: { data: LandingData }) {
-  const { stats, offices } = data;
-  const mapped = new Set(offices?.features.map((feature) => feature.properties.org_id)).size;
+  const { stats } = data;
+  const mapped = data.city?.organisations ?? 0;
   const topSector = stats?.top_sectors[0];
   const latest = stats?.recent_rounds.find((round) => round.announced_on);
-  const city = offices?.features[0]?.properties.city;
+  const city = data.city?.name;
 
   if (!stats || !mapped || !topSector) {
     return (
@@ -62,6 +62,9 @@ function HeroCards({ data }: { data: LandingData }) {
         <div className="mt-1.5 text-sm text-ink">
           <CountUp value={stats.rounds} /> funding rounds · {formatUsd(stats.raised_usd)}
         </div>
+        {stats.countries > 1 && (
+          <div className="mt-1.5 text-xs text-slate">Investors in {stats.countries} countries</div>
+        )}
       </Card>
       <Card className="right-[4%] top-[42%] hidden lg:block" delay={1.1}>
         <div className="flex items-center justify-between">
@@ -135,7 +138,7 @@ export function Hero({ data }: { data: LandingData }) {
         </motion.div>
         <p className="mt-10 text-xs text-slate/80">
           {data.live
-            ? 'Nairobi shows records from the live map. Points elsewhere are illustrative.'
+            ? `${data.city?.name ?? 'One city'} shows records from the live map, and so do investors placed in other cities. The remaining points are illustrative.`
             : 'Points on this map are illustrative.'}
         </p>
       </div>

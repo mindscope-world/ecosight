@@ -4,6 +4,9 @@ import { fetchEvents, fetchOffices, fetchStats, type OfficeCollection, type Stat
 import { layerForTypes } from '../entities';
 import { illustrativePoints, type PreviewKind } from './demo';
 
+/** Real records a city needs before its illustrative cluster is dropped. */
+const COVERED_FROM = 10;
+
 const LAYER_KIND: Record<string, PreviewKind> = {
   startups: 'startup',
   investors: 'investor',
@@ -20,6 +23,8 @@ export interface LandingData {
   stats: Stats | null;
   /** True once real records are in `points`. */
   live: boolean;
+  /** The city with the most real records, which is the one the page talks about by name. */
+  city: { name: string; offices: OfficeCollection['features']; organisations: number } | null;
 }
 
 /**
@@ -51,15 +56,24 @@ export function useLandingData(): LandingData {
       real.features.push({ type: 'Feature', geometry: feature.geometry, properties: { kind: 'event' } });
 
     const live = real.features.length > 0;
-    // Where real records exist, the illustrative cluster for that city is left out.
-    const cities = new Set((offices?.features ?? []).map((feature) => feature.properties.city));
-    const illustrative = illustrativePoints([...cities]);
+    const byCity = new Map<string, OfficeCollection['features']>();
+    for (const feature of offices?.features ?? [])
+      byCity.set(feature.properties.city, [...(byCity.get(feature.properties.city) ?? []), feature]);
+    const [name, inCity] = [...byCity].sort((a, b) => b[1].length - a[1].length)[0] ?? [];
+    // A city's illustrative cluster gives way once it has real coverage. One or two
+    // real records there do not: those are drawn on top of the illustration.
+    const covered = [...byCity].filter(([, features]) => features.length >= COVERED_FROM).map(([city]) => city);
+    const illustrative = illustrativePoints(covered);
     return {
       points: { type: 'FeatureCollection', features: [...illustrative.features, ...real.features] },
       real,
       offices,
       stats,
       live,
+      city:
+        name && inCity
+          ? { name, offices: inCity, organisations: new Set(inCity.map((f) => f.properties.org_id)).size }
+          : null,
     };
   }, [offices, events, stats]);
 }

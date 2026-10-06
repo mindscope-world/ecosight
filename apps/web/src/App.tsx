@@ -255,7 +255,10 @@ export function App() {
   const signals = useMemo(() => (stats ? buildSignals(stats, sectors) : []), [stats, sectors]);
   const emerging = useMemo(
     () =>
-      [...(stats?.cities ?? [])].sort(
+      // Only cities with something recent to show: a city that merely hosts an investor is not emerging.
+      (stats?.cities ?? [])
+        .filter((city) => city.rounds_12m + city.upcoming_events > 0)
+        .sort(
         (a, b) =>
           (b.rounds_12m + b.upcoming_events) / b.organisations -
           (a.rounds_12m + a.upcoming_events) / a.organisations,

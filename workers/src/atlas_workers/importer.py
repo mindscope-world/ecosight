@@ -27,7 +27,6 @@ from pathlib import Path
 
 from .geocode import Geocoder, Place, in_nairobi
 
-NAIROBI = ("Nairobi", "KE")
 # What an investor known only from a funding round is described as, until a dataset says more.
 INVESTOR_PLACEHOLDER = "Named as an investor in a funding round on record."
 
@@ -44,6 +43,7 @@ DEFAULT_COLUMNS = {
     "premise": "Exact public building / premise",
     "location_verification": "Location verification",
     "city": "City",
+    "country": "Country",
     "latitude": "Latitude",
     "longitude": "Longitude",
     "funding_status": "Funding level / status",
@@ -164,6 +164,10 @@ class Record:
     types: list[str] = field(default_factory=lambda: ["startup"])
     founded_year: int | None = None
     city: str = "Nairobi"
+    # ISO 3166 two-letter code.
+    country: str = "KE"
+    # Where a record outside Nairobi is drawn when it has no coordinates of its own.
+    city_centre: Place | None = None
     # Coordinates given by the dataset itself, which take precedence over a lookup.
     given: tuple[float, float] | None = None
     # Set when the organisation is already on record from another source.
@@ -422,6 +426,7 @@ def parse_row(
         domain=domain,
         types=types or ["startup"],
         city=fields["city"] or "Nairobi",
+        country=(fields["country"] or "KE").upper(),
         references=references,
         confidence=CONFIDENCE.get(fields["confidence"].lower()),
         people=read_people(people_text),
@@ -462,12 +467,14 @@ def parse_row(
         except ValueError:
             record.notes.append("coordinates not read")
         else:
-            if in_nairobi(lon, lat):
-                record.given = (lon, lat)
+            if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                record.notes.append("coordinates not read")
+            elif record.city.casefold() == "nairobi" and not in_nairobi(lon, lat):
+                record.notes.append("coordinates are outside Nairobi; not used")
             else:
-                record.notes.append("coordinates are outside the covered area")
-    if record.city.casefold() != "nairobi":
-        record.notes.append(f"city not covered yet: {record.city}")
+                record.given = (lon, lat)
+    if not re.fullmatch(r"[A-Z]{2}", record.country):
+        record.notes.append(f"country must be a two-letter code, not {fields['country']!r}")
     if not record.sectors:
         record.notes.append("no sector recognised")
     if website_noted:
@@ -543,8 +550,17 @@ def match_existing(conn, records: list[Record], import_key: str) -> None:
 
 def locate(record: Record, geocoder: Geocoder) -> None:
     """Place a record as precisely as the public evidence and the geocoder allow."""
-    if record.city.casefold() != "nairobi":
-        return  # Kept without an office until that city is covered.
+    elsewhere = record.city.casefold() != "nairobi"
+    if elsewhere and not re.fullmatch(r"[A-Z]{2}", record.country):
+        return
+    if elsewhere and not record.given:
+        # Street addresses are only looked up in Nairobi; elsewhere a record sits at its city's centre.
+        record.city_centre = geocoder.city(record.city, record.country)
+        if record.city_centre:
+            record.precision = "city"
+        else:
+            record.notes.append(f"city not found: {record.city}, {record.country}; kept without an office")
+        return
     if record.given:
         lon, lat = record.given
         record.place = Place(lon, lat, "address", "coordinates given in the dataset")
@@ -622,6 +638,18 @@ def build_report(records: list[Record], source: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def ensure_city(cur, name: str, country: str, centre: Place) -> None:
+    """Record a city's centre, which is where the database draws its city-level offices."""
+    cur.execute(
+        """
+        insert into city (name, country, centroid)
+        values (%s, %s, st_setsrid(st_makepoint(%s, %s), 4326)::geography)
+        on conflict (name, country) do nothing
+        """,
+        (name, country, centre.lon, centre.lat),
+    )
+
+
 def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_sample: bool) -> None:
     """Write the plan in one transaction. Re-running replaces what this import loaded before."""
     with conn.transaction(), conn.cursor() as cur:
@@ -695,6 +723,8 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                 org_id = cur.fetchone()[0]
                 has_office, known_people = False, set()
 
+            if record.city_centre:
+                ensure_city(cur, record.city, record.country, record.city_centre)
             if record.precision and not has_office:
                 lon, lat = (record.place.lon, record.place.lat) if record.place else (0.0, 0.0)
                 cur.execute(
@@ -704,7 +734,7 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                     returning id
                     """,
                     # A city-precision office is moved to the city centroid by the database.
-                    (org_id, record.address, *NAIROBI, lon, lat, record.precision),
+                    (org_id, record.address, record.city, record.country, lon, lat, record.precision),
                 )
                 added["offices"].append(str(cur.fetchone()[0]))
             for name, role in record.people:

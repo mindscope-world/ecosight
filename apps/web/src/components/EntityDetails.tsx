@@ -219,7 +219,8 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
               <span className="text-mute">
                 {source.field} ({source.method}):{' '}
               </span>
-              <SourceLink url={source.source_url} />
+              {/* With no link, the stated basis is what there is to show. */}
+              {!source.source_url && source.quote ? <span>{source.quote}</span> : <SourceLink url={source.source_url} />}
             </li>
           ))}
           {org.sources.length === 0 && <li className="text-mute">No sources recorded</li>}

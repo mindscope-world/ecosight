@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Stats } from '../api';
-import { formatAgo, formatPartialDate, trend } from './format';
+import { countryName, formatAgo, formatPartialDate, trend } from './format';
 import { buildSignals } from './signals';
 
 const zero = { current: 0, previous: 0 };
@@ -31,6 +31,13 @@ describe('formatAgo', () => {
     expect(formatAgo('2026-10-06T11:48:00Z', now)).toBe('12 min. ago');
     expect(formatAgo('2026-10-06T09:00:00Z', now)).toBe('3 hr. ago');
     expect(formatAgo('2026-10-03T12:00:00Z', now)).toBe('3 days ago');
+  });
+});
+
+describe('countryName', () => {
+  it('names a country from its code and passes through what it does not know', () => {
+    expect(countryName('KE')).toBe('Kenya');
+    expect(countryName('not a code')).toBe('not a code');
   });
 });
 

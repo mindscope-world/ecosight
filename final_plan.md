@@ -13,7 +13,7 @@ Urgency:
 
 ## 1. What is built
 
-The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 67 TypeScript tests, 73 Python tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against the 600 KB budget.
+The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 68 TypeScript tests, 74 Python tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against the 600 KB budget.
 
 ### Data
 
@@ -78,9 +78,10 @@ The first real dataset exposed gaps that the synthetic sample hid. These come fi
 | # | Item | Track | Notes |
 |---|------|-------|-------|
 | 2.1 | ~~A way to see records that share one point~~ | Done | Records on one spot keep a counted marker at every zoom; clicking it lists them, and each opens with a link back to the list |
-| 2.2 | Locations for investors | Backend + data | **Nairobi done.** The investors dataset is loaded: 19 investors, 10 accelerators and incubators and 1 hub are on the map. 5 of its rows were merged into investors already known from funding rounds, which kept their round links and gained an office. Still without a location: the 30 round investors with no Nairobi presence, most of them abroad |
-| 2.3 | Country-level view | Both | Follows from 2.2: investors abroad make the map international |
+| 2.2 | Locations for investors | Backend + data | **Mostly done.** The Nairobi investors dataset is loaded (19 investors, 10 accelerators and incubators, 1 hub). 17 investors abroad are placed at their headquarters city, in 9 countries, from `curation/investor_headquarters.json`. Those placements rest on the curator's general knowledge, not on cited sources, and say so on each card: they need checking and sourcing. 13 investors remain unplaced because their location is not known with confidence; the file lists them |
+| 2.3 | Country-level view | Both | Partly done: records in any country can be stored and drawn, the country filter lists every country with records by name, and the market panel ranks cities worldwide. Still to build: a per-country summary, and street-level address lookup outside Nairobi (records elsewhere sit at their city's centre unless the dataset gives coordinates) |
 | 2.4 | ~~Entity types from data~~ | Done | Types are read from a dataset's type or category column, including descriptive ones ("VC / impact investor", "innovation hub and accelerator"). The startups dataset has no such column, so its rows remain startups |
+| 2.5b | Startups outside Kenya | Data | The importer accepts them (`City`, `Country`, and optionally `Latitude` and `Longitude` columns), but no dataset of them has been supplied. Three drafts in the Nairobi dataset are described as based elsewhere (London, Mauritius, Kigali); they stay drafts because the research could not confirm them as distinct organisations |
 | 2.5 | Events | Data + backend | There are no real events, so the Events layer and its panels are empty. Needs a source: a dataset or a crawler |
 | 2.6 | ~~Importer for other datasets~~ | Done | `--mapping` reads other column headings; founded year and coordinates are read when given; an organisation already on record (same website or name) is not loaded twice. Cities other than Nairobi are reported and left without an office until 2.2 and 2.3 |
 | 2.7 | Currency conversion | Backend | One round is in Canadian dollars and is left out of dollar totals |

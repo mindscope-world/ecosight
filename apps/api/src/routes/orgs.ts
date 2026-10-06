@@ -83,7 +83,7 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'field', s.field, 'source_url', s.source_url, 'method', s.method,
-              'verified_at', s.verified_at
+              'quote', s.quote, 'verified_at', s.verified_at
             ) order by s.field)
             from field_source s
             where s.record_type = 'organisation' and s.record_id = g.id

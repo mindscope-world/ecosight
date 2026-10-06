@@ -1,10 +1,11 @@
-"""Geocoding through the public Nominatim service, limited to the Nairobi area.
+"""Geocoding through the public Nominatim service: addresses in the Nairobi area, and city centres anywhere.
 
 The usage policy allows one request a second and asks for cached results, so every
 answer, including "nothing found", is written to a cache file and reused.
 """
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,10 @@ def in_nairobi(lon: float, lat: float) -> bool:
     return west <= lon <= east and south <= lat <= north
 
 
+def _squash(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
 def classify(category: str, kind: str) -> str:
     if category in _AREA_CATEGORIES:
         return "area"
@@ -55,36 +60,59 @@ class Geocoder:
         )
 
     def lookup(self, query: str) -> Place | None:
+        """A place within the Nairobi area. Addresses elsewhere are not looked up yet."""
         if query not in self._cache:
-            self._cache[query] = self._fetch(query)
-            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-            self.cache_path.write_text(json.dumps(self._cache, indent=1, ensure_ascii=False, sort_keys=True))
+            self._store(query, self._fetch(query))
         hit = self._cache[query]
         return Place(**hit) if hit else None
 
-    def _fetch(self, query: str) -> dict | None:
+    def city(self, name: str, country: str) -> Place | None:
+        """The centre of a city anywhere in the world, for placing records at city level."""
+        key = f"city:{name},{country.upper()}"
+        if key not in self._cache:
+            top = self._request(
+                {"q": name, "countrycodes": country.lower(), "featureType": "settlement"}
+            )
+            hit = None
+            # The result must be the place asked for, not the nearest thing with a similar name.
+            if top and _squash(name.split()[0]) in _squash(top.get("display_name", "")):
+                hit = {
+                    "lon": float(top["lon"]),
+                    "lat": float(top["lat"]),
+                    "level": "area",
+                    "matched": top.get("display_name", ""),
+                }
+            self._store(key, hit)
+        hit = self._cache[key]
+        return Place(**hit) if hit else None
+
+    def _store(self, key: str, value: dict | None) -> None:
+        self._cache[key] = value
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cache_path.write_text(json.dumps(self._cache, indent=1, ensure_ascii=False, sort_keys=True))
+
+    def _request(self, params: dict) -> dict | None:
+        """One search, at most one a second. The top result, or None."""
         wait = self._last + self.delay - time.monotonic()
         if wait > 0:
             time.sleep(wait)
-        west, south, east, north = NAIROBI_BOX
+        # Names are asked for in English, so "Vienna" is recognised in a reply that would say "Wien".
         response = self.client.get(
-            NOMINATIM_URL,
-            params={
-                "q": query,
-                "format": "jsonv2",
-                "limit": 1,
-                "countrycodes": "ke",
-                "viewbox": f"{west},{north},{east},{south}",
-                "bounded": 1,
-            },
+            NOMINATIM_URL, params={"format": "jsonv2", "limit": 1, "accept-language": "en", **params}
         )
         self._last = time.monotonic()
         self.requests += 1
         response.raise_for_status()
         results = response.json()
-        if not results:
+        return results[0] if results else None
+
+    def _fetch(self, query: str) -> dict | None:
+        west, south, east, north = NAIROBI_BOX
+        top = self._request(
+            {"q": query, "countrycodes": "ke", "viewbox": f"{west},{north},{east},{south}", "bounded": 1}
+        )
+        if not top:
             return None
-        top = results[0]
         lon, lat = float(top["lon"]), float(top["lat"])
         if not in_nairobi(lon, lat):
             return None

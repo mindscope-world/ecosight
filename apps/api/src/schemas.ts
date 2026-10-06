@@ -41,6 +41,8 @@ export const FieldSource = Type.Object({
   field: Type.String(),
   source_url: Nullable(Type.String()),
   method: Type.Union([Type.Literal('manual'), Type.Literal('partner'), Type.Literal('ai')]),
+  // The words a value rests on: a quotation from the source, or the stated basis when there is no link.
+  quote: Type.Optional(Nullable(Type.String())),
   verified_at: Nullable(Type.String({ format: 'date-time' })),
 });
 
