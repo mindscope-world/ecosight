@@ -6,7 +6,7 @@ Oct 6, 2026 · drafted from the UI/UX brief
 
 This document turns the UI/UX brief into a build plan for the web app in `apps/web`. Sections 1 to 8 restate the brief as a specification. Sections 9 to 12 say how it maps onto the code that exists, what each panel needs from the API, the order to build it in, and the decisions that are still open. The combined frontend and backend order is in `final_plan.md`.
 
-> **Status, Oct 6, 2026.** Build-order phases 1 to 6 and 8 are implemented, with parts of 7. Section 13 lists what is built and what is not. Sections 9 and 10 describe the state before this work and are kept for reference.
+> **Status, Oct 7, 2026.** The map app (sections 1 to 13) has build-order phases 1 to 6 and 8 implemented, with parts of 7; section 13 lists what is built and what is not. The landing page (section 14) is built. Sections 9 and 10 describe the state before this work and are kept for reference.
 
 > **Reference screenshot.** The brief refers to an attached reference screenshot. It has not been seen while writing this plan: it sits outside the project folder, which the session could not read. The design language below comes from the brief's written description only. Copy the image into `docs/reference/` before the design-system work starts.
 
@@ -319,3 +319,63 @@ Every panel has a minimise control, and both side columns collapse to a rail.
 - Trend percentages show a dash when the earlier period is empty, which is most of them on freshly loaded data.
 - The activity panels (activity, signals, chart, cities, feed) describe the whole dataset; only the overview, top sectors, layer counts and status bar follow the filters.
 - The colour palette for entity types passes colour-blind checks for neighbouring pairs but not for every pair, so shape carries identity alongside colour.
+
+## 14. Landing page
+
+Added Oct 7, 2026 from the landing page brief. The landing page is the site's front door at `/`; the map app from sections 1 to 13 now lives at `/map/`.
+
+### The task
+
+A premium landing page that makes one idea clear within five seconds: ecoSight turns the startup ecosystem from disconnected lists into a living, explorable map. The map is the hero, not an illustration beside it.
+
+The page tells the story in order:
+
+1. The ecosystem is fragmented.
+2. ecoSight maps it.
+3. Every company, investor, program and event becomes a point on the map.
+4. Connections become visible.
+5. Hidden opportunities become discoverable.
+
+Design direction: clean, sophisticated, confident and inviting; a dark and light hybrid in deep navy, midnight, electric cyan and blue; large type, generous space, subtle motion, uppercase micro-labels. Not a generic SaaS page, a directory, a crypto site or a neon dashboard. No stock photographs, invented customer logos, invented testimonials or claimed partnerships.
+
+### Sections and their components
+
+| Section | Component | What it shows |
+|---------|-----------|---------------|
+| Navigation | `Navbar` | Wordmark, Explore, Ecosystems, Startups, Investors, Insights, Sign in, Explore the Map. Clear over the hero, blurred surface once scrolled, collapses to a menu on phones |
+| Hero | `Hero`, `HeroMap` | "See where innovation happens." over a live world map with clusters at innovation hubs, pulsing hubs, slow drift, and floating product cards |
+| Trust | `TrustBar` | "Built for the people shaping the ecosystem." with audience categories, no logos |
+| Problem | `ProblemSection` | "The ecosystem is everywhere. The data isn't." A table beside the same records on a map, then Lists → Places → Connections → Opportunity |
+| Layers | `EcosystemLayers` | "One ecosystem. Every layer." Five cards; pointing at one lights that layer on a miniature map |
+| Explore | `InteractiveMapPreview` | "Explore ecosystems at every scale." World, Africa, East Africa, Kenya, Nairobi, with layer toggles |
+| Use cases | `FounderSection`, `InvestorSection`, `EcosystemBuilderSection` | One heading, one paragraph, one link and one visual each |
+| Intelligence | `IntelligenceSection` | "A map that becomes smarter over time." The chain from startup to sector as linked nodes |
+| Signals | `SignalsSection` | Example signal cards, each marked as demo data |
+| Global | `GlobalSection` | "Innovation doesn't happen in one place." A globe centred on Africa with connections between cities |
+| Close | `FinalCTA`, `Footer` | Closing call to action; product, use case, company and legal columns |
+
+Motion: text rises on load, the map fades in, sections reveal on scroll, numbers count up, buttons nudge on hover. Everything stops for people who ask their system for reduced motion.
+
+### Status: built
+
+Built in `apps/web/src/landing/` with React, Tailwind, Motion, Lucide icons and MapLibre. Checked in a headless browser at desktop and phone widths with no console errors. First-load JavaScript is 122 KB; the map library is fetched only when a map is about to scroll into view.
+
+How the brief's open points were settled:
+
+- **Real figures where they exist.** The hero cards, the problem section's table and its map, and the Nairobi view of the explore preview read the product's own records. Today that means 69 organisations, 36 funding rounds and the largest sector.
+- **Everything else is marked.** Points outside Nairobi, the connections between cities and the small schematic maps are illustrative, and each says so in a caption. The signals cards carry a "Demo data" tag, as the brief requires. If the product's records cannot be loaded, the hero falls back to the brief's example figures, tagged as demo data.
+- **Nothing links nowhere.** "Sign in" is shown but inactive, since there are no accounts yet. "Join the ecosystem" opens the public repository. Footer entries for pages that do not exist (About, Methodology, Contact, Privacy, Terms, Data Policy) are plain text, not links.
+- **Old share links still work.** A link to the map made before the move is forwarded from `/` to `/map/` with its state.
+- **Recharts is not used.** The page has no chart that needs it.
+
+### Not done
+
+| Item | Why |
+|------|-----|
+| Pages behind the footer: About, Methodology, Contact, Privacy, Terms, Data Policy | Content and legal text need the owner; Privacy and Terms are required before a public launch |
+| Sign in, and "Join the ecosystem" as a sign-up | Needs accounts (step 5 of `final_plan.md`) |
+| Hoverable city labels on the hero map | The preview maps are non-interactive by design; the explore section's controls are the interaction |
+| Real points for investors, programs and events | The investors dataset is not loaded yet, and there are no events |
+| A social preview image and page metadata for sharing | Small; best done once the copy is final |
+| A design review against a reference | The page follows the written brief; no visual reference was supplied for it |
+

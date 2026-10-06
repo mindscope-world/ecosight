@@ -1,20 +1,4 @@
-@import 'tailwindcss';
-@import '@fontsource-variable/inter';
-
-@theme {
-  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --color-bg: #071018;
-  --color-panel: #0b151e;
-  --color-raised: #101d28;
-  --color-line: #1a2a35;
-  --color-accent: #22d3ee;
-  --color-accent2: #3b82f6;
-  --color-ink: #e6edf3;
-  --color-mute: #8b9aa7;
-  --color-good: #34d399;
-  --color-warn: #f59e0b;
-  --color-crit: #ef4444;
-}
+@import './theme.css';
 
 /* In the base layer so utility classes on an element can override these. */
 @layer base {

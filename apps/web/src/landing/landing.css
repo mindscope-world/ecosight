@@ -1,0 +1,42 @@
+@import '../theme.css';
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 4.5rem;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+/* The map's own attribution, restyled to sit quietly on the dark previews. */
+.maplibregl-ctrl-attrib {
+  background: transparent !important;
+  color: #cbd5e1 !important;
+  font-size: 10px;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: #cbd5e1 !important;
+}
+
+.maplibregl-ctrl-attrib-button {
+  filter: invert(1) brightness(0.7);
+}

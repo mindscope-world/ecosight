@@ -73,7 +73,8 @@ VITE_DEMO_DATA=false \
 pnpm --filter @atlas/web build                        # output in apps/web/dist/
 ```
 
-Upload `apps/web/dist/` to the static host. If the site is served from a sub-path
+Upload `apps/web/dist/` to the static host. It holds two pages: the landing page at
+the root and the map app under `map/`. If the site is served from a sub-path
 (for example GitHub Pages at `/ecosight/`), add `--base=/ecosight/` to the build
 command; the logo and the data folder follow it.
 
@@ -83,7 +84,8 @@ are loaded.
 
 ## 4. Checks after deploying
 
-1. The map shows markers, and the status bar says "Live" with the right counts.
+1. The landing page loads and its hero cards say "Live". Under `/map/`, the map
+   shows markers and the status bar says "Live" with the right counts.
 2. Search finds an organisation and the details panel opens (this is the API).
 3. Stop the API: the map and the left panel still load.
 4. In the repository, under Settings > Secrets and variables > Variables, set

@@ -22,7 +22,7 @@ pnpm db:seed      # synthetic sample organisations around Nairobi
 pnpm dev          # API on :4000, web app on :5173
 ```
 
-Open <http://localhost:5173>. The API's OpenAPI document is at
+Open <http://localhost:5173> for the landing page and <http://localhost:5173/map/> for the map app. The API's OpenAPI document is at
 <http://localhost:4000/openapi.json>.
 
 ## Checks
@@ -32,7 +32,7 @@ pnpm typecheck
 pnpm db:test      # build the separate test database with the synthetic sample
 pnpm test         # API tests run against that test database
 pnpm build
-pnpm check:bundle # fails if first-load JavaScript exceeds 600 KB compressed
+pnpm check:bundle # fails if either page's first-load JavaScript exceeds 600 KB compressed
 ```
 
 ## Deploying
@@ -43,13 +43,15 @@ and the API runs as a container from `infra/api/Dockerfile`.
 
 ## Layout
 
-- `apps/web` — Vite, React, Tailwind and MapLibre. The app reaches the map only through `src/map/adapter.ts`.
+- `apps/web` — Vite, React, Tailwind and MapLibre. Two pages: the landing page (`index.html`, `src/landing/`) and the map app (`map/index.html`, `src/`). The app reaches the map only through `src/map/adapter.ts`; the landing page's previews use `src/map/previewMap.ts`.
   `public/logo.png` is the pin mark cropped from the full logo in `logo.png` at the repo root.
 - `apps/api` — Fastify. Route schemas generate the OpenAPI document.
 - `packages/schema` — share-link state and filter rules shared by the web app and, later, the API.
 - `db` — SQL migrations, seed data and their runners.
 - `workers` — Python pipeline: feed crawlers, raw document store, extraction, eval harness.
 - `eval` — labelled set for extraction accuracy. See `eval/README.md`.
+- `datasets` — researched datasets, one dated folder each. The files are not in git; see `datasets/README.md`.
+- `curation` — work derived from a dataset by hand, such as funding rounds read from its notes.
 - `infra` — Docker Compose for local development.
 - `docs` — fork audit, decision records, crawled sources.
 
