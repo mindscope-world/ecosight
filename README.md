@@ -68,6 +68,16 @@ placed through the public Nominatim geocoder (one request a second, cached in
 street name. Add `--replace-sample` to remove the synthetic sample at the same time.
 `pnpm db:seed` refuses to run on a database that holds real records.
 
+```sh
+uv run atlas import-rounds ../curation/<file>.json          # dry run: checks the file and prints the rounds
+uv run atlas import-rounds ../curation/<file>.json --apply  # load; re-running replaces what it loaded before
+```
+
+`import-rounds` loads funding rounds a person has read out of a dataset's funding
+notes. Every round carries the words it was read from, and the load stops if a
+quote is not in the stored note. Re-running `import-orgs` removes the rounds of the
+organisations it replaces, so run `import-rounds` again after it.
+
 Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on
 [Groq](https://console.groq.com) through LangChain and needs `GROQ_API_KEY` in
 `.env`. `GROQ_MODEL` changes the model (default `llama-3.3-70b-versatile`).

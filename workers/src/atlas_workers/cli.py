@@ -93,6 +93,28 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rounds(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .rounds import apply, check_against_database, read_file, summarise
+
+    doc, rounds, problems = read_file(Path(args.file))
+    with psycopg.connect(config.database_url()) as conn:
+        orgs, more = check_against_database(conn, doc["dataset"], rounds)
+        problems += more
+        if problems:
+            print("\n".join(problems), file=sys.stderr)
+            print(f"{len(problems)} problem(s); nothing loaded.", file=sys.stderr)
+            return 1
+        print(summarise(doc, rounds))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to load.")
+            return 0
+        apply(conn, doc, rounds, orgs)
+    print("\nLoaded.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="atlas")
     commands = parser.add_subparsers(required=True)
@@ -121,6 +143,11 @@ def main() -> int:
     load.add_argument("--snapshot", default=date.today().isoformat(), help="date the research was done (YYYY-MM-DD)")
     load.add_argument("--report", default=str(config.REPO_ROOT / "data" / "import-report.md"))
     load.set_defaults(run=cmd_import)
+
+    funding = commands.add_parser("import-rounds", help="load hand-curated funding rounds (dry run unless --apply)")
+    funding.add_argument("file")
+    funding.add_argument("--apply", action="store_true", help="write to the database")
+    funding.set_defaults(run=cmd_rounds)
 
     args = parser.parse_args()
     return args.run(args)

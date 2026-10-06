@@ -17,6 +17,9 @@ export type OrgType = Static<typeof OrgType>;
 
 const Nullable = <T extends TSchema>(t: T) => Type.Union([t, Type.Null()]);
 
+// How much of a round's date is real: a round "in 2021" is stored as 1 January.
+const DatePrecision = Type.Union([Type.Literal('day'), Type.Literal('month'), Type.Literal('year'), Type.Null()]);
+
 const OrgLink = Type.Object({
   id: Type.String({ format: 'uuid' }),
   name: Type.String(),
@@ -61,7 +64,10 @@ export const OrgDetail = Type.Object({
       id: Type.String({ format: 'uuid' }),
       stage: Nullable(Type.String()),
       amount_usd: Nullable(Type.Number()),
+      amount_original: Nullable(Type.Number()),
+      currency: Nullable(Type.String()),
       announced_on: Nullable(Type.String({ format: 'date' })),
+      announced_precision: DatePrecision,
     }),
   ),
   // The organisation's neighbours in the ecosystem graph.
@@ -102,6 +108,7 @@ export const RoundDetail = Type.Object({
   currency: Nullable(Type.String()),
   amount_usd: Nullable(Type.Number()),
   announced_on: Nullable(Type.String({ format: 'date' })),
+  announced_precision: DatePrecision,
   investors: Type.Array(
     Type.Object({
       id: Type.String({ format: 'uuid' }),

@@ -62,7 +62,10 @@ export interface OrgDetail {
     id: string;
     stage: string | null;
     amount_usd: number | null;
+    amount_original: number | null;
+    currency: string | null;
     announced_on: string | null;
+    announced_precision: 'day' | 'month' | 'year' | null;
   }[];
   connections: {
     investors: OrgLink[];

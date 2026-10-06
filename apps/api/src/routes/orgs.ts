@@ -74,7 +74,8 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', r.id, 'stage', r.stage, 'amount_usd', r.amount_usd::float8,
-              'announced_on', r.announced_on
+              'amount_original', r.amount_original::float8, 'currency', r.currency,
+              'announced_on', r.announced_on, 'announced_precision', r.announced_precision
             ) order by r.announced_on desc nulls last)
             from funding_round r
             where r.organisation_id = g.id and r.status = 'published'

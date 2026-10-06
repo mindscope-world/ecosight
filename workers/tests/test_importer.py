@@ -57,6 +57,8 @@ def test_sectors_follow_the_order_of_mention():
         ("Seed; subsequent undisclosed strategic backing reported", "seed"),
         ("Senior debt facility (latest dated disclosure found)", "debt"),
         ("Bootstrapped; no disclosed external funding round found", "bootstrapped"),
+        ("Seed prize (2023); no later closed round reliably disclosed.", "grant"),
+        ("Grant (Sample Foundation seed funding)", "grant"),
         # Statuses that mention a stage only in passing must not be read as that stage.
         ("Undisclosed investment (reported early-stage round); prior Series A", None),
         ("No reliable disclosure found", None),

@@ -68,11 +68,12 @@ STAGE_RULES: tuple[tuple[str, str], ...] = (
     ("series-a", r"series a"),
     ("series-b", r"series b"),
     ("series-c", r"series c"),
+    # Before "seed": a "seed prize" is prize money, not a seed round.
+    ("grant", r"grant|award|prize"),
     ("pre-seed", r"pre-seed"),
     ("seed", r"seed"),
     ("bridge", r"bridge"),
     ("debt", r"debt"),
-    ("grant", r"grant|award|prize"),
     ("bootstrapped", r"bootstrapped|self-funded"),
 )
 _NO_STAGE = re.compile(r"^(no |undisclosed|latest|proposed|venture-backed|fundraising|fmo)", re.I)
