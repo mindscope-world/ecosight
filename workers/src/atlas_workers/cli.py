@@ -126,6 +126,26 @@ def cmd_rounds(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_locations(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .geocode import Geocoder
+    from .locations import apply, read_file, resolve, summarise
+
+    path = Path(args.file)
+    doc, placements = read_file(path)
+    key = f"{path.stem}/locations"
+    with psycopg.connect(config.database_url()) as conn:
+        resolve(conn, placements, Geocoder(config.geocode_cache()), key)
+        print(summarise(placements))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to load.")
+            return 0
+        apply(conn, doc, placements, key)
+    print("\nLoaded.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="atlas")
     commands = parser.add_subparsers(required=True)
@@ -161,6 +181,11 @@ def main() -> int:
     funding.add_argument("file")
     funding.add_argument("--apply", action="store_true", help="write to the database")
     funding.set_defaults(run=cmd_rounds)
+
+    places = commands.add_parser("import-locations", help="place organisations that have no office at a city (dry run unless --apply)")
+    places.add_argument("file")
+    places.add_argument("--apply", action="store_true", help="write to the database")
+    places.set_defaults(run=cmd_locations)
 
     args = parser.parse_args()
     return args.run(args)

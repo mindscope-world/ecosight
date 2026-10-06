@@ -88,6 +88,17 @@ uv run atlas import-rounds ../curation/<file>.json          # dry run: checks th
 uv run atlas import-rounds ../curation/<file>.json --apply  # load; re-running replaces what it loaded before
 ```
 
+```sh
+uv run atlas import-locations ../curation/<file>.json          # dry run: shows who can be placed and where
+uv run atlas import-locations ../curation/<file>.json --apply  # load; re-running replaces what it placed before
+```
+
+`import-locations` gives a city to organisations that are on record with no office,
+such as investors named only in a funding round. They are placed at the centre of
+the city, never at an address, and each carries the stated basis for its placement.
+`import-orgs` also places records outside Nairobi at city level, from a dataset's
+`City` and `Country` columns, or exactly where it gives `Latitude` and `Longitude`.
+
 `import-rounds` loads funding rounds a person has read out of a dataset's funding
 notes. Every round carries the words it was read from, and the load stops if a
 quote is not in the stored note. Re-running `import-orgs` removes the rounds of the

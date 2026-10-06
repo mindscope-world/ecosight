@@ -17,7 +17,8 @@ const EXAMPLE_ROWS = [
 
 /** The same records twice: once as rows, once where they are. */
 export function ProblemSection({ data }: { data: LandingData }) {
-  const offices = data.offices?.features ?? [];
+  // One city's records: a table of a whole country would not fit beside a map of it.
+  const offices = data.city?.offices ?? [];
   const funded = [...new Map(offices.map((feature) => [feature.properties.org_id, feature.properties])).values()]
     .filter((org) => org.raised_usd > 0)
     .sort((a, b) => b.raised_usd - a.raised_usd)
@@ -91,7 +92,7 @@ export function ProblemSection({ data }: { data: LandingData }) {
           <div className="flex items-center justify-between">
             <Eyebrow className="text-accent">ecoSight</Eyebrow>
             <span className="text-xs text-slate">
-              {offices.length ? `${new Set(offices.map((f) => f.properties.org_id)).size} organisations, where they are` : 'The same records, where they are'}
+              {data.city ? `${data.city.organisations} organisations in ${data.city.name}, where they are` : 'The same records, where they are'}
             </span>
           </div>
           <svg viewBox="0 0 100 62" className="mt-4 block w-full" aria-hidden="true">

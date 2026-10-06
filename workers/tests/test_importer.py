@@ -271,17 +271,34 @@ def test_a_dataset_with_other_headings_is_read_through_a_mapping(tmp_path):
     locate(hub, geocoder(tmp_path, {}))
     assert (hub.precision, hub.place.lon, hub.place.lat) == ("address", 36.80, -1.26)
     assert "founded year not read: 'nineteen'" in far.notes
-    assert "coordinates are outside the covered area" in far.notes
+    assert "coordinates are outside Nairobi; not used" in far.notes
 
     with pytest.raises(ValueError, match="missing columns: Startup / organisation"):
         read_dataset(path)
 
 
-def test_records_in_cities_not_yet_covered_get_no_office(tmp_path):
-    record = parse_row({**ROW, "City": "Mombasa"})
-    locate(record, geocoder(tmp_path, {"Sample House, Nairobi": [BUILDING]}))
-    assert record.precision is None
-    assert "city not covered yet: Mombasa" in record.notes
+def test_records_outside_nairobi_are_placed_at_their_city(tmp_path):
+    lagos = {"lon": "3.39", "lat": "6.45", "category": "place", "type": "city", "display_name": "Lagos, Lagos Island, Nigeria"}
+    geo = geocoder(tmp_path, {"Lagos": [lagos], "Sample House, Nairobi": [BUILDING]})
+
+    record = parse_row({**ROW, "City": "Lagos", "Country": "ng"})
+    locate(record, geo)
+    assert (record.city, record.country, record.precision) == ("Lagos", "NG", "city")
+    assert (record.city_centre.lon, record.place) == (3.39, None)  # the Nairobi address lookup is not attempted
+
+    # Coordinates given by the dataset are used as they are.
+    exact = parse_row({**ROW, "City": "Lagos", "Country": "NG", "Latitude": "6.43", "Longitude": "3.42"})
+    locate(exact, geo)
+    assert (exact.precision, exact.place.lon) == ("address", 3.42)
+
+    # A city the geocoder cannot find, or finds as something else, gets no office.
+    lost = parse_row({**ROW, "City": "Atlantis", "Country": "GR"})
+    locate(lost, geocoder(tmp_path / "b", {"Atlantis": [{**lagos, "display_name": "Atlantic Hotel, Athens"}]}))
+    assert lost.precision is None and "city not found: Atlantis, GR" in lost.notes[-1]
+
+    bad = parse_row({**ROW, "City": "Lagos", "Country": "Nigeria"})
+    locate(bad, geo)
+    assert bad.precision is None and "country must be a two-letter code" in bad.notes[0]
 
 
 def test_cleaning_services_are_not_clean_technology():

@@ -78,10 +78,10 @@ export function InteractiveMapPreview({ data }: { data: LandingData }) {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
             <p className="text-xs text-slate">
               <Eyebrow className="mr-2 text-ink/80">{SCALES[scale]!.label}</Eyebrow>
-              {atCity && data.live
-                ? `${data.real.features.length} records from the live map.`
+              {atCity && data.city
+                ? `${data.city.organisations} organisations from the live map.`
                 : data.live
-                  ? 'Nairobi shows live records. Points elsewhere are illustrative.'
+                  ? 'Nairobi and investors abroad are live records. The remaining points are illustrative.'
                   : 'Points are illustrative.'}
             </p>
             <ButtonLink href={MAP_URL} variant="text">Open the full map</ButtonLink>

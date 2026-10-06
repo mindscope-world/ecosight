@@ -1,0 +1,39 @@
+{
+  "about": "Cities for investors that are on record only because a funding round names them, so that they can be drawn on the map. Each is placed at the centre of the city, never at an address.",
+  "basis": "Headquarters city from the curator's general knowledge of the organisation. Not taken from a cited source; to be replaced by a sourced address.",
+  "confidence": 0.5,
+  "placements": [
+    { "name": "Bill & Melinda Gates Foundation", "city": "Seattle", "country": "US" },
+    { "name": "BlueOrchard", "city": "Zurich", "country": "CH" },
+    { "name": "British International Investment", "city": "London", "country": "GB" },
+    { "name": "FMO", "city": "The Hague", "country": "NL" },
+    { "name": "IFC", "city": "Washington", "country": "US" },
+    { "name": "Oikocredit", "city": "Amersfoort", "country": "NL" },
+    { "name": "Speedinvest", "city": "Vienna", "country": "AT" },
+    { "name": "Quona Capital", "city": "Washington", "country": "US" },
+    { "name": "Better Tomorrow Ventures", "city": "San Francisco", "country": "US" },
+    { "name": "Plug and Play Tech Center", "city": "Sunnyvale", "country": "US" },
+    { "name": "Norrsken Accelerator", "city": "Stockholm", "country": "SE" },
+    { "name": "GreenTec Capital", "city": "Frankfurt", "country": "DE" },
+    { "name": "HAVAÍC", "city": "Cape Town", "country": "ZA" },
+    { "name": "Future Africa", "city": "Lagos", "country": "NG" },
+    { "name": "Oui Capital", "city": "Lagos", "country": "NG" },
+    { "name": "EchoVC", "city": "Lagos", "country": "NG" },
+    { "name": "Women's World Banking Capital Partners II", "city": "New York", "country": "US" }
+  ],
+  "not_placed": [
+    { "name": "Triodos Fair Share Fund", "reason": "A fund, not an office; its manager's town would need confirming." },
+    { "name": "Triodos Microfinance Fund", "reason": "A fund, not an office; its manager's town would need confirming." },
+    { "name": "Google Africa Investment Fund", "reason": "A programme of a company, with no headquarters of its own." },
+    { "name": "Bolt by QED Investors", "reason": "A programme of an investor; unsure where it is run from." },
+    { "name": "Renew Capital", "reason": "Unsure which of its offices is the headquarters." },
+    { "name": "Adanian Labs Africa", "reason": "Believed to be in Nairobi, but not sure enough to place." },
+    { "name": "Delta40", "reason": "Unsure: it works from more than one African city." },
+    { "name": "DFS Lab", "reason": "Not known to the curator." },
+    { "name": "3IF Ventures", "reason": "Not known to the curator." },
+    { "name": "Hesabu Capital", "reason": "Not known to the curator." },
+    { "name": "FP Capital", "reason": "Not known to the curator." },
+    { "name": "Waarde Capital", "reason": "Not known to the curator." },
+    { "name": "Zephyr Acorn", "reason": "Not known to the curator." }
+  ]
+}

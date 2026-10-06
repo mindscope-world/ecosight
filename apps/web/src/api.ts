@@ -77,6 +77,7 @@ export interface OrgDetail {
     field: string;
     source_url: string | null;
     method: 'manual' | 'partner' | 'ai';
+    quote?: string | null;
     verified_at: string | null;
   }[];
   last_verified_at: string | null;
