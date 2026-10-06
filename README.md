@@ -33,6 +33,7 @@ pnpm db:test      # build the separate test database with the synthetic sample
 pnpm test         # API tests run against that test database
 pnpm build
 pnpm check:bundle # fails if either page's first-load JavaScript exceeds 600 KB compressed
+pnpm e2e          # drives both pages in Chrome against the test database; starts its own servers
 ```
 
 ## Deploying

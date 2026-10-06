@@ -37,6 +37,8 @@ export interface MapAdapter {
   addHeatLayer(spec: HeatLayerSpec): void;
   setData(id: string, data: FeatureCollection<Point>): void;
   setVisible(id: string, visible: boolean): void;
+  /** Draw lines between places, replacing any drawn before. An empty list clears them. */
+  setLinks(lines: [number, number][][]): void;
   flyTo(camera: Camera): void;
   /** Fit the view to [west, south, east, north]. */
   fitBounds(bounds: [number, number, number, number]): void;

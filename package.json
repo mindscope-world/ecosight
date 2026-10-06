@@ -15,6 +15,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "check:bundle": "node scripts/check-bundle-size.mjs"
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "e2e": "pnpm --filter @atlas/web e2e"
   }
 }

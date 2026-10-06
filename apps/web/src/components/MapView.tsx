@@ -19,6 +19,7 @@ export function MapView({
   onSelect,
   onSelectMany,
   onCamera,
+  onReady,
 }: {
   /** Filled once the map exists, for the camera moves the rest of the app makes. */
   adapter: RefObject<MapAdapter | null>;
@@ -31,11 +32,13 @@ export function MapView({
   /** Several records on one spot were clicked. */
   onSelectMany: (layerId: string, records: Record<string, unknown>[]) => void;
   onCamera: () => void;
+  /** Called once, when the map can first be drawn on. */
+  onReady: () => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   // The map is created once; these keep its listeners pointed at the latest props.
-  const latest = useRef({ onSelect, onSelectMany, onCamera, data, enabled, basemap });
-  latest.current = { onSelect, onSelectMany, onCamera, data, enabled, basemap };
+  const latest = useRef({ onSelect, onSelectMany, onCamera, onReady, data, enabled, basemap });
+  latest.current = { onSelect, onSelectMany, onCamera, onReady, data, enabled, basemap };
   const applied = useRef(basemap);
 
   useEffect(() => {
@@ -64,6 +67,7 @@ export function MapView({
       }
       push(map, latest.current.data, latest.current.enabled);
       map.onCameraChange(() => latest.current.onCamera());
+      latest.current.onReady();
     });
     return () => {
       alive = false;
@@ -99,7 +103,13 @@ function push(map: MapAdapter, data: Record<string, FeatureCollection<Point>>, e
     map.setVisible(layer.id, enabled.has(layer.id));
   }
   for (const layer of HEAT_LAYERS) {
-    map.setData(layer.id, data[layer.source] ?? EMPTY);
+    // A record with no public address is drawn at its city's centre. Dozens of
+    // them on one point would read as the densest place on the map, so the
+    // heatmaps count only records whose position means something.
+    const located = (data[layer.source] ?? EMPTY).features.filter(
+      (feature) => feature.properties?.precision !== 'city',
+    );
+    map.setData(layer.id, { type: 'FeatureCollection', features: located });
     map.setVisible(layer.id, enabled.has(layer.id));
   }
 }

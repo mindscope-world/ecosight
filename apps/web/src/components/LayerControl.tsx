@@ -65,6 +65,9 @@ export function LayerControl({
           {layer.label}
         </Row>
       ))}
+      <p className="m-0 mt-1 text-[10px] leading-snug text-mute">
+        Heatmaps leave out records placed at city level, which have no public address.
+      </p>
       <div className="mb-1.5 mt-2.5">
         <MicroLabel>Map style</MicroLabel>
       </div>

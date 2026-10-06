@@ -24,6 +24,8 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm check:bundle
+      # Drives both pages in the runner's own Chrome, against the seeded sample.
+      - run: pnpm e2e
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
         working-directory: workers

@@ -1,4 +1,4 @@
-import type { FeatureCollection, Point } from 'geojson';
+import type { FeatureCollection, LineString, Point } from 'geojson';
 import {
   Map as MapLibreMap,
   NavigationControl,
@@ -22,6 +22,7 @@ setWorkerUrl(workerUrl);
 const EMPTY: FeatureCollection<Point> = { type: 'FeatureCollection', features: [] };
 const POINT_SUFFIXES = ['clusters', 'cluster-count', 'points'];
 const ICON_PIXELS = 48;
+const LINKS = 'links';
 // Past this zoom a cluster is records on the same spot: zooming will not part them.
 const STACK_ZOOM = 17;
 const STACK_LIMIT = 500;
@@ -58,6 +59,8 @@ export class MapLibreAdapter implements MapAdapter {
   private readonly ready: Promise<void>;
   /** What each layer shows, kept so it can be redrawn on a new basemap. */
   private readonly layers = new Map<string, LayerState>();
+  private links: [number, number][][] = [];
+  private styleReady = false;
   private basemap: Basemap;
 
   constructor(container: HTMLElement, options: { basemap: Basemap; camera: Camera }) {
@@ -73,8 +76,10 @@ export class MapLibreAdapter implements MapAdapter {
     this.ready = new Promise((resolve) => this.map.once('load', () => resolve()));
     // A new basemap style replaces every source, layer and image, ours included.
     this.map.on('style.load', () => {
+      this.styleReady = true;
       if (this.basemap.hillshade) this.drawHillshade();
       for (const id of this.layers.keys()) this.draw(id);
+      this.drawLinks();
     });
     this.setBasemap(options.basemap);
   }
@@ -85,6 +90,7 @@ export class MapLibreAdapter implements MapAdapter {
 
   setBasemap(basemap: Basemap): void {
     this.basemap = basemap;
+    this.styleReady = false;
     this.map.setStyle(basemap.url, {
       diff: false,
       transformStyle: (_previous, next) =>
@@ -256,6 +262,44 @@ export class MapLibreAdapter implements MapAdapter {
         'icon-allow-overlap': true,
       },
     });
+  }
+
+  setLinks(lines: [number, number][][]): void {
+    this.links = lines;
+    const source = this.map.getSource<GeoJSONSource>(LINKS);
+    if (source) source.setData(this.linkData());
+    else this.drawLinks();
+  }
+
+  private linkData(): FeatureCollection<LineString> {
+    return {
+      type: 'FeatureCollection',
+      features: this.links.map((coordinates) => ({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates },
+        properties: {},
+      })),
+    };
+  }
+
+  private drawLinks(): void {
+    const map = this.map;
+    // Between asking for a basemap and its arrival there is no style to draw on;
+    // the lines are drawn when it lands.
+    if (!this.styleReady || map.getSource(LINKS)) return;
+    map.addSource(LINKS, { type: 'geojson', data: this.linkData() });
+    // Under every marker, over the basemap and the heatmaps.
+    const above = map.getStyle().layers.find((layer) => layer.id.endsWith('-clusters'))?.id;
+    map.addLayer(
+      {
+        id: LINKS,
+        type: 'line',
+        source: LINKS,
+        layout: { 'line-cap': 'round' },
+        paint: { 'line-color': '#22d3ee', 'line-width': 1.4, 'line-opacity': 0.75 },
+      },
+      above,
+    );
   }
 
   setData(id: string, data: FeatureCollection<Point>): void {

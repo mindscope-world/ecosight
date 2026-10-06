@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Stats } from '../api';
 import { countryName, formatAgo, formatPartialDate, trend } from './format';
+import { greatCircle } from './geo';
 import { buildSignals } from './signals';
 
 const zero = { current: 0, previous: 0 };
@@ -66,5 +67,20 @@ describe('signals', () => {
     expect(signals[1]!.tag).toEqual({ text: '+50.0%', tone: 'up' });
     expect(signals[2]!.tag).toBeUndefined();
     expect(signals[3]!.detail).toContain('$2.5M');
+  });
+});
+
+describe('greatCircle', () => {
+  it('runs from one place to the other and bows toward the pole', () => {
+    const line = greatCircle([36.82, -1.29], [-77.04, 38.9], 10); // Nairobi to Washington
+    expect(line).toHaveLength(11);
+    expect(line[0]![0]).toBeCloseTo(36.82, 5);
+    expect(line[10]![1]).toBeCloseTo(38.9, 5);
+    // Halfway along it is north of the straight-line midpoint between the two latitudes.
+    expect(line[5]![1]).toBeGreaterThan((-1.29 + 38.9) / 2);
+  });
+
+  it('draws nothing but the two ends between a place and itself', () => {
+    expect(greatCircle([36.82, -1.29], [36.82, -1.29])).toEqual([[36.82, -1.29], [36.82, -1.29]]);
   });
 });

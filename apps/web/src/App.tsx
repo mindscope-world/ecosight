@@ -37,6 +37,7 @@ import { TopNavigation } from './components/TopNavigation';
 import { Icon, MicroLabel, useMediaQuery, useStored } from './components/ui';
 import { BASEMAPS, DEFAULT_CAMERA } from './config';
 import { HEAT_LAYERS, POINT_LAYERS, VIEW_LAYERS } from './entities';
+import { greatCircle } from './lib/geo';
 import { buildSignals } from './lib/signals';
 import type { MapAdapter } from './map/adapter';
 
@@ -140,6 +141,7 @@ export function App() {
   const [selected, setSelected] = useState<Selection | undefined>(initial.selected);
   const [detail, setDetail] = useState<Detail>({ status: 'loading' });
   const [camera, setCamera] = useState(0);
+  const [mapReady, setMapReady] = useState(false);
   // The list a marker opened when it stood for several records on one spot.
   const [stack, setStack] = useState<Stack | null>(null);
 
@@ -293,6 +295,31 @@ export function App() {
     });
     return () => controller.abort();
   }, [selected]);
+
+  // Lines from the selected organisation to those it is tied to by money: its
+  // investors and the companies it has backed, and to its own branches.
+  const links = useMemo(() => {
+    if (!selected || detail.status !== 'org') return [];
+    const { org } = detail;
+    const home = org.offices[0];
+    if (!home) return [];
+    const headquarters = new Map<string, [number, number]>();
+    for (const feature of offices?.features ?? [])
+      if (feature.properties.is_hq || !headquarters.has(feature.properties.org_id))
+        headquarters.set(feature.properties.org_id, feature.geometry.coordinates as [number, number]);
+    const ends: [number, number][] = [
+      ...[...org.connections.investors, ...org.connections.portfolio].flatMap((other) => {
+        const place = headquarters.get(other.id);
+        return place ? [place] : [];
+      }),
+      ...org.offices.slice(1).map((office): [number, number] => [office.lon, office.lat]),
+    ];
+    return ends.map((end) => greatCircle([home.lon, home.lat], end));
+  }, [selected, detail, offices]);
+
+  useEffect(() => {
+    if (mapReady) map.current?.setLinks(links);
+  }, [links, mapReady]);
 
   const flyTo = useCallback((lon: number, lat: number, zoom: number) => {
     const current = map.current?.getCamera().zoom ?? 0;
@@ -523,6 +550,7 @@ export function App() {
             }}
             onSelectMany={openStack}
             onCamera={() => setCamera((tick) => tick + 1)}
+            onReady={() => setMapReady(true)}
           />
           {desktop && layerControl(true)}
           {desktop && <MapLegend heat={HEAT_LAYERS.filter((layer) => enabled.has(layer.id))} />}
