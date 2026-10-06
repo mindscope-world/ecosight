@@ -1,4 +1,4 @@
-import { countActive, NO_FILTERS, type Filters } from '@atlas/schema';
+import { countActive, NO_FILTERS, type Filters, type InvestorFilter } from '@atlas/schema';
 import type { ReactNode } from 'react';
 import { POINT_LAYERS } from '../entities';
 import { Chip, Icon, MicroLabel, ShapeIcon } from './ui';
@@ -23,6 +23,35 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 
 function toggle(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+const INVESTOR_OPTIONS: [InvestorFilter, string, string][] = [
+  ['any', 'Any', 'Every investor'],
+  ['active', 'Active', 'Took part in a round in the last 12 months'],
+  ['lead', 'Lead investor', 'Has led at least one round'],
+  ['portfolio', 'Has portfolio', 'Has at least one company on record'],
+];
+
+function DateInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <label className="flex items-center gap-1.5 text-mute">
+      {label}
+      <input
+        type="date"
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value || null)}
+        className="h-7 rounded border border-line bg-bg px-2 text-ink"
+      />
+    </label>
+  );
 }
 
 function YearInput({
@@ -66,7 +95,7 @@ export function FilterPanel({
   filters: Filters;
   onChange: (filters: Filters) => void;
   /** Values that occur in the data, so no option leads to an empty map by construction. */
-  options: { sectors: string[]; stages: string[]; cities: string[] };
+  options: { sectors: string[]; stages: string[]; cities: string[]; countries: string[] };
   enabled: ReadonlySet<string>;
   onToggleLayer: (id: string, on: boolean) => void;
   /** Organisations passing the filters. */
@@ -133,6 +162,19 @@ export function FilterPanel({
           </div>
         </Group>
         <Group title="Geography">
+          {options.countries.length > 1 && (
+            <select
+              aria-label="Country"
+              value={filters.country ?? ''}
+              onChange={(event) => set({ country: event.target.value || null })}
+              className="mb-1.5 h-7 w-full rounded border border-line bg-bg px-2"
+            >
+              <option value="">All countries</option>
+              {options.countries.map((country) => (
+                <option key={country}>{country}</option>
+              ))}
+            </select>
+          )}
           <select
             aria-label="City"
             value={filters.city ?? ''}
@@ -149,6 +191,28 @@ export function FilterPanel({
           <div className="flex gap-3">
             <YearInput label="From" value={filters.foundedFrom} onChange={(foundedFrom) => set({ foundedFrom })} />
             <YearInput label="To" value={filters.foundedTo} onChange={(foundedTo) => set({ foundedTo })} />
+          </div>
+        </Group>
+        <Group title="Funding round in">
+          <div className="flex gap-3">
+            <YearInput label="From" value={filters.fundedFrom} onChange={(fundedFrom) => set({ fundedFrom })} />
+            <YearInput label="To" value={filters.fundedTo} onChange={(fundedTo) => set({ fundedTo })} />
+          </div>
+        </Group>
+        <Group title="Investor activity">
+          <div className="flex flex-wrap gap-1">
+            {INVESTOR_OPTIONS.map(([value, label, hint]) => (
+              <Chip key={value} active={filters.investor === value} title={hint} onClick={() => set({ investor: value })}>
+                {label}
+              </Chip>
+            ))}
+          </div>
+          <p className="m-0 mt-1.5 text-[11px] text-mute">Narrows investors only.</p>
+        </Group>
+        <Group title="Event date">
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+            <DateInput label="From" value={filters.eventFrom} onChange={(eventFrom) => set({ eventFrom })} />
+            <DateInput label="To" value={filters.eventTo} onChange={(eventTo) => set({ eventTo })} />
           </div>
         </Group>
         <Group title="Status">

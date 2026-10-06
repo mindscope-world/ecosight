@@ -98,10 +98,10 @@ The first demo outside this machine.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 4.1 | Filters accepted by the layer and stats endpoints | Backend | Today filtering happens in the browser |
-| 4.2 | Activity panels follow the filters | Both | Activity, signals, chart, cities and feed describe the whole dataset today. Depends on 4.1 |
-| 4.3 | Remaining filter kinds | Both | Region, funding date, event date, investor activity (active, lead, portfolio) |
-| 4.4 | Search results for people and rounds | Backend | Optional; founders are now on record |
+| 4.1 | ~~Filters accepted by the layer and stats endpoints~~ | Done | The API and the browser apply one set of rules from `packages/schema`; a test checks they agree on fifteen filter combinations |
+| 4.2 | ~~Activity panels follow the filters~~ | Done | Activity, signals, chart, cities, feed and status bar follow them. If the API cannot be reached the panels keep the all-records figures and say so; the map keeps filtering by itself |
+| 4.3 | Remaining filter kinds | Both | Done: country, year of a funding round, event dates, investor activity (active, lead, has portfolio). Not done: region and radius, which wait for the country view (2.3) and area selection (7.1). The country, event and investor filters have little to act on until step 2's data arrives |
+| 4.4 | ~~Search results for people~~ | Done | Founders are found by name and open their organisation; anyone who has opted out is left out. Rounds are reached through their organisation |
 
 ### Step 5 — Review and accounts (Medium, High for 5.1 and 5.2)
 

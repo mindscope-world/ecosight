@@ -1,4 +1,4 @@
-import type { Filterable } from '@atlas/schema';
+import { encodeFilters, type Filterable, type FilterableEvent, type Filters } from '@atlas/schema';
 import type { FeatureCollection, Point } from 'geojson';
 import { API_URL, DATA_URL } from './config';
 
@@ -20,11 +20,9 @@ export interface OfficeProperties extends Filterable {
   org_id: string;
   name: string;
   primary_type: OrgType;
-  types: OrgType[];
   sector: string | null;
   is_hq: boolean;
   precision: 'address' | 'area' | 'city';
-  country: string;
   valid_from: string | null;
 }
 
@@ -84,11 +82,10 @@ export interface OrgDetail {
   last_verified_at: string | null;
 }
 
-export interface EventProperties {
+export interface EventProperties extends FilterableEvent {
   event_id: string;
   name: string;
   venue: string | null;
-  starts_at: string;
 }
 
 export type EventCollection = FeatureCollection<Point, EventProperties>;
@@ -121,6 +118,7 @@ export interface SearchResponse {
   understood: { type: OrgType | null; sector: string | null; city: string | null };
   organisations: OrgResult[];
   events: { id: string; name: string; venue: string | null; starts_at: string; lon: number; lat: number }[];
+  people: { name: string; role: string; organisation: OrgResult }[];
   locations: { city: string; country: string; organisations: number; lon: number; lat: number }[];
   sectors: { sector: string; organisations: number }[];
 }
@@ -193,3 +191,7 @@ export const search = (query: string, signal?: AbortSignal) =>
   getJson<SearchResponse>(`/search?q=${encodeURIComponent(query)}&limit=12`, signal);
 
 export const fetchStats = (signal?: AbortSignal) => getData<Stats>('stats.json', '/stats', signal);
+
+/** Totals and activity for the records passing the filters. Always from the API. */
+export const fetchFilteredStats = (filters: Filters, signal?: AbortSignal) =>
+  getJson<Stats>(`/stats?${encodeFilters(filters).join('&')}`, signal);

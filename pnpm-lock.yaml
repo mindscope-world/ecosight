@@ -10,6 +10,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@atlas/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
       '@fastify/cors':
         specifier: ^11.3.0
         version: 11.3.0

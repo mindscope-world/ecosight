@@ -3,6 +3,7 @@ import {
   decodeUrlState,
   encodeUrlState,
   matches,
+  matchesEvent,
   NO_FILTERS,
   type Filters,
   type MapStyle,
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   fetchEvent,
   fetchEvents,
+  fetchFilteredStats,
   fetchOffices,
   fetchOrg,
   fetchStats,
@@ -123,7 +125,10 @@ export function App() {
 
   const [offices, setOffices] = useState<OfficeCollection | null>(null);
   const [events, setEvents] = useState<EventCollection | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
+  // Figures for everything on record, and for what passes the filters when any are set.
+  const [allStats, setStats] = useState<Stats | null>(null);
+  const [filteredStats, setFilteredStats] = useState<Stats | null>(null);
+  const [statsBehind, setStatsBehind] = useState(false);
   const [failed, setFailed] = useState(false);
 
   const [view, setView] = useState<View>(initial.view ?? 'map');
@@ -162,12 +167,20 @@ export function App() {
     [offices, filters],
   );
 
+  const visibleEvents = useMemo<EventCollection>(
+    () => ({
+      type: 'FeatureCollection',
+      features: (events?.features ?? []).filter((feature) => matchesEvent(feature.properties, filters)),
+    }),
+    [events, filters],
+  );
+
   const layerData = useMemo(() => {
     const data: Record<string, FeatureCollection<Point>> = {};
     for (const layer of POINT_LAYERS)
       data[layer.id] =
         layer.id === 'events'
-          ? (events ?? { type: 'FeatureCollection', features: [] })
+          ? visibleEvents
           : {
               type: 'FeatureCollection',
               features: visible.filter((feature) =>
@@ -175,19 +188,49 @@ export function App() {
               ),
             };
     return data;
-  }, [visible, events]);
+  }, [visible, visibleEvents]);
 
   const counts = useMemo(() => {
     const result: Record<string, number> = {};
     for (const layer of POINT_LAYERS)
       result[layer.id] =
         layer.id === 'events'
-          ? (events?.features.length ?? 0)
+          ? visibleEvents.features.length
           : new Set(layerData[layer.id]!.features.map((feature) => feature.properties!.org_id)).size;
     return result;
-  }, [layerData, events]);
+  }, [layerData, visibleEvents]);
 
   const orgs = useMemo(() => distinctOrgs(visible), [visible]);
+
+  // The panels' figures follow the filters. They come from the API, which applies
+  // the same rules as the map; if it cannot be reached the panels keep the figures
+  // for everything and say so, and the map carries on filtering by itself.
+  const filtered = countActive(filters) > 0;
+  useEffect(() => {
+    if (!filtered) {
+      setFilteredStats(null);
+      setStatsBehind(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetchFilteredStats(filters, controller.signal)
+        .then((result) => {
+          setFilteredStats(result);
+          setStatsBehind(false);
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setFilteredStats(null);
+          setStatsBehind(true);
+        });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [filters, filtered]);
+  const stats = filteredStats ?? allStats;
 
   const sectors = useMemo<SectorShare[]>(() => {
     const tally = new Map<string, number>();
@@ -205,6 +248,7 @@ export function App() {
       sectors: sorted(all.flatMap((org) => org.sectors)),
       stages: sorted(all.flatMap((org) => (org.stage ? [org.stage] : []))),
       cities: sorted((offices?.features ?? []).map((feature) => feature.properties.city)),
+      countries: sorted((offices?.features ?? []).map((feature) => feature.properties.country)),
     };
   }, [offices]);
 
@@ -357,7 +401,6 @@ export function App() {
     return () => removeEventListener('keydown', onKey);
   }, []);
 
-  const filtered = countActive(filters) > 0;
   const overview = (
     <EcosystemOverview
       counts={{
@@ -371,6 +414,11 @@ export function App() {
   );
   const leftContent = stats ? (
     <>
+      {statsBehind && (
+        <p className="m-0 border-b border-line px-3 py-2 text-[11px] text-warn">
+          The figures below cover all records: filtered figures could not be loaded.
+        </p>
+      )}
       {overview}
       <ActivityPanel stats={stats} />
       <TopSectors sectors={sectors} onPick={(sector) => setFilters({ ...filters, sectors: [sector] })} />
@@ -387,13 +435,20 @@ export function App() {
     <p className="p-3 text-mute">{failed ? 'The data could not be loaded.' : 'Loading…'}</p>
   );
   const insights = stats ? (
-    <AnalyticsPanel
+    <>
+      {statsBehind && (
+        <p className="m-0 border-b border-line px-3 py-2 text-[11px] text-warn">
+          The figures below cover all records: filtered figures could not be loaded.
+        </p>
+      )}
+      <AnalyticsPanel
       stats={stats}
       signals={signals}
       emerging={emerging}
       onCity={goToCity}
       onRecent={(item) => follow({ kind: item.kind === 'event' ? 'event' : 'org', id: item.id })}
     />
+    </>
   ) : (
     <p className="p-3 text-mute">{failed ? 'The data could not be loaded.' : 'Loading…'}</p>
   );
@@ -536,7 +591,7 @@ export function App() {
           <BottomSheet title="Intelligence" onClose={() => setSheet(null)}>{insights}</BottomSheet>
         )}
       </div>
-      <StatusBar stats={stats} failed={failed} inView={orgs.length + (events?.features.length ?? 0)} filtered={filtered} />
+      <StatusBar stats={stats} failed={failed} inView={orgs.length + visibleEvents.features.length} filtered={filtered} />
       {searchOpen && <SearchCommand onPick={pickSearch} onClose={() => setSearchOpen(false)} />}
     </div>
   );

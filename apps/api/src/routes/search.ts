@@ -135,6 +135,21 @@ export const searchRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
           and (name ilike ${like(q)} or name % ${q} or venue ilike ${like(q)})
         order by starts_at limit 5
       `;
+      const people = await sql`
+        select p.name, p.role, jsonb_build_object(
+          'id', g.id, 'name', g.name, 'types', g.types, 'sector', g.sectors[1], 'city', o.city,
+          'lon', st_x(o.geom::geometry), 'lat', st_y(o.geom::geometry)
+        ) as organisation
+        from person_role p
+        join organisation g on g.id = p.organisation_id and g.status = 'published'
+        left join lateral (
+          select city, geom from office
+          where organisation_id = g.id and valid_to is null
+          order by is_hq desc, valid_from nulls last limit 1
+        ) o on true
+        where not p.opted_out and (p.name ilike ${like(q)} or p.name % ${q})
+        order by similarity(p.name, ${q}) desc, p.name limit 5
+      `;
       const locations = await sql`
         select city, country, count(distinct organisation_id)::int as organisations,
           avg(st_x(geom::geometry))::float8 as lon, avg(st_y(geom::geometry))::float8 as lat
@@ -153,6 +168,7 @@ export const searchRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
         understood: { type: parsed.type, sector: parsed.sector, city: parsed.city },
         organisations,
         events: events as never,
+        people: people as never,
         locations: locations as never,
         sectors: sectors as never,
       };

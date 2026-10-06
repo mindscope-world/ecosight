@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { encodeFilters, matches, NO_FILTERS, type Filters } from '@atlas/schema';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../src/app.js';
 import { buildLayers } from '../src/build-layers.js';
@@ -177,6 +178,19 @@ describe('GET /search', () => {
     expect(body.locations[0]).toMatchObject({ city: 'Nairobi', country: 'KE', organisations: 48 });
   });
 
+  it('finds people through their organisation, and never those who opted out', async () => {
+    const body = (await app.inject('/search?q=sample%20founder')).json();
+    expect(body.people).toEqual([
+      { name: 'Sample Founder', role: 'Co-founder', organisation: expect.objectContaining({ name: 'Sample Startup 01' }) },
+    ]);
+    await sql`update person_role set opted_out = true where name = 'Sample Founder'`;
+    try {
+      expect((await app.inject('/search?q=sample%20founder')).json().people).toEqual([]);
+    } finally {
+      await sql`update person_role set opted_out = false where name = 'Sample Founder'`;
+    }
+  });
+
   it('finds events by name', async () => {
     const body = (await app.inject('/search?q=meetup')).json();
     expect(body.events).toHaveLength(5);
@@ -261,6 +275,74 @@ describe('GET /stats', () => {
     expect(body.by_type[0]).toEqual({ type: 'startup', count: 30 });
     expect(body.top_sectors.length).toBeLessThanOrEqual(8);
     expect(body.recent_rounds[0]).toMatchObject({ name: 'Sample Startup 30', amount_usd: 3_000_000 });
+  });
+});
+
+describe('filters', () => {
+  const query = (filters: Filters) => encodeFilters(filters).join('&');
+  const cases: [string, Partial<Filters>][] = [
+    ['a sector', { sectors: ['fintech'] }],
+    ['two sectors and a stage', { sectors: ['fintech', 'agritech'], stages: ['seed'] }],
+    ['inactive only', { status: 'inactive' }],
+    ['founded range', { foundedFrom: 2015, foundedTo: 2018 }],
+    ['open-ended founded range', { foundedTo: 2012 }],
+    ['least raised', { raisedMin: 1_500_000 }],
+    ['funded in a year', { fundedFrom: 2025, fundedTo: 2025 }],
+    ['funded up to a year', { fundedTo: 2024 }],
+    ['lead investors', { investor: 'lead' }],
+    ['investors with a portfolio', { investor: 'portfolio' }],
+    ['active investors', { investor: 'active' }],
+    ['a city', { city: 'Nairobi' }],
+    ['a city with no records', { city: 'Mombasa' }],
+    ['a country', { country: 'KE' }],
+    ['several at once', { sectors: ['cleantech'], status: 'active', fundedFrom: 2024, investor: 'lead' }],
+  ];
+
+  it.each(cases)('the API and the browser agree on %s', async (_name, partial) => {
+    const filters = { ...NO_FILTERS, ...partial };
+    const all = (await app.inject('/layers/offices.geojson')).json().features;
+    const expected = all.filter((f: any) => matches(f.properties, filters)).map((f: any) => f.properties.office_id);
+    const served = (await app.inject(`/layers/offices.geojson?${query(filters)}`)).json().features;
+    expect(served.map((f: any) => f.properties.office_id).sort()).toEqual(expected.sort());
+  });
+
+  it('are not all trivially empty or full', async () => {
+    const count = async (partial: Partial<Filters>) =>
+      (await app.inject(`/layers/offices.geojson?${query({ ...NO_FILTERS, ...partial })}`)).json().features.length;
+    expect(await count({ sectors: ['fintech'] })).toBeGreaterThan(0);
+    expect(await count({ sectors: ['fintech'] })).toBeLessThan(58);
+    expect(await count({ raisedMin: 1_500_000 })).toBe(6); // startups 15, 20, 25 and 30; 15 and 30 also have a branch
+    expect(await count({ investor: 'lead' })).toBe(49); // 58 offices, less 8 funds and 2 angel networks, plus the one fund that has led
+  });
+
+  it('narrow every figure in the stats', async () => {
+    const stats = async (partial: Partial<Filters>) =>
+      (await app.inject(`/stats?${query({ ...NO_FILTERS, ...partial })}`)).json();
+    const funded = await stats({ raisedMin: 1_500_000 });
+    expect(funded).toMatchObject({ organisations: 4, rounds: 4, raised_usd: 9_000_000 });
+    expect(funded.by_type).toEqual([{ type: 'startup', count: 4 }]);
+    expect(funded.cities[0]).toMatchObject({ city: 'Nairobi', organisations: 4 });
+    expect(funded.recent.every((item: any) => item.kind !== 'organisation' || /Startup (15|20|25|30)/.test(item.label) || item.kind === 'event')).toBe(true);
+
+    const fintech = await stats({ sectors: ['fintech'] });
+    expect(fintech.top_sectors).toEqual([{ sector: 'fintech', count: fintech.organisations }]);
+    expect(fintech.organisations).toBeLessThan(48);
+  });
+
+  it('apply place and date filters to events', async () => {
+    const events = async (partial: Partial<Filters>) =>
+      (await app.inject(`/layers/events.geojson?${query({ ...NO_FILTERS, ...partial })}`)).json().features;
+    expect(await events({ sectors: ['fintech'] })).toHaveLength(6); // organisation filters leave events alone
+    expect(await events({ city: 'Mombasa' })).toHaveLength(0);
+    const first = (await events({}))[0].properties.starts_at.slice(0, 10);
+    expect(await events({ eventFrom: first, eventTo: first })).toHaveLength(1);
+    expect((await app.inject(`/stats?${query({ ...NO_FILTERS, eventFrom: first, eventTo: first })}`)).json().upcoming_events).toBe(1);
+  });
+
+  it('ignore malformed filter values', async () => {
+    const res = await app.inject('/layers/offices.geojson?fa=maybe&fy=abc&fi=whale&fk=Kenya');
+    expect(res.statusCode).toBe(200);
+    expect(res.json().features).toHaveLength(58);
   });
 });
 

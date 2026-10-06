@@ -48,6 +48,16 @@ function groupRows(results: SearchResponse): { title: string; rows: Row[] }[] {
     })),
   });
   groups.push({
+    title: 'People',
+    rows: results.people.map((person) => ({
+      key: `person-${person.name}-${person.organisation.id}`,
+      pick: { kind: 'org' as const, id: person.organisation.id, lon: person.organisation.lon, lat: person.organisation.lat },
+      title: person.name,
+      meta: `${person.role} · ${person.organisation.name}`,
+      icon: null,
+    })),
+  });
+  groups.push({
     title: 'Locations',
     rows: results.locations.map((place) => ({
       key: `city-${place.city}-${place.country}`,
