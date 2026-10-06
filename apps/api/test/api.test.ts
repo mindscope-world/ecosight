@@ -1,5 +1,9 @@
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../src/app.js';
+import { buildLayers } from '../src/build-layers.js';
 import { connect, withFund, type Sql } from '../src/db.js';
 import { parseQuery } from '../src/routes/search.js';
 
@@ -257,6 +261,39 @@ describe('GET /stats', () => {
     expect(body.by_type[0]).toEqual({ type: 'startup', count: 30 });
     expect(body.top_sectors.length).toBeLessThanOrEqual(8);
     expect(body.recent_rounds[0]).toMatchObject({ name: 'Sample Startup 30', amount_usd: 3_000_000 });
+  });
+});
+
+describe('rate limits', () => {
+  it('turn a client away past its allowance, search sooner, and never the health check', async () => {
+    const limited = await buildApp({ sql, rateLimit: 8 });
+    try {
+      const codes = async (path: string, times: number) => {
+        const seen: number[] = [];
+        for (let i = 0; i < times; i++) seen.push((await limited.inject(path)).statusCode);
+        return seen;
+      };
+      // Search has a quarter of the allowance: 2 of 8.
+      expect(await codes('/search?q=sample', 3)).toEqual([200, 200, 429]);
+      expect(await codes('/stats', 9)).toEqual([...Array(8).fill(200), 429]);
+      expect(await codes('/health', 12)).toEqual(Array(12).fill(200));
+    } finally {
+      await limited.close();
+    }
+  });
+});
+
+describe('static layer build', () => {
+  it('writes the same data the API serves', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'layers-'));
+    const sizes = await buildLayers(sql, dir);
+    expect((await readdir(dir)).sort()).toEqual(['events.geojson', 'manifest.json', 'offices.geojson', 'stats.json']);
+    expect(Object.keys(sizes)).toHaveLength(4);
+
+    const offices = JSON.parse(await readFile(join(dir, 'offices.geojson'), 'utf8'));
+    expect(offices).toEqual((await app.inject('/layers/offices.geojson')).json());
+    expect(JSON.parse(await readFile(join(dir, 'stats.json'), 'utf8')).organisations).toBe(48);
+    expect(JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')).built_at).toMatch(/^20\d\d-/);
   });
 });
 

@@ -12,7 +12,7 @@ function Logo() {
   return (
     <span className="flex items-center gap-2">
       {hasImage && (
-        <img src="/logo.png" alt="" className="h-7 w-auto" onError={() => setHasImage(false)} />
+        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" className="h-7 w-auto" onError={() => setHasImage(false)} />
       )}
       <span className="text-[15px] font-semibold tracking-tight">
         eco<span className="text-accent2">Sight</span>

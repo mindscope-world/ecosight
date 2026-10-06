@@ -72,6 +72,7 @@ export const searchRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
         }),
         response: { 200: SearchResponse },
       },
+      config: app.searchLimit ? { rateLimit: { max: app.searchLimit, timeWindow: '1 minute' } } : {},
     },
     async (req) => {
       const q = req.query.q.trim();
