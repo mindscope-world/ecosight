@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matches, NO_FILTERS } from './filters';
+import { countActive, decodeFilters, encodeFilters, matches, matchesEvent, narrowsOrganisations, NO_FILTERS } from './filters';
 import { decodeUrlState, encodeUrlState } from './urlState';
 
 const id = '3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c';
@@ -69,7 +69,13 @@ describe('share-link state', () => {
 });
 
 describe('filters', () => {
-  const org = { sectors: ['fintech'], stage: 'seed', city: 'Nairobi', is_active: true, founded_year: 2018, raised_usd: 500_000 };
+  const org = {
+    types: ['startup'], sectors: ['fintech'], stage: 'seed', city: 'Nairobi', country: 'KE', is_active: true,
+    founded_year: 2018, raised_usd: 500_000, funding_years: [2021, 2023], led_rounds: 0, portfolio: 0,
+    last_invested_on: null,
+  };
+  const fund = { ...org, types: ['fund'], funding_years: [2024], led_rounds: 1, portfolio: 3, last_invested_on: '2026-03-01' };
+  const now = Date.parse('2026-10-07T12:00:00Z');
 
   it('match everything when empty', () => {
     expect(matches(org, NO_FILTERS)).toBe(true);
@@ -86,5 +92,47 @@ describe('filters', () => {
   it('leave out records with no value for a filtered fact', () => {
     expect(matches({ ...org, founded_year: null }, { ...NO_FILTERS, foundedFrom: 2000 })).toBe(false);
     expect(matches({ ...org, stage: null }, { ...NO_FILTERS, stages: ['seed'] })).toBe(false);
+  });
+
+  it('match on country and on the years of funding', () => {
+    expect(matches(org, { ...NO_FILTERS, country: 'KE' })).toBe(true);
+    expect(matches(org, { ...NO_FILTERS, country: 'NG' })).toBe(false);
+    expect(matches(org, { ...NO_FILTERS, fundedFrom: 2022, fundedTo: 2023 })).toBe(true);
+    expect(matches(org, { ...NO_FILTERS, fundedFrom: 2024 })).toBe(false);
+    expect(matches(org, { ...NO_FILTERS, fundedTo: 2021 })).toBe(true);
+  });
+
+  it('apply the investor filter to investors only', () => {
+    expect(matches(org, { ...NO_FILTERS, investor: 'lead' })).toBe(true); // a startup is unaffected
+    expect(matches(fund, { ...NO_FILTERS, investor: 'lead' })).toBe(true);
+    expect(matches({ ...fund, led_rounds: 0 }, { ...NO_FILTERS, investor: 'lead' })).toBe(false);
+    expect(matches({ ...fund, portfolio: 0 }, { ...NO_FILTERS, investor: 'portfolio' })).toBe(false);
+    expect(matches(fund, { ...NO_FILTERS, investor: 'active' }, now)).toBe(true);
+    expect(matches({ ...fund, last_invested_on: '2025-10-06' }, { ...NO_FILTERS, investor: 'active' }, now)).toBe(false);
+    expect(matches({ ...fund, last_invested_on: '2025-10-07' }, { ...NO_FILTERS, investor: 'active' }, now)).toBe(true);
+    expect(matches({ ...fund, last_invested_on: null }, { ...NO_FILTERS, investor: 'active' }, now)).toBe(false);
+  });
+
+  it('filter events by place and start date only', () => {
+    const event = { city: 'Nairobi', country: 'KE', starts_at: '2026-10-20T15:00:00Z' };
+    expect(matchesEvent(event, { ...NO_FILTERS, sectors: ['fintech'] })).toBe(true);
+    expect(matchesEvent(event, { ...NO_FILTERS, city: 'Lagos' })).toBe(false);
+    expect(matchesEvent(event, { ...NO_FILTERS, eventFrom: '2026-10-20', eventTo: '2026-10-20' })).toBe(true);
+    expect(matchesEvent(event, { ...NO_FILTERS, eventFrom: '2026-10-21' })).toBe(false);
+    expect(narrowsOrganisations({ ...NO_FILTERS, eventFrom: '2026-10-21' })).toBe(false);
+    expect(narrowsOrganisations({ ...NO_FILTERS, country: 'KE' })).toBe(true);
+  });
+
+  it('round-trip every kind through the URL', () => {
+    const all = {
+      sectors: ['fintech'], stages: ['seed'], city: 'Nairobi', country: 'KE', status: 'active' as const,
+      foundedFrom: 2015, foundedTo: null, raisedMin: 1_000_000, fundedFrom: null, fundedTo: 2023,
+      investor: 'lead' as const, eventFrom: '2026-10-01', eventTo: null,
+    };
+    const query = encodeFilters(all).join('&');
+    expect(query).toBe('fs=fintech&fg=seed&fc=Nairobi&fk=KE&fa=active&fy=2015-&fr=1000000&fd=-2023&fi=lead&fe=2026-10-01_');
+    expect(decodeFilters(new URLSearchParams(query))).toEqual(all);
+    expect(countActive(all)).toBe(10);
+    expect(decodeFilters(new URLSearchParams('fk=Kenya&fi=whale&fe=soon_2026-13-01&fd=x-y'))).toEqual(NO_FILTERS);
   });
 });

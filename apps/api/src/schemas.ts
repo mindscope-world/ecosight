@@ -138,6 +138,10 @@ export const SearchResponse = Type.Object({
       lat: Type.Number(),
     }),
   ),
+  // People are found only through their role at a published organisation.
+  people: Type.Array(
+    Type.Object({ name: Type.String(), role: Type.String(), organisation: Type.Any() }),
+  ),
   locations: Type.Array(
     Type.Object({
       city: Type.String(),

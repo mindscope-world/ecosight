@@ -1,6 +1,7 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
 import type { Sql } from '../db.js';
+import { eventConditions, FilterQuery, filtersFrom, organisationConditions } from '../filters.js';
 import { OrgType } from '../schemas.js';
 
 const FeatureCollection = Type.Object({
@@ -18,12 +19,13 @@ export const layerRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
     {
       schema: {
         summary: 'Current offices of published organisations',
-        querystring: Type.Object({ type: Type.Optional(OrgType) }),
+        querystring: Type.Object({ type: Type.Optional(OrgType), ...FilterQuery }),
         response: { 200: FeatureCollection },
       },
     },
     async (req, reply) => {
       const type = req.query.type ?? null;
+      const filters = filtersFrom(req.query);
       const [row] = await sql<{ features: unknown[] }[]>`
         select coalesce(jsonb_agg(jsonb_build_object(
           'type', 'Feature',
@@ -43,12 +45,23 @@ export const layerRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
             'country', country,
             'founded_year', founded_year,
             'is_active', is_active,
-            'raised_usd', raised_usd::float8,
+            'raised_usd', f.raised_usd::float8,
+            'funding_years', f.funding_years,
+            'led_rounds', f.led_rounds,
+            'portfolio', f.portfolio,
+            'last_invested_on', f.last_invested_on,
             'valid_from', valid_from
           )
         ) order by name, office_id), '[]'::jsonb) as features
-        from public_office
-        where ${type}::org_type is null or ${type}::org_type = any(types)
+        from public_office o
+        join organisation_funding f using (organisation_id)
+        where (${type}::org_type is null or ${type}::org_type = any(types))
+          and organisation_id in (
+            select g.id from organisation g where true ${organisationConditions(sql, filters)}
+          )
+          -- With a place filter, only the offices in that place are drawn.
+          and (${filters.city}::text is null or o.city = ${filters.city})
+          and (${filters.country}::text is null or o.country = ${filters.country})
       `;
       reply.header('cache-control', 'public, max-age=60');
       return { type: 'FeatureCollection' as const, features: row?.features ?? [] };
@@ -60,10 +73,12 @@ export const layerRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
     {
       schema: {
         summary: 'Published events that have not ended',
+        querystring: Type.Object(FilterQuery),
         response: { 200: FeatureCollection },
       },
     },
-    async (_req, reply) => {
+    async (req, reply) => {
+      const filters = filtersFrom(req.query);
       const [row] = await sql<{ features: unknown[] }[]>`
         select coalesce(jsonb_agg(jsonb_build_object(
           'type', 'Feature',
@@ -72,11 +87,13 @@ export const layerRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
             'event_id', event_id,
             'name', name,
             'venue', venue,
+            'city', city,
+            'country', country,
             'starts_at', starts_at
           )
         ) order by starts_at, event_id), '[]'::jsonb) as features
         from public_event
-        where coalesce(ends_at, starts_at) >= now()
+        where coalesce(ends_at, starts_at) >= now() ${eventConditions(sql, filters)}
       `;
       reply.header('cache-control', 'public, max-age=60');
       return { type: 'FeatureCollection' as const, features: row?.features ?? [] };

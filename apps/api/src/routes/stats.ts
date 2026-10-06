@@ -1,33 +1,56 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
+import { Type } from '@sinclair/typebox';
 import type { Sql } from '../db.js';
+import { eventConditions, FilterQuery, filtersFrom, organisationConditions } from '../filters.js';
 import { Stats } from '../schemas.js';
 
 export const statsRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { sql }) => {
   app.get(
     '/stats',
-    { schema: { summary: 'Totals for the dashboard, over published records', response: { 200: Stats } } },
-    async (_req, reply) => {
+    {
+      schema: {
+        summary: 'Totals and activity over published records, narrowed by the filters given',
+        querystring: Type.Object(FilterQuery),
+        response: { 200: Stats },
+      },
+    },
+    async (req, reply) => {
+      const filters = filtersFrom(req.query);
+      // Every figure below reads from these four sets, so one place decides what is in scope.
       const [stats] = await sql<Stats[]>`
-        with published_round as (
-          select r.id, r.organisation_id, g.name, r.stage, r.amount_usd, r.announced_on, r.created_at
+        with org as (
+          select g.* from organisation g
+          where g.status = 'published' ${organisationConditions(sql, filters)}
+        ),
+        site as (
+          select o.* from public_office o
+          where o.organisation_id in (select id from org)
+            and (${filters.city}::text is null or o.city = ${filters.city})
+            and (${filters.country}::text is null or o.country = ${filters.country})
+        ),
+        published_round as (
+          select r.id, r.organisation_id, g.name, r.stage, r.amount_usd, r.announced_on, r.created_at, r.updated_at
           from funding_round r
-          join organisation g on g.id = r.organisation_id and g.status = 'published'
+          join org g on g.id = r.organisation_id
           where r.status = 'published'
+        ),
+        happening as (
+          select * from public_event where true ${eventConditions(sql, filters)}
         )
         select
-          (select count(*)::int from organisation where status = 'published') as organisations,
-          (select count(*)::int from public_office) as offices,
-          (select count(*)::int from public_event where coalesce(ends_at, starts_at) >= now())
+          (select count(*)::int from org) as organisations,
+          (select count(*)::int from site) as offices,
+          (select count(*)::int from happening where coalesce(ends_at, starts_at) >= now())
             as upcoming_events,
           (select count(*)::int from published_round) as rounds,
           (select coalesce(sum(amount_usd), 0)::float8 from published_round) as raised_usd,
           -- An organisation with several types counts once under each.
-          (select count(distinct country)::int from public_office) as countries,
+          (select count(distinct country)::int from site) as countries,
           (
             select greatest(
-              (select max(updated_at) from organisation where status = 'published'),
-              (select max(updated_at) from funding_round where status = 'published'),
-              (select max(updated_at) from event where status = 'published')
+              (select max(updated_at) from org),
+              (select max(updated_at) from published_round),
+              (select max(e.updated_at) from happening h join event e on e.id = h.event_id)
             )
           ) as last_updated,
           jsonb_build_object(
@@ -36,9 +59,8 @@ export const statsRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
                 'current', count(*) filter (where created_at >= now() - interval '30 days'),
                 'previous', count(*) filter (where created_at < now() - interval '30 days')
               )
-              from organisation
-              where status = 'published' and 'startup' = any(types)
-                and created_at >= now() - interval '60 days'
+              from org
+              where 'startup' = any(types) and created_at >= now() - interval '60 days'
             ),
             'rounds_announced', (
               select jsonb_build_object(
@@ -62,10 +84,11 @@ export const statsRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
                 'current', count(*) filter (where created_at >= now() - interval '30 days'),
                 'previous', count(*) filter (where created_at < now() - interval '30 days')
               )
-              from program where created_at >= now() - interval '60 days'
+              from program
+              where organisation_id in (select id from org) and created_at >= now() - interval '60 days'
             ),
             'events_next_30_days', (
-              select count(*) from public_event
+              select count(*) from happening
               where starts_at >= now() and starts_at < now() + interval '30 days'
             )
           ) as activity,
@@ -84,17 +107,17 @@ export const statsRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
               from (
                 select city, country, count(distinct organisation_id)::int as orgs,
                   avg(st_x(geom::geometry)) as lon, avg(st_y(geom::geometry)) as lat
-                from public_office group by city, country
+                from site group by city, country
               ) c
               left join (
                 select o.city, o.country, count(distinct pr.id)::int as rounds
                 from published_round pr
-                join public_office o on o.organisation_id = pr.organisation_id and o.is_hq
+                join site o on o.organisation_id = pr.organisation_id and o.is_hq
                 where pr.announced_on >= current_date - 365
                 group by o.city, o.country
               ) r using (city, country)
               left join (
-                select city, country, count(*)::int as events from public_event
+                select city, country, count(*)::int as events from happening
                 where coalesce(ends_at, starts_at) >= now() group by city, country
               ) e using (city, country)
               order by raw desc limit 8
@@ -120,12 +143,12 @@ export const statsRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
             select jsonb_agg(jsonb_build_object('kind', kind, 'id', id, 'label', label, 'at', at) order by at desc, label)
             from (
               (select 'organisation' as kind, id, name as label, created_at as at
-                from organisation where status = 'published')
+                from org)
               union all
               (select 'round', organisation_id, name, created_at from published_round)
               union all
               (select 'event', p.event_id, p.name, e.created_at
-                from public_event p join event e on e.id = p.event_id)
+                from happening p join event e on e.id = p.event_id)
               order by at desc, label limit 8
             ) feed
           ), '[]'::jsonb) as recent,
@@ -133,14 +156,14 @@ export const statsRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
             select jsonb_agg(jsonb_build_object('type', type, 'count', n) order by n desc, type)
             from (
               select unnest(types)::text as type, count(*)::int as n
-              from organisation where status = 'published' group by 1
+              from org group by 1
             ) t
           ), '[]'::jsonb) as by_type,
           coalesce((
             select jsonb_agg(jsonb_build_object('sector', sector, 'count', n) order by n desc, sector)
             from (
               select unnest(sectors) as sector, count(*)::int as n
-              from organisation where status = 'published' group by 1 order by n desc, 1 limit 8
+              from org group by 1 order by n desc, 1 limit 8
             ) s
           ), '[]'::jsonb) as top_sectors,
           coalesce((
