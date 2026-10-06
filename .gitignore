@@ -8,3 +8,6 @@ __pycache__/
 .pytest_cache/
 coverage/
 data/
+apps/web/public/data/
+# Dataset files stay out of git; only the index page is tracked. See datasets/README.md.
+datasets/*/

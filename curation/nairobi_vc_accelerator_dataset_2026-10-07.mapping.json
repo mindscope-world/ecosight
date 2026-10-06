@@ -1,0 +1,24 @@
+{
+  "about": "How to read datasets/nairobi-investors-2026-10-07/nairobi_vc_accelerator_dataset_2026-10-07.csv, loaded with --publish-all. Columns maps the importer's field names to this file's headings. Aliases lists names that mean the same organisation as one already on record. Statuses overrides the default (verified) for rows whose own evidence says their Nairobi presence is not verified. Aliases and statuses are judgments by the curator and should be checked.",
+  "columns": {
+    "name": "name",
+    "type": "category",
+    "industry": "industry_focus",
+    "location_basis": "nairobi_presence_evidence",
+    "premise": "exact_location",
+    "funding_status": "funding_size",
+    "funding_details": "funding_size_basis",
+    "founders": "key_people",
+    "sources": "sources",
+    "confidence": "confidence"
+  },
+  "aliases": {
+    "Equator Africa": [
+      "Equator"
+    ]
+  },
+  "statuses": {
+    "The Baobab Network": "partially_verified",
+    "Pangea Accelerator": "partially_verified"
+  }
+}

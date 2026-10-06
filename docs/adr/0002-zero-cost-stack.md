@@ -18,8 +18,9 @@ that moving to a paid tier later is a configuration change and not a rewrite.
 | Extraction | Rule-based baseline, and a model on Groq called through LangChain | Free tier, rate limited | If the free tier's daily limits are too low for a backfill, or accuracy on the labelled set is too low | Groq's paid tier, or another LangChain chat model passed to the same extractor |
 | Geocoding | Public Nominatim, 1 request per second, results cached | Free | Bulk backfills beyond a few thousand addresses | Kenya-only self-hosted Nominatim |
 | Raw document store | Local directory, later Cloudflare R2 | Free up to 10 GB | Above 10 GB | Paid R2 storage |
-| Web hosting | Cloudflare Pages | Free | Not expected | — |
-| API and workers hosting | Not chosen yet | — | — | See open questions |
+| Web hosting | Any static host; the build supports a sub-path, so GitHub Pages works without another account | Free | Not expected | — |
+| API hosting | A container (`infra/api/Dockerfile`); host not chosen yet | — | — | See open questions |
+| Scheduled jobs | GitHub Actions on a schedule | Free and unmetered while the repository is public | If the repository goes private: 2,000 minutes a month | — |
 | CI | GitHub Actions | Free for public repos, 2,000 minutes a month for private | — | — |
 
 ## Why
@@ -42,7 +43,8 @@ isolates behind one setting or one interface.
 
 ## Open questions
 
-- Where the API and the daily workers run for free. Candidates: a free-tier
-  container host for the API, and a scheduled GitHub Actions job for the workers.
-  Needs a decision before the week 6 staging demo.
+- Where the API runs for free. It is packaged as a container and the map no
+  longer depends on it being up, so a host that sleeps when idle is acceptable.
+  Free tiers change often; check the candidates' current terms when choosing.
+  See `docs/deploy.md`.
 - Whether the model choice survives the labelled-set comparison in month 2.

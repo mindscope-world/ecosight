@@ -67,10 +67,23 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 def cmd_import(args: argparse.Namespace) -> int:
     from .geocode import Geocoder
-    from .importer import apply, build_report, locate, read_dataset
+    import psycopg
+
+    from .importer import apply, build_report, locate, match_existing, read_dataset
 
     path = Path(args.dataset)
-    records = read_dataset(path)
+    mapping = json.loads(Path(args.mapping).read_text()) if args.mapping else {}
+    # A mapping file is either the columns alone, or columns with aliases beside them.
+    columns = mapping.get("columns", mapping) or None
+    records = read_dataset(path, columns, args.publish_all, mapping.get("aliases"), mapping.get("statuses"))
+    # Checked on a dry run too, so the report shows what would be skipped.
+    try:
+        with psycopg.connect(config.database_url(), connect_timeout=5) as conn:
+            match_existing(conn, records, path.stem)
+    except psycopg.OperationalError:
+        if args.apply:
+            raise
+        print("Database not reachable: existing records were not checked.", file=sys.stderr)
     geocoder = Geocoder(config.geocode_cache())
     for record in records:
         locate(record, geocoder)
@@ -84,8 +97,6 @@ def cmd_import(args: argparse.Namespace) -> int:
     if not args.apply:
         print("Dry run: nothing was written to the database. Add --apply to load.")
         return 0
-
-    import psycopg
 
     with psycopg.connect(config.database_url()) as conn:
         apply(conn, records, path.stem, args.snapshot, args.replace_sample)
@@ -139,6 +150,8 @@ def main() -> int:
     load = commands.add_parser("import-orgs", help="load a researched organisations CSV (dry run unless --apply)")
     load.add_argument("dataset")
     load.add_argument("--apply", action="store_true", help="write to the database")
+    load.add_argument("--mapping", help="JSON file mapping field names to this dataset's column headings")
+    load.add_argument("--publish-all", action="store_true", help="for a vetted dataset with no verification column: publish every row")
     load.add_argument("--replace-sample", action="store_true", help="also remove the synthetic sample records")
     load.add_argument("--snapshot", default=date.today().isoformat(), help="date the research was done (YYYY-MM-DD)")
     load.add_argument("--report", default=str(config.REPO_ROOT / "data" / "import-report.md"))

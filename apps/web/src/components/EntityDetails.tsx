@@ -78,6 +78,8 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
   const latest = org.rounds[0];
   const { investors, portfolio, programs, events, people } = org.connections;
   const connected = investors.length + portfolio.length + programs.length + events.length + people.length;
+  // Investors and programs are described by what they back, not by what they raised.
+  const company = org.types.includes('startup');
   return (
     <>
       <div className="px-3 pb-3">
@@ -94,7 +96,11 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
         )}
         <div className="mt-3 grid grid-cols-3 gap-2">
           <Fact label="Founded" value={org.founded_year ?? '—'} />
-          <Fact label={org.raised_usd > 0 ? 'Funding' : 'Stage'} value={org.raised_usd > 0 ? formatUsd(org.raised_usd) : (org.stage ?? '—')} />
+          {company ? (
+            <Fact label={org.raised_usd > 0 ? 'Funding' : 'Stage'} value={org.raised_usd > 0 ? formatUsd(org.raised_usd) : (org.stage ?? '—')} />
+          ) : (
+            <Fact label="Portfolio" value={portfolio.length > 0 ? `${portfolio.length} on record` : '—'} />
+          )}
           <Fact
             label="Status"
             value={
@@ -118,7 +124,7 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
       )}
 
       {org.rounds.length === 0 && (org.funding_note || org.stage) && (
-        <Block title="Funding">
+        <Block title={company ? 'Funding' : 'Capital'}>
           {org.stage && <Fact label="Stage" value={org.stage} />}
           {org.funding_note && <p className="m-0 mt-1.5 leading-snug text-mute">{org.funding_note}</p>}
         </Block>
@@ -266,8 +272,11 @@ export function EntityDetails({
   detail,
   onSelect,
   onClose,
+  back,
 }: {
   detail: Detail;
+  /** Return to the list this record was picked from, when there is one. */
+  back?: { label: string; onBack: () => void };
   /** Open a connected record; the map follows. */
   onSelect: (selection: Selection) => void;
   onClose: () => void;
@@ -275,7 +284,14 @@ export function EntityDetails({
   return (
     <div aria-live="polite">
       <div className="flex h-8 items-center justify-between px-3">
-        <MicroLabel>Selected</MicroLabel>
+        {back ? (
+          <button type="button" className="flex items-center gap-1 text-[11px] text-accent2 hover:underline" onClick={back.onBack}>
+            <Icon name="chevronLeft" size={12} />
+            {back.label}
+          </button>
+        ) : (
+          <MicroLabel>Selected</MicroLabel>
+        )}
         <button type="button" aria-label="Close details" className="text-mute hover:text-ink" onClick={onClose}>
           <Icon name="close" size={14} />
         </button>

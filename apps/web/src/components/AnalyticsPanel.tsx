@@ -126,8 +126,9 @@ export function AnalyticsPanel({
       />
       <Section id="recent" title="Recent activity">
         <ul>
-          {stats.recent.map((item) => (
-            <li key={`${item.kind}-${item.id}-${item.at}`}>
+          {stats.recent.map((item, index) => (
+            // A company with two rounds loaded together appears twice with the same id and time.
+            <li key={`${item.kind}-${item.id}-${index}`}>
               <button
                 type="button"
                 className="grid w-full grid-cols-[4.5rem_1fr] gap-2 py-1 text-left hover:text-accent"

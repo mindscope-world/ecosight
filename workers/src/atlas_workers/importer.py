@@ -12,6 +12,9 @@ reliably and leaves the rest as text for a person:
 
 Running without `apply` changes nothing in the database: it builds the plan and
 the report, which is what gets reviewed first.
+
+Other datasets are read through a column mapping: a JSON object from the field
+names in `DEFAULT_COLUMNS` to that dataset's own column headings.
 """
 
 import csv
@@ -22,23 +25,55 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .geocode import Geocoder, Place
+from .geocode import Geocoder, Place, in_nairobi
 
 NAIROBI = ("Nairobi", "KE")
+# What an investor known only from a funding round is described as, until a dataset says more.
+INVESTOR_PLACEHOLDER = "Named as an investor in a funding round on record."
 
-REQUIRED_COLUMNS = (
-    "Record #",
-    "Startup / organisation",
-    "Verification status",
-    "Industry",
-    "Nairobi basis",
-    "Exact public building / premise",
-    "Location verification",
-    "Funding level / status",
-    "Funding details",
-    "Founders and public roles",
-    "Official website",
-)
+# Field name to column heading, as in the first dataset loaded. A mapping file
+# overrides any of these for a dataset with different headings.
+DEFAULT_COLUMNS = {
+    "record": "Record #",
+    "name": "Startup / organisation",
+    "status": "Verification status",
+    "type": "Type",
+    "industry": "Industry",
+    "founded_year": "Founded year",
+    "location_basis": "Nairobi basis",
+    "premise": "Exact public building / premise",
+    "location_verification": "Location verification",
+    "city": "City",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "funding_status": "Funding level / status",
+    "funding_details": "Funding details",
+    "founders": "Founders and public roles",
+    "website": "Official website",
+    "source_name": "Identity / Nairobi source URL",
+    "source_office": "Location source URL",
+    "source_funding": "Funding source URL",
+    "source_people": "Founder source URL",
+    # One cell holding every source for the row, as "title — URL" entries.
+    "sources": "Sources",
+    "confidence": "Confidence",
+}
+CONFIDENCE = {"high": 0.9, "medium": 0.6, "low": 0.3}
+# Only a name is indispensable. Everything else has a safe reading when absent.
+REQUIRED_FIELDS = ("name",)
+
+# Words a dataset may use for each kind of organisation.
+TYPE_WORDS = {
+    "startup": "startup", "company": "startup", "scaleup": "startup",
+    "investor": "fund", "vc": "fund", "venture capital": "fund", "fund": "fund", "pe": "fund",
+    "angel network": "angel_network", "angel": "angel_network",
+    "accelerator": "accelerator", "incubator": "incubator",
+    "ngo": "ngo", "non-profit": "ngo", "nonprofit": "ngo",
+    "development funder": "development_funder", "dfi": "development_funder", "foundation": "development_funder",
+    "hub": "innovation_hub", "innovation hub": "innovation_hub", "coworking": "innovation_hub",
+    "university": "university", "government": "government_program", "government program": "government_program",
+    "corporate": "corporate",
+}
 STATUSES = {"verified", "partially_verified", "not_verified", "inactive_or_unclear"}
 LOCATION_LEVELS = {
     "exact_public_address_verified",
@@ -55,7 +90,8 @@ SECTOR_RULES: tuple[tuple[str, str], ...] = (
     ("edtech", r"ed-?tech|education|learning|assistive"),
     ("mobility", r"mobility|ride-hailing|electric[- ]motorcycle|\bev\b|fleet"),
     ("logistics", r"logistic|freight|trucking|deliver|parcel|fulfil|transport|supply chain"),
-    ("cleantech", r"clean|climate|energy|solar|waste|circular|recycl"),
+    # Not bare "clean": a cleaning service is not clean technology.
+    ("cleantech", r"clean ?tech|clean (?:cooking|energy)|climate|energy|solar|waste|circular|recycl"),
     ("e-commerce", r"e-commerce|retail|marketplace"),
     ("ai", r"\bai\b|artificial intelligence|machine learning"),
     ("software", r"software|saas|it services|digital products|data infrastructure|blockchain|\biot\b|game"),
@@ -90,6 +126,7 @@ _NAME_WORD = r"(?:[A-Z][\w'’.-]*|da|de|van|wa)"
 _PERSON = rf"{_NAME_WORD}(?: {_NAME_WORD}){{1,3}}"
 _DASH_ROLE = re.compile(rf"^({_PERSON}) [—–-] ([^.;(]+)")
 _PAREN_ROLE = re.compile(rf"({_PERSON}) \(([^)]*founder[^)]*)\)", re.I)
+_ROLE_WORD = re.compile(r"\b(founder|ceo|cto|coo|cfo|partner|director|chair|president|head|officer|managing)\b", re.I)
 # Floor and unit wording inside an address part, and whole parts that locate nothing.
 _FLOOR = re.compile(r"\b(?:\d+(?:st|nd|rd|th)|ground|first|second|third)\s+floor\b|\blevel\s+\d+\b|\b\d{5}\b", re.I)
 _NOT_ADDRESS_PART = re.compile(
@@ -124,11 +161,24 @@ class Record:
     premise: str | None
     area: str | None
     place: Place | None = None
+    types: list[str] = field(default_factory=lambda: ["startup"])
+    founded_year: int | None = None
+    city: str = "Nairobi"
+    # Coordinates given by the dataset itself, which take precedence over a lookup.
+    given: tuple[float, float] | None = None
+    # Set when the organisation is already on record from another source.
+    existing: str | None = None
+    existing_id: str | None = None
+    aliases: list[str] = field(default_factory=list)
+    references: list[str] = field(default_factory=list)
+    confidence: float | None = None
     precision: str | None = None
     address: str | None = None
     sources: dict[str, str] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     raw: dict[str, str] = field(default_factory=dict)
+    # The row keyed by field name, kept so later steps need not know the dataset's headings.
+    fields: dict[str, str] = field(default_factory=dict)
 
 
 def slugify(text: str) -> str:
@@ -175,24 +225,27 @@ def read_website(text: str) -> tuple[str | None, str | None, bool]:
 def read_people(text: str) -> list[tuple[str, str]]:
     """People the text names as founders, with the role as written."""
     people: dict[str, str] = {}
-    for part in re.split(r";\s*|(?<=[a-z)])\.\s+", text):
+    for part in re.split(r";\s*|\s*\|\s*|(?<=[a-z)])\.\s+", text):
         match = _DASH_ROLE.match(part.strip())
         if match and "founder" in match[2].lower():
             people.setdefault(match[1], match[2].strip().rstrip(","))
     for name, role in _PAREN_ROLE.findall(text):
-        people.setdefault(name, role.strip())
+        # "Founder and CEO (co-founder confirmed by ...)" is a role with a remark, not a person.
+        if not _ROLE_WORD.search(name):
+            people.setdefault(name, role.strip())
     return [(name, role[:80]) for name, role in people.items()]
 
 
 _SENTENCE_END = r";|(?<!\bNo)(?<=[a-z)])\.(?:\s|$)"
 _STREET = re.compile(rf"^(?:No\.?\s*)?\d+\s+(.+\b{_STREET_WORD})$", re.I)
-_IS_STREET = re.compile(rf"\b{_STREET_WORD}$", re.I)
+_IS_STREET = re.compile(rf"\b{_STREET_WORD}(?: (?:North|South|East|West))?$", re.I)
 _LEAD_IN = re.compile(r"^(?:off|along|next to|opposite|near)[- ]", re.I)
 
 
 def clean_address(premise: str) -> str:
     """The address itself: the first one given, without the researcher's remarks."""
     first = re.split(_SENTENCE_END, premise, maxsplit=1)[0]
+    first = re.split(r"\s—\s", first, maxsplit=1)[0]  # "... Nairobi — third-party listing"
     first = re.sub(r"^[^,:]{0,40}:\s*", "", first)  # "Workpay parent office: ..."
     return re.sub(r"\s*\([^)]*(\)|$)", "", first).strip().rstrip(".")
 
@@ -249,6 +302,9 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
             # A street or district result counts only if it is named exactly as the building.
             if place.level == "area" and _squash(place.matched.split(",")[0]) != _squash(building):
                 continue
+            # The building's name must lead the result, not sit further along its address.
+            if _squash(building) not in _squash(",".join(place.matched.split(",")[:2])):
+                continue
             if distinctive or any(_key_word(part) in _squash(place.matched) for part in rest):
                 return place, "address"
     for index, part in enumerate(rest):
@@ -262,67 +318,187 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
     return None
 
 
-def parse_row(row: dict[str, str]) -> Record:
-    raw_name = row["Startup / organisation"].strip()
+# For descriptive categories such as "climate fund manager": the first rule whose
+# word appears decides the type. Order matters: an "angel-network manager" is an
+# angel network, and a "venture studio" is a program before it is a fund.
+TYPE_HINTS: tuple[tuple[str, str], ...] = (
+    (r"angel", "angel_network"),
+    (r"accelerator", "accelerator"),
+    (r"incubator", "incubator"),
+    (r"\bhub\b", "innovation_hub"),
+    (r"studio|venture builder|support organi[sz]ation", "accelerator"),
+    (r"\bvc\b|venture capital|investor|\bfund\b", "fund"),
+)
+
+
+def read_types(text: str) -> tuple[list[str], list[str]]:
+    """Organisation types named in a cell, and any words that were not understood."""
+    types: list[str] = []
+    unknown: list[str] = []
+    for word in re.split(r"[;,/|()]| and ", text.lower()):
+        word = word.strip()
+        if not word:
+            continue
+        kind = TYPE_WORDS.get(word) or TYPE_WORDS.get(word.rstrip("s"))
+        if kind is None:
+            kind = next((kind for pattern, kind in TYPE_HINTS if re.search(pattern, word)), None)
+        if kind is None:
+            unknown.append(word)
+        elif kind not in types:
+            types.append(kind)
+    return types, unknown
+
+
+def read_sources(text: str) -> list[str]:
+    """Every link in a sources cell, in order, without repeats."""
+    return list(dict.fromkeys(url.rstrip(".,") for url in re.findall(r"https?://[^\s|;,)]+", text)))
+
+
+# Words too common in organisation names to identify one website among many.
+_GENERIC_NAME_WORDS = {
+    "africa", "capital", "ventures", "venture", "fund", "kenya", "network", "accelerator", "partners",
+    "limited", "east", "climate", "center", "centre", "innovation", "equity", "global", "group",
+}
+
+
+def own_site(name: str, urls: list[str]) -> tuple[str | None, str | None]:
+    """The organisation's own website among its sources: the first whose address carries its name."""
+    words = [
+        word for word in re.findall(r"[a-z0-9]+", name.lower()) if len(word) >= 4 and word not in _GENERIC_NAME_WORDS
+    ]
+    for url in urls:
+        _, domain, _ = read_website(url)
+        squashed = re.sub(r"[^a-z0-9]", "", domain or "")
+        if domain and any(word in squashed for word in words):
+            return f"https://{domain}/", domain
+    return None, None
+
+
+def to_fields(row: dict[str, str], columns: dict[str, str]) -> dict[str, str]:
+    """A dataset row keyed by field name, whatever its own headings are. Absent columns read as empty."""
+    return {name: (row.get(column) or "").strip() for name, column in columns.items()}
+
+
+def parse_row(
+    row: dict[str, str],
+    columns: dict[str, str] = DEFAULT_COLUMNS,
+    position: int = 0,
+    publish_all: bool = False,
+) -> Record:
+    fields = to_fields(row, columns)
+    raw_name = fields["name"]
     name = display_name(raw_name)
-    status = row["Verification status"].strip()
-    website, domain, website_noted = read_website(row.get("Official website", ""))
-    premise = row["Exact public building / premise"].strip()
-    has_premise = bool(premise) and not premise.lower().startswith("not publicly verified")
-    area = _AREA_IN_TEXT.search(row["Nairobi basis"])
-    funding = row["Funding details"].strip()
-    people_text = row["Founders and public roles"].strip()
+    # A dataset with no verification column is unverified unless the person loading it vouches for it.
+    status = fields["status"] or ("verified" if publish_all else "not_verified")
+    website, domain, website_noted = read_website(fields["website"])
+    premise = fields["premise"]
+    has_premise = bool(premise) and not re.match(r"not publicly (verified|disclosed)", premise, re.I)
+    area = _AREA_IN_TEXT.search(fields["location_basis"])
+    funding = fields["funding_details"]
+    funding_status = fields["funding_status"].rstrip(".")
+    people_text = fields["founders"]
+    types, unknown_types = read_types(fields["type"])
+    references = read_sources(fields["sources"])
+    if not website:
+        website, domain = own_site(name, references)
+    # With no stated level, an address in the row is taken as the address.
+    level = fields["location_verification"] or (
+        "exact_public_address_verified" if has_premise else "not_publicly_verified"
+    )
 
     record = Record(
-        number=int(row["Record #"]),
+        number=int(fields["record"]) if fields["record"].isdigit() else position,
         raw_name=raw_name,
         name=name,
         slug=slugify(name),
         status=status,
         publish=status == "verified",
-        description=row["Industry"].strip(),
-        sectors=read_sectors(row["Industry"]),
-        stage=read_stage(row["Funding level / status"]),
-        funding_note=f"{row['Funding level / status'].strip().rstrip('.')}. {funding}" if funding else None,
+        description=fields["industry"],
+        sectors=read_sectors(fields["industry"]),
+        # A stage describes a company raising money, not an investor's fund.
+        stage=read_stage(fields["funding_status"]) if not types or "startup" in types else None,
+        funding_note=". ".join(part for part in (funding_status, funding) if part) or None,
         website=website,
         domain=domain,
+        types=types or ["startup"],
+        city=fields["city"] or "Nairobi",
+        references=references,
+        confidence=CONFIDENCE.get(fields["confidence"].lower()),
         people=read_people(people_text),
-        location_level=row["Location verification"].strip(),
+        location_level=level,
         premise=premise if has_premise else None,
         area=area[1] if area else None,
         sources={
-            key: row.get(column, "").strip()
-            for key, column in (
-                ("name", "Identity / Nairobi source URL"),
-                ("office", "Location source URL"),
-                ("funding", "Funding source URL"),
-                ("people", "Founder source URL"),
-                ("website", "Official website"),
+            key: fields[source]
+            for key, source in (
+                ("name", "source_name"),
+                ("office", "source_office"),
+                ("funding", "source_funding"),
+                ("people", "source_people"),
+                ("website", "website"),
             )
-            if row.get(column, "").strip().startswith("http")
+            if fields[source].startswith("http")
         },
         raw=dict(row),
     )
+    record.fields = fields
+    if not name:
+        record.notes.append("no name")
     if status not in STATUSES:
         record.notes.append(f"unknown verification status {status!r}")
     if record.location_level not in LOCATION_LEVELS:
         record.notes.append(f"unknown location verification {record.location_level!r}")
+    if unknown_types:
+        record.notes.append(f"type not recognised: {', '.join(unknown_types)}")
+    if fields["founded_year"]:
+        year = fields["founded_year"]
+        if year.isdigit() and 1800 <= int(year) <= 2100:
+            record.founded_year = int(year)
+        else:
+            record.notes.append(f"founded year not read: {year!r}")
+    if fields["latitude"] or fields["longitude"]:
+        try:
+            lon, lat = float(fields["longitude"]), float(fields["latitude"])
+        except ValueError:
+            record.notes.append("coordinates not read")
+        else:
+            if in_nairobi(lon, lat):
+                record.given = (lon, lat)
+            else:
+                record.notes.append("coordinates are outside the covered area")
+    if record.city.casefold() != "nairobi":
+        record.notes.append(f"city not covered yet: {record.city}")
     if not record.sectors:
         record.notes.append("no sector recognised")
     if website_noted:
         record.notes.append("website cell has a note; first URL used")
-    if not record.people and not re.match(r"(no founders|founder\(s\) not|not publicly)", people_text, re.I):
+    if people_text and not record.people and not re.match(r"(no founders|founder\(s\) not|not publicly)", people_text, re.I):
         record.notes.append("founder text not read")
     return record
 
 
-def read_dataset(path: Path) -> list[Record]:
+def read_dataset(
+    path: Path,
+    columns: dict[str, str] | None = None,
+    publish_all: bool = False,
+    aliases: dict[str, list[str]] | None = None,
+    statuses: dict[str, str] | None = None,
+) -> list[Record]:
+    columns = {**DEFAULT_COLUMNS, **(columns or {})}
     with path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
-        missing = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
+        missing = [columns[name] for name in REQUIRED_FIELDS if columns[name] not in (reader.fieldnames or [])]
         if missing:
             raise ValueError(f"{path.name} is missing columns: {', '.join(missing)}")
-        records = [parse_row(row) for row in reader]
+        records = [parse_row(row, columns, position, publish_all) for position, row in enumerate(reader, 1)]
+    for record in records:
+        record.aliases = list((aliases or {}).get(record.name, []))
+        # A status set by the curator for one row outranks the dataset-wide default.
+        if record.name in (statuses or {}):
+            record.status = statuses[record.name]
+            record.publish = record.status == "verified"
+            if record.status not in STATUSES:
+                record.notes.append(f"unknown verification status {record.status!r}")
     for key, label in (("slug", "name"), ("domain", "website domain")):
         seen = Counter(getattr(record, key) for record in records if getattr(record, key))
         for record in records:
@@ -331,8 +507,49 @@ def read_dataset(path: Path) -> list[Record]:
     return records
 
 
+def match_existing(conn, records: list[Record], import_key: str) -> None:
+    """Find records that are already on record from somewhere other than this import.
+
+    Matching is by website domain, then by name or any other name either side goes
+    by. A match is merged into, never loaded as a second organisation: the existing
+    record keeps its id and its links, and gains whatever it was missing.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select g.id, g.slug, g.website_domain, g.name, g.aliases from organisation g
+            where not exists (
+              select 1 from review_item r
+              where r.record_id = g.id and r.payload->>'import' = %s
+                and not coalesce((r.payload->>'merged')::boolean, false)
+            )
+            """,
+            (import_key,),
+        )
+        existing = cur.fetchall()
+    by_domain = {domain: (org_id, name) for org_id, _, domain, name, _ in existing if domain}
+    by_slug: dict[str, tuple[str, str]] = {}
+    for org_id, slug, _, name, aliases in existing:
+        for key in (slug, *map(slugify, aliases)):
+            by_slug.setdefault(key, (org_id, name))
+    for record in records:
+        found = (record.domain and by_domain.get(record.domain)) or next(
+            (by_slug[key] for key in (record.slug, *map(slugify, record.aliases)) if key in by_slug), None
+        )
+        if found:
+            record.existing_id, record.existing = found
+            record.notes.append(f"already on record as {found[1]}; merged into it")
+
+
 def locate(record: Record, geocoder: Geocoder) -> None:
     """Place a record as precisely as the public evidence and the geocoder allow."""
+    if record.city.casefold() != "nairobi":
+        return  # Kept without an office until that city is covered.
+    if record.given:
+        lon, lat = record.given
+        record.place = Place(lon, lat, "address", "coordinates given in the dataset")
+        record.precision, record.address = "address", clean_address(record.premise) if record.premise else None
+        return
     if record.location_level == "not_publicly_verified" and not record.publish:
         return  # No confirmed Nairobi location: the draft is kept without an office.
     if record.premise and record.location_level == "exact_public_address_verified":
@@ -359,6 +576,12 @@ def build_report(records: list[Record], source: str) -> str:
         f"- Rows read: {len(records)}",
         f"- Published (verified): {len(published)}",
         f"- Loaded as drafts for review: {len(records) - len(published)}",
+        "",
+        f"- Already on record, not loaded again: {sum(bool(r.existing) for r in records)}",
+        "",
+        "## Types",
+        "",
+        *[f"- {kind}: {count}" for kind, count in Counter(r.types[0] for r in records).most_common()],
         "",
         "## Verification status",
         "",
@@ -402,57 +625,113 @@ def build_report(records: list[Record], source: str) -> str:
 def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_sample: bool) -> None:
     """Write the plan in one transaction. Re-running replaces what this import loaded before."""
     with conn.transaction(), conn.cursor() as cur:
-        cur.execute(
-            "select record_id from review_item where payload->>'import' = %s and record_id is not null",
-            (import_key,),
-        )
-        previous = [row[0] for row in cur.fetchall()]
+        cur.execute("select record_id, payload from review_item where payload->>'import' = %s", (import_key,))
+        owned: list[str] = []
+        for org_id, payload in cur.fetchall():
+            if not payload.get("merged"):
+                owned.append(org_id)
+                continue
+            # A record merged into one that belongs elsewhere: take back only what was added.
+            added = payload.get("added", {})
+            cur.execute("delete from office where id = any(%s::uuid[])", (added.get("offices", []),))
+            cur.execute("delete from person_role where id = any(%s::uuid[])", (added.get("people", []),))
+            cur.execute("delete from field_source where id = any(%s::uuid[])", (added.get("sources", []),))
+        cur.execute("delete from review_item where payload->>'import' = %s", (import_key,))
         if replace_sample:
             cur.execute("select id from organisation where slug like 'sample-%%'")
-            previous += [row[0] for row in cur.fetchall()]
+            owned += [row[0] for row in cur.fetchall()]
             cur.execute("delete from event where name like 'Sample Meetup %%'")
-        if previous:
-            cur.execute("delete from field_source where record_type = 'organisation' and record_id = any(%s)", (previous,))
-            cur.execute("delete from review_item where record_id = any(%s)", (previous,))
-            cur.execute("delete from organisation where id = any(%s)", (previous,))
+        if owned:
+            cur.execute("delete from field_source where record_type = 'organisation' and record_id = any(%s)", (owned,))
+            cur.execute("delete from review_item where record_id = any(%s)", (owned,))
+            cur.execute("delete from organisation where id = any(%s)", (owned,))
 
         for record in records:
-            cur.execute(
-                """
-                insert into organisation
-                  (name, slug, types, sectors, stage, website_domain, description, status, funding_note)
-                values (%s, %s, '{startup}', %s, %s, %s, %s, %s, %s)
-                returning id
-                """,
-                (
-                    record.name, record.slug, record.sectors, record.stage, record.domain,
-                    record.description, "published" if record.publish else "draft", record.funding_note,
-                ),
-            )
-            org_id = cur.fetchone()[0]
-            if record.precision:
+            if not record.name:
+                continue
+            added: dict[str, list[str]] = {"offices": [], "people": [], "sources": []}
+            if record.existing_id:
+                org_id = record.existing_id
+                # Fill what the existing record lacks; never overwrite what it has.
+                cur.execute(
+                    """
+                    update organisation set
+                      name = %s,
+                      slug = %s,
+                      aliases = (select array(select distinct a from unnest(aliases || %s::text[] || array[name]) a where a <> %s)),
+                      types = (select array(select distinct t from unnest(types || %s::org_type[]) t)),
+                      sectors = case when sectors = '{}' then %s else sectors end,
+                      description = case when description is null or description = %s then %s else description end,
+                      website_domain = coalesce(website_domain, %s),
+                      funding_note = coalesce(funding_note, %s),
+                      founded_year = coalesce(founded_year, %s)
+                    where id = %s
+                    """,
+                    (
+                        record.name, record.slug, record.aliases, record.name, record.types, record.sectors,
+                        INVESTOR_PLACEHOLDER, record.description or None, record.domain, record.funding_note,
+                        record.founded_year, org_id,
+                    ),
+                )
+                cur.execute("select count(*) from office where organisation_id = %s and valid_to is null", (org_id,))
+                has_office = cur.fetchone()[0] > 0
+                cur.execute("select name from person_role where organisation_id = %s", (org_id,))
+                known_people = {row[0] for row in cur.fetchall()}
+            else:
+                cur.execute(
+                    """
+                    insert into organisation
+                      (name, slug, aliases, types, sectors, stage, website_domain, description, status,
+                       funding_note, founded_year)
+                    values (%s, %s, %s, %s::org_type[], %s, %s, %s, %s, %s, %s, %s)
+                    returning id
+                    """,
+                    (
+                        record.name, record.slug, record.aliases, record.types, record.sectors, record.stage,
+                        record.domain, record.description, "published" if record.publish else "draft",
+                        record.funding_note, record.founded_year,
+                    ),
+                )
+                org_id = cur.fetchone()[0]
+                has_office, known_people = False, set()
+
+            if record.precision and not has_office:
                 lon, lat = (record.place.lon, record.place.lat) if record.place else (0.0, 0.0)
                 cur.execute(
                     """
                     insert into office (organisation_id, is_hq, address, city, country, geom, precision)
                     values (%s, true, %s, %s, %s, st_setsrid(st_makepoint(%s, %s), 4326)::geography, %s)
+                    returning id
                     """,
                     # A city-precision office is moved to the city centroid by the database.
                     (org_id, record.address, *NAIROBI, lon, lat, record.precision),
                 )
+                added["offices"].append(str(cur.fetchone()[0]))
             for name, role in record.people:
+                if name in known_people:
+                    continue
                 cur.execute(
-                    "insert into person_role (organisation_id, name, role) values (%s, %s, %s)",
+                    "insert into person_role (organisation_id, name, role) values (%s, %s, %s) returning id",
                     (org_id, name, role),
                 )
-            for field_name, url in record.sources.items():
+                added["people"].append(str(cur.fetchone()[0]))
+            sources = dict(record.sources)
+            for number, url in enumerate(record.references):
+                # The first listed source stands behind the record itself.
+                sources.setdefault("name" if number == 0 and not record.existing_id else f"reference {number + 1}", url)
+            for field_name, url in sources.items():
                 cur.execute(
                     """
-                    insert into field_source (record_type, record_id, field, source_url, method, verified_at)
-                    values ('organisation', %s, %s, %s, 'manual', %s)
+                    insert into field_source (record_type, record_id, field, source_url, method, confidence, verified_at)
+                    values ('organisation', %s, %s, %s, 'manual', %s, %s)
+                    returning id
                     """,
-                    (org_id, field_name, url, snapshot if record.publish else None),
+                    (org_id, field_name, url, record.confidence, snapshot if record.publish else None),
                 )
+                added["sources"].append(str(cur.fetchone()[0]))
+            payload = {"import": import_key, "record": record.number, "row": record.raw, "fields": record.fields}
+            if record.existing_id:
+                payload |= {"merged": True, "added": added}
             cur.execute(
                 """
                 insert into review_item (record_type, record_id, payload, method, status, reason, reviewed_at)
@@ -460,7 +739,7 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                 """,
                 (
                     org_id,
-                    json.dumps({"import": import_key, "record": record.number, "row": record.raw}),
+                    json.dumps(payload),
                     "approved" if record.publish else "pending",
                     None if record.publish else f"Dataset marks this row {record.status}",
                     snapshot if record.publish else None,

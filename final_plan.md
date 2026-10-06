@@ -13,14 +13,15 @@ Urgency:
 
 ## 1. What is built
 
-Everything below is committed on the `sprint-2-foundations` branch and passes its checks locally: 41 TypeScript tests, 62 Python tests, typecheck, build, and first-load JavaScript of 354 KB against the 600 KB budget.
+The work is public at <https://github.com/mindscope-world/ecosight>. Pull request 1 brings it into `main`, and CI passes on it. Work after that pull request is on the `step-2-real-data` branch. Checks pass locally: 67 TypeScript tests, 73 Python tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against the 600 KB budget.
 
 ### Data
 
+- **Datasets live in `datasets/`**, one dated folder each, kept out of git (see `datasets/README.md`).
 - **First real dataset loaded** from `nairobi_startups_organisations_100.csv` (research snapshot Oct 6, 2026). Of 100 rows, the 69 marked verified are published. The other 31 are kept as drafts with a pending review item each: 18 not verified, 7 partially verified, 6 inactive or unclear.
 - **Placement of the 69:** 16 at a confirmed building, 23 on their street or neighbourhood, 30 at city level.
 - **Funding:** 36 rounds for 25 organisations, read by hand from the funding notes into `curation/nairobi_startups_funding_rounds.json`, each with the words it was read from. USD 112.13 million in rounds with a stated dollar amount. The file also lists 16 items deliberately not recorded as rounds, with reasons.
-- **Investors:** 35, created from those rounds. They have a name and a type only.
+- **Investors and programs:** a second dataset of 25 Nairobi venture firms, impact investors and accelerators is loaded: 23 published, 2 kept as drafts because their own evidence calls their Nairobi presence unverified. 5 placed at a confirmed building, 9 on their street or neighbourhood, 9 at city level. With the 35 investors named in funding rounds (5 of them the same organisations, merged), 53 investors and programs are on record and 23 are on the map.
 - **People:** 118 named as founders. **Sources:** every loaded field carries its source link.
 - The synthetic sample now lives only in the test database.
 
@@ -33,6 +34,12 @@ Organisations with eleven entity types, founded year, active status and funding 
 Office and event layers; organisation detail with funding and connections; event and round detail; search grouped into organisations, events, cities and sectors, which reads type, sector and city words; stats with period comparison, city scores, funding by month and a recent feed; OpenAPI document.
 
 ### Web (React, Tailwind, MapLibre)
+
+Two pages: the landing page at `/` and the map app at `/map/`.
+
+**Landing page.** Hero over a live world map with figures from the product's own records, audience bar, problem section (a table beside the same records on a map), layer cards, an explore preview that travels from the world to Nairobi, three use cases, the relationship chain, example signals marked as demo data, a globe with connections, closing call to action and footer. Specified and reported in `frontend_plan.md` section 14.
+
+**Map app.**
 
 The ecoSight interface: top navigation with six lenses, logo, navy map with a marker shape per entity type, clustering, floating layer control, funding heatmap, startup density, dark, light and terrain styles, collapsible left and right intelligence panels, entity details with funding and one-click graph navigation, search command palette, filter drawer, status bar, share links, and bottom sheets on small screens.
 
@@ -55,11 +62,12 @@ Nothing here needs new features. It makes the work safe, shared and trusted.
 
 | # | Item | Who | Notes |
 |---|------|-----|-------|
-| 1.1 | Create a remote, push the branch, get CI green | Owner + backend | There is no remote, so CI has never run |
-| 1.2 | Decide whether the three dataset files go into git | Owner | They hold founder names and business contacts, and are untracked today |
+| 1.1 | ~~Create a remote, push the branch, get CI green~~ | Done | Public repository, CI green on pull request 1. Still to do: merge the pull request |
+| 1.2 | ~~Decide whether the dataset files go into git~~ | Done, by default | They are organised under `datasets/` and ignored by git, because the repository is public and they hold names and contacts. Reversible if the owner decides otherwise |
 | 1.3 | Confirm the data's sources allow publishing it | Owner | Risk R6 in `plan.md`. Blocks any public deployment |
+| 1.4b | Check the investors import | Owner | `curation/nairobi_vc_accelerator_dataset_2026-10-07.mapping.json` records two judgments: "Equator Africa" is the "Equator" named in Leta's round, and two rows are held as drafts. Only people named as founders were loaded, not partners or directors |
 | 1.4 | Check the 36 curated rounds | Owner | Especially: investor types are the curator's classification, a bare "$" is read as US dollars, SunCulture is dated by announcement, Pezesha's equity and debt are one round |
-| 1.5 | Review the 31 drafts | Owner | In particular the 6 marked inactive or unclear: show, mark inactive, or keep hidden |
+| 1.5 | Review the 33 drafts | Owner | 31 from the startups dataset, in particular the 6 marked inactive or unclear; 2 from the investors dataset (The Baobab Network, Pangea Accelerator) |
 | 1.6 | Confirm the decisions listed in section 1 and ADR 0002 | Owner | They were taken on recommendation, not signed off |
 | 1.7 | Copy the reference screenshot into `docs/reference/` | Owner | The interface has never been compared with it |
 
@@ -69,12 +77,12 @@ The first real dataset exposed gaps that the synthetic sample hid. These come fi
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 2.1 | A way to see records that share one point | Frontend | 30 city-level organisations sit on one spot in the city centre; only the top one can be clicked |
-| 2.2 | Locations for investors | Backend + data | The 35 investors have no office, so the Investors layer is empty. Most are outside Kenya: needs a city per investor and centroids for those cities |
+| 2.1 | ~~A way to see records that share one point~~ | Done | Records on one spot keep a counted marker at every zoom; clicking it lists them, and each opens with a link back to the list |
+| 2.2 | Locations for investors | Backend + data | **Nairobi done.** The investors dataset is loaded: 19 investors, 10 accelerators and incubators and 1 hub are on the map. 5 of its rows were merged into investors already known from funding rounds, which kept their round links and gained an office. Still without a location: the 30 round investors with no Nairobi presence, most of them abroad |
 | 2.3 | Country-level view | Both | Follows from 2.2: investors abroad make the map international |
-| 2.4 | Entity types from data | Backend | Every imported row is typed as a startup. The importer needs a type column or a reviewed mapping |
+| 2.4 | ~~Entity types from data~~ | Done | Types are read from a dataset's type or category column, including descriptive ones ("VC / impact investor", "innovation hub and accelerator"). The startups dataset has no such column, so its rows remain startups |
 | 2.5 | Events | Data + backend | There are no real events, so the Events layer and its panels are empty. Needs a source: a dataset or a crawler |
-| 2.6 | Importer for other datasets | Backend | It expects this dataset's column names. Add a column mapping and matching against existing records by website and name |
+| 2.6 | ~~Importer for other datasets~~ | Done | `--mapping` reads other column headings; founded year and coordinates are read when given; an organisation already on record (same website or name) is not loaded twice. Cities other than Nairobi are reported and left without an office until 2.2 and 2.3 |
 | 2.7 | Currency conversion | Backend | One round is in Canadian dollars and is left out of dollar totals |
 | 2.8 | Business contacts and logo | Backend + owner | Decide whether public business emails and phones are stored and shown; add a logo field |
 | 2.9 | Founded year | Data | The filter and the card support it; the dataset has no such column |
@@ -85,11 +93,11 @@ The first demo outside this machine.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 3.1 | Choose the free hosts | Owner + backend | Supabase for the database; static hosting for the web app; a host for the API and the scheduled workers is still undecided (open question in ADR 0002) |
-| 3.2 | Staging deployment | Backend | Database, API and web app |
-| 3.3 | Public layer build job | Backend | Write layer GeoJSON to static files, so the map does not depend on the API being up |
-| 3.4 | Rate limits on the public API | Backend | |
-| 3.5 | Error reporting and an uptime check | Backend | Including the public basemap, which has no uptime commitment |
+| 3.1 | Choose the free hosts | Owner | Supabase for the database; any static host for the web app (GitHub Pages works without another account); scheduled jobs on GitHub Actions. A container host for the API is still to choose |
+| 3.2 | Staging deployment | Owner + backend | Prepared, not deployed: the API runs as a container (`infra/api/Dockerfile`), the web build reads static data and supports a sub-path, and `docs/deploy.md` has the steps. Needs the accounts from 3.1, and 1.3 before anything is public |
+| 3.3 | ~~Public layer build job~~ | Done | `pnpm layers:build` writes the map's data as static files; checked that the map loads with the API stopped. Scheduling it waits on 3.1 |
+| 3.4 | ~~Rate limits on the public API~~ | Done | 120 requests a minute per visitor, a quarter of that for search; also a setting for which sites may call the API |
+| 3.5 | Error reporting and an uptime check | Backend + owner | Uptime check written (site, map data, API, basemap, every half hour); it starts once the addresses are set as repository variables. Error reporting needs an account with a reporting service |
 | 3.6 | Set the crawler and geocoder contact address | Owner | `CRAWLER_USER_AGENT`; required by the services' usage policies before regular use |
 
 **First external demo after this step:** real Nairobi data, click from a startup to its investors and on to their portfolio.
@@ -98,10 +106,10 @@ The first demo outside this machine.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 4.1 | Filters accepted by the layer and stats endpoints | Backend | Today filtering happens in the browser |
-| 4.2 | Activity panels follow the filters | Both | Activity, signals, chart, cities and feed describe the whole dataset today. Depends on 4.1 |
-| 4.3 | Remaining filter kinds | Both | Region, funding date, event date, investor activity (active, lead, portfolio) |
-| 4.4 | Search results for people and rounds | Backend | Optional; founders are now on record |
+| 4.1 | ~~Filters accepted by the layer and stats endpoints~~ | Done | The API and the browser apply one set of rules from `packages/schema`; a test checks they agree on fifteen filter combinations |
+| 4.2 | ~~Activity panels follow the filters~~ | Done | Activity, signals, chart, cities, feed and status bar follow them. If the API cannot be reached the panels keep the all-records figures and say so; the map keeps filtering by itself |
+| 4.3 | Remaining filter kinds | Both | Done: country, year of a funding round, event dates, investor activity (active, lead, has portfolio). Not done: region and radius, which wait for the country view (2.3) and area selection (7.1). The country, event and investor filters have little to act on until step 2's data arrives |
+| 4.4 | ~~Search results for people~~ | Done | Founders are found by name and open their organisation; anyone who has opted out is left out. Rounds are reached through their organisation |
 
 ### Step 5 — Review and accounts (Medium, High for 5.1 and 5.2)
 
@@ -156,6 +164,19 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 8.8 | Offline caching | Frontend | |
 | 8.9 | Production cutover | Backend | |
 
+### Landing page follow-ups (Medium)
+
+The landing page is built; these are what it still lacks.
+
+| # | Item | Track | Notes |
+|---|------|-------|-------|
+| L.1 | Privacy, Terms and Data Policy pages | Owner | Required before a public launch; belongs with 8.7. Shown as plain text in the footer today |
+| L.2 | About, Methodology and Contact pages | Owner + frontend | Methodology can be drawn from `docs/sources.md` and the import rules |
+| L.3 | Sign in and sign up from the landing page | Both | Follows step 5; "Sign in" is inactive and "Join the ecosystem" opens the repository |
+| L.4 | Real event points | Data | Investors and programs are now real in Nairobi; events still need a source (2.5) |
+| L.5 | Social preview image and sharing metadata | Frontend | Once the copy is final |
+| L.6 | Lighthouse and accessibility pass on the landing page | Frontend | With 8.2 and 8.3 |
+
 ### Later (Low)
 
 - 3D globe.
@@ -175,6 +196,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 6 | Fresh data | — | Extraction to review queue, matching, scheduler | Medium |
 | 7 | Advanced map | Selection, time, lines, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility | Backups, security, legal | Medium, then Critical |
+| L | Landing page follow-ups | Missing pages, sharing metadata | — | Medium |
 
 Steps 1 and 2 are the priority. Step 6 does not depend on any frontend work and can start as soon as 6.1 to 6.3 are done. Step 8.7 has the longest lead time and should start no later than step 3.
 

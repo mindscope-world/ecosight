@@ -6,7 +6,7 @@ import { buildSignals } from './signals';
 const zero = { current: 0, previous: 0 };
 const stats: Stats = {
   organisations: 10, offices: 12, countries: 1, last_updated: null, upcoming_events: 0, rounds: 0,
-  raised_usd: 0, cities: [], recent: [], by_type: [], top_sectors: [],
+  raised_usd: 0, cities: [], recent: [], by_type: [], top_sectors: [], recent_rounds: [],
   funding_by_month: [{ month: '2026-09', amount_usd: 0, rounds: 0 }],
   activity: { startups_added: zero, rounds_announced: zero, active_investors: zero, programs_added: zero, events_next_30_days: 0 },
 };
