@@ -3,7 +3,10 @@ import { useState } from 'react';
 import { VIEW_LABELS } from '../entities';
 import { Icon } from './ui';
 
-/** The logo image when it has been added to public/, the wordmark alone otherwise. */
+/**
+ * The pin mark from the logo beside the wordmark. The wordmark is set in text:
+ * the logo file's dark "eco" lettering is made for light backgrounds.
+ */
 function Logo() {
   const [hasImage, setHasImage] = useState(true);
   return (
@@ -12,7 +15,7 @@ function Logo() {
         <img src="/logo.png" alt="" className="h-7 w-auto" onError={() => setHasImage(false)} />
       )}
       <span className="text-[15px] font-semibold tracking-tight">
-        eco<span className="text-accent">Sight</span>
+        eco<span className="text-accent2">Sight</span>
       </span>
     </span>
   );

@@ -37,7 +37,7 @@ pnpm check:bundle # fails if first-load JavaScript exceeds 600 KB compressed
 ## Layout
 
 - `apps/web` — Vite, React, Tailwind and MapLibre. The app reaches the map only through `src/map/adapter.ts`.
-  Put the logo at `apps/web/public/logo.png`; the header shows the wordmark alone until it is there.
+  `public/logo.png` is the pin mark cropped from the full logo in `logo.png` at the repo root.
 - `apps/api` — Fastify. Route schemas generate the OpenAPI document.
 - `packages/schema` — share-link state and filter rules shared by the web app and, later, the API.
 - `db` — SQL migrations, seed data and their runners.

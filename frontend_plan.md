@@ -305,7 +305,6 @@ Every panel has a minimise control, and both side columns collapse to a rail.
 
 | Item | Why |
 |------|-----|
-| Logo image | The file could not be read from outside the project. The header uses `apps/web/public/logo.png` as soon as it exists |
 | Satellite style | No imagery source with a suitable licence is chosen. The option is shown disabled |
 | Polygon and radius selection, country-level view | Phase 7 |
 | Recent Activity map layer | Phase 7 |

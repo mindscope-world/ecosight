@@ -46,7 +46,7 @@ export function StatusBar({
       )}
       <span className="ml-auto hidden items-baseline gap-2 whitespace-nowrap md:flex">
         <span className="font-semibold">
-          eco<span className="text-accent">Sight</span>
+          eco<span className="text-accent2">Sight</span>
         </span>
         <MicroLabel>Ecosystem intelligence platform</MicroLabel>
       </span>

@@ -20,7 +20,7 @@ Built and passing checks locally (40 TypeScript tests, 26 Python tests, first-lo
 - **Web (React, Tailwind, MapLibre):** the ecoSight interface from `frontend_plan.md`: top navigation, shaped markers, layer control, heatmaps, three map styles, left and right intelligence panels, entity details with graph navigation, search command palette, filter drawer, status bar, bottom sheets on small screens. `frontend_plan.md` section 13 lists what is and is not built.
 - **Pipeline (Python):** raw document store, two RSS crawlers, extraction with a rule-based baseline and a Groq model through LangChain, eval harness.
 
-Not done: nothing after the first commit is committed, there is no remote, CI has never run, the data is synthetic, the logo image is not in the repo, and the Groq path has not been run against Groq.
+Not done: nothing after the first commit is committed, there is no remote, CI has never run, the data is synthetic, and the Groq path has not been run against Groq.
 
 Phases 2, 3 and 4 below were built ahead of phase 1, on the synthetic sample. Their remaining items are marked.
 
@@ -31,7 +31,7 @@ Phases 2, 3 and 4 below were built ahead of phase 1, on the synthetic sample. Th
 | 0.1 | Commit the `sprint-2-foundations` branch, add a remote, push, get CI green | Both | Everything since the first commit is uncommitted |
 | 0.2 | Settle the open decisions in `frontend_plan.md` section 12 | Both | React and Tailwind, Fastify or FastAPI, the ecoSight name, scope. Phase 2 cannot start without the first three |
 | 0.3 | Add the Groq key to `.env` and run the model extractor once | Backend | Confirms the default model name is still offered |
-| 0.4 | Copy the reference screenshot into `docs/reference/` and the logo to `apps/web/public/logo.png` | Frontend | Neither could be read from outside the project |
+| 0.4 | Copy the reference screenshot into `docs/reference/` | Frontend | It could not be read from outside the project |
 
 ## Phase 1 — Real data in (Critical)
 
@@ -76,7 +76,7 @@ When the file arrives the first output is a validation report: rows read, rows r
 
 ## Phase 2 — Design system and shell (High) — built
 
-Remaining: the logo image (0.4 applies to it too), and a check against the reference screenshot once it is in the repo.
+Remaining: a check against the reference screenshot once it is in the repo.
 
 | # | Item | Track |
 |---|------|-------|
