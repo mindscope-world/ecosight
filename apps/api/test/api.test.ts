@@ -103,6 +103,7 @@ describe('GET /rounds/:id', () => {
       organisation: { name: 'Sample Startup 10' },
       amount_usd: 1000000,
       currency: 'USD',
+      announced_precision: 'day',
       investors: [{ name: 'Sample Fund 01', is_lead: true }],
     });
   });

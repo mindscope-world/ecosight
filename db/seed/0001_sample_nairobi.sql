@@ -76,8 +76,8 @@ begin
 
       -- Every fifth startup has a round led by the first sample fund.
       if k = 1 and i % 5 = 0 then
-        insert into funding_round (organisation_id, stage, amount_original, currency, amount_usd, fx_rate, announced_on, status)
-        values (org, stages[1 + (i % 4)], i * 100000, 'USD', i * 100000, 1, date '2024-01-01' + i * 20, 'published')
+        insert into funding_round (organisation_id, stage, amount_original, currency, amount_usd, fx_rate, announced_on, announced_precision, status)
+        values (org, stages[1 + (i % 4)], i * 100000, 'USD', i * 100000, 1, date '2024-01-01' + i * 20, 'day', 'published')
         returning id into rnd;
       end if;
     end loop;

@@ -2,7 +2,7 @@ import type { Selection } from '@atlas/schema';
 import type { ReactNode } from 'react';
 import type { EventDetail, OrgDetail, OrgLink } from '../api';
 import { layerForTypes, POINT_LAYERS, TYPE_LABELS } from '../entities';
-import { formatDate, formatDateTime, formatUsd } from '../lib/format';
+import { formatDate, formatDateTime, formatMoney, formatPartialDate, formatUsd } from '../lib/format';
 import { Icon, MicroLabel, ShapeIcon } from './ui';
 
 export type Detail =
@@ -66,6 +66,12 @@ function Group({ label, children, count }: { label: string; children: ReactNode;
   );
 }
 
+/** A round's amount in the currency it was reported in, or that it was not disclosed. */
+function amountOf(round: OrgDetail['rounds'][number]): string {
+  if (round.amount_original == null || !round.currency) return 'undisclosed';
+  return formatMoney(round.amount_original, round.currency);
+}
+
 function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Selection) => void }) {
   const layer = layerForTypes(org.types);
   const hq = org.offices[0];
@@ -121,39 +127,42 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
       {org.rounds.length > 0 && (
         <Block title="Funding">
           <div className="grid grid-cols-3 gap-2">
-            <Fact label="Total raised" value={formatUsd(org.raised_usd)} />
+            <Fact label="Total raised" value={org.raised_usd > 0 ? formatUsd(org.raised_usd) : '—'} />
             <Fact label="Latest round" value={latest?.stage ?? '—'} />
-            <Fact label="Latest amount" value={latest?.amount_usd != null ? formatUsd(latest.amount_usd) : '—'} />
+            <Fact label="Latest amount" value={latest ? amountOf(latest) : '—'} />
           </div>
           <ul className="mt-2 text-mute">
             {org.rounds.map((round) => (
               <li key={round.id} className="flex justify-between tabular-nums">
                 <span>{round.stage ?? 'Round'}</span>
                 <span>
-                  {round.amount_usd != null ? formatUsd(round.amount_usd) : '—'}
-                  {round.announced_on && ` · ${formatDate(round.announced_on)}`}
+                  {amountOf(round)}
+                  {round.announced_on && ` · ${formatPartialDate(round.announced_on, round.announced_precision)}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {org.funding_note && <p className="m-0 mt-2 text-[11px] leading-snug text-mute">{org.funding_note}</p>}
+        </Block>
+      )}
+
+      {org.offices.length > 0 && (
+        <Block title="Locations">
+          <ul>
+            {org.offices.map((office) => (
+              <li key={office.id} className="flex justify-between gap-2">
+                {/* Researched addresses usually name the city already. */}
+                <span>{office.address?.includes(office.city) ? office.address : [office.address, office.city].filter(Boolean).join(', ')}</span>
+                <span className="text-[11px] text-mute">
+                  {office.is_hq ? 'HQ' : 'Branch'}
+                  {office.precision === 'city' && ' · city level'}
+                  {office.precision === 'area' && ' · area level'}
                 </span>
               </li>
             ))}
           </ul>
         </Block>
       )}
-
-      <Block title="Locations">
-        <ul>
-          {org.offices.map((office) => (
-            <li key={office.id} className="flex justify-between gap-2">
-              {/* Researched addresses usually name the city already. */}
-              <span>{office.address?.includes(office.city) ? office.address : [office.address, office.city].filter(Boolean).join(', ')}</span>
-              <span className="text-[11px] text-mute">
-                {office.is_hq ? 'HQ' : 'Branch'}
-                {office.precision === 'city' && ' · city level'}
-                {office.precision === 'area' && ' · area level'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Block>
 
       <Block title="Connections">
         {connected === 0 && <p className="m-0 text-mute">No connections recorded yet.</p>}

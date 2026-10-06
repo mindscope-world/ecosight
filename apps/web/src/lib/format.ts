@@ -15,6 +15,26 @@ export function formatUsd(amount: number): string {
   }).format(amount);
 }
 
+/** A date shown only as precisely as it is known: "2021", "Apr 2024" or "Feb 14, 2023". */
+export function formatPartialDate(iso: string, precision: 'day' | 'month' | 'year' | null): string {
+  if (precision === 'year') return iso.slice(0, 4);
+  if (precision === 'month') return formatMonth(iso.slice(0, 7), true);
+  return new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString(undefined, {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  });
+}
+
+/** An amount in its own currency, compact: "$3.7M", "CA$4K". */
+export function formatMoney(amount: number, currency: string): string {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency,
+    notation: 'compact',
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function formatCount(count: number): string {
   return new Intl.NumberFormat().format(count);
 }

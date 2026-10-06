@@ -16,7 +16,7 @@ export const roundRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
     async (req, reply) => {
       const [round] = await sql<RoundDetail[]>`
         select
-          r.id, r.stage, r.currency, r.announced_on::text as announced_on,
+          r.id, r.stage, r.currency, r.announced_on::text as announced_on, r.announced_precision,
           r.amount_original::float8 as amount_original,
           r.amount_usd::float8 as amount_usd,
           jsonb_build_object('id', g.id, 'name', g.name) as organisation,

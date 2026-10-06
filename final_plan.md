@@ -40,13 +40,15 @@ Loaded on Oct 7, 2026 from `nairobi_startups_organisations_100.csv` (research sn
 - 100 rows read. The 69 marked verified are published; the other 31 (18 not verified, 7 partially verified, 6 inactive or unclear) are drafts with pending review items.
 - Of the 69: 16 are placed at a confirmed building, 23 on their street or neighbourhood, 30 at city level.
 - 118 people named as founders, 403 field sources. All 100 are typed as startups.
-- Not loaded: funding as round rows (the disclosure text is kept as a note, and a stage where the status names one), business emails and phone numbers, investors named in funding text.
+- Not loaded by the importer: business emails and phone numbers. Funding rounds and investors were added afterwards by hand, see below.
 - The synthetic sample now lives only in the test database (`pnpm db:test`).
 
 Done: 1.1 except logo URL, 1.2, 1.3, 1.4 (within the dataset), 1.5, 1.7, 1.8. Remaining in this phase:
 
 - Review the 31 drafts, in particular the 6 marked inactive or unclear.
-- Turn the funding notes into round rows, with investors, by a person reading each one. About 25 verified rows state an amount.
+- Have the owner check the 36 rounds read from the funding notes (`curation/nairobi_startups_funding_rounds.json`): 25 organisations, 35 investors, USD 112.13 million in rounds with a stated dollar amount. The file also lists 16 items deliberately not recorded as rounds, with the reason for each.
+- Investors created from those rounds have a name and a type only: no office, so they are in search and in connections but not on the map.
+- Convert non-dollar amounts (one CAD prize so far) once currency conversion exists.
 - Decide whether business emails and phones should be stored and shown.
 - City-level records all sit on one point in the city centre; the map needs a way to list them (30 today).
 - Entity types beyond startup, when a dataset carries them.

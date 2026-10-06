@@ -1,0 +1,742 @@
+{
+  "about": "Funding rounds read by hand from the 'Funding details' column of nairobi_startups_organisations_100.csv. Each round carries the words it was read from. A round is recorded when the note reports a closed financing with an amount, or with a date and a stage or investor. Targets, running totals, valuations, lending capital and programme maximums are not rounds. Dates are as precise as the note: YYYY, YYYY-MM or YYYY-MM-DD. A bare $ is read as US dollars. Investor types are the curator's classification, not from the dataset.",
+  "dataset": "nairobi_startups_organisations_100",
+  "snapshot": "2026-10-06",
+  "investors": {
+    "3IF Ventures": "fund",
+    "4DX Ventures": "fund",
+    "Adanian Labs Africa": "fund",
+    "Better Tomorrow Ventures": "fund",
+    "Bill & Melinda Gates Foundation": "development_funder",
+    "BlueOrchard": "fund",
+    "Bolt by QED Investors": "fund",
+    "British International Investment": "development_funder",
+    "DFS Lab": "fund",
+    "DOB Equity": "fund",
+    "Delta40": "fund",
+    "EchoVC": "fund",
+    "Equator": "fund",
+    "FMO": "development_funder",
+    "FP Capital": "fund",
+    "Founders Factory Africa": "fund",
+    "Future Africa": "fund",
+    "Google Africa Investment Fund": "fund",
+    "GreenTec Capital": "fund",
+    "HAVAÍC": "fund",
+    "Hesabu Capital": "fund",
+    "IFC": "development_funder",
+    "Norrsken Accelerator": "accelerator",
+    "Oikocredit": "fund",
+    "Oui Capital": "fund",
+    "Plug and Play Tech Center": "fund",
+    "Quona Capital": "fund",
+    "Renew Capital": "fund",
+    "Speedinvest": "fund",
+    "Triodos Fair Share Fund": "fund",
+    "Triodos Microfinance Fund": "fund",
+    "Verod-Kepple Africa Ventures": "fund",
+    "Waarde Capital": "fund",
+    "Women's World Banking Capital Partners II": "fund",
+    "Zephyr Acorn": "fund"
+  },
+  "rounds": [
+    {
+      "record": 4,
+      "organisation": "Bismart Insurance",
+      "stage": "seed",
+      "amount": null,
+      "currency": null,
+      "date": "2018-07",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "GreenTec Capital",
+          "lead": false
+        }
+      ],
+      "quote": "WeeTracker reported a seed-stage investment agreement with GreenTec Capital in July 2018, amount undisclosed.",
+      "source": null
+    },
+    {
+      "record": 9,
+      "organisation": "Churpy",
+      "stage": "seed",
+      "amount": 1000000,
+      "currency": "USD",
+      "date": "2022-03",
+      "precision": "month",
+      "investors": [],
+      "quote": "TechCrunch reported a $1 million seed round in March 2022, following a $100,000 pre-seed.",
+      "source": null
+    },
+    {
+      "record": 9,
+      "organisation": "Churpy",
+      "stage": "pre-seed",
+      "amount": 100000,
+      "currency": "USD",
+      "date": null,
+      "precision": null,
+      "investors": [],
+      "quote": "following a $100,000 pre-seed",
+      "source": null
+    },
+    {
+      "record": 12,
+      "organisation": "Credrails",
+      "stage": null,
+      "amount": 1500000,
+      "currency": "USD",
+      "date": "2024-06-21",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "FMO",
+          "lead": false
+        }
+      ],
+      "quote": "FMO's project page lists USD 1.50 million total financing, effective 2024-06-21.",
+      "source": null
+    },
+    {
+      "record": 12,
+      "organisation": "Credrails",
+      "stage": "seed",
+      "amount": null,
+      "currency": null,
+      "date": "2022",
+      "precision": "year",
+      "investors": [],
+      "quote": "Disrupt Africa reported a seed round in 2022 but did not disclose its amount.",
+      "source": null
+    },
+    {
+      "record": 15,
+      "organisation": "Fingo Africa",
+      "stage": "seed",
+      "amount": 4000000,
+      "currency": "USD",
+      "date": "2021",
+      "precision": "year",
+      "investors": [],
+      "quote": "TechCrunch reported a $4 million seed round toward the end of 2021, following a $200,000 pre-seed round.",
+      "source": null
+    },
+    {
+      "record": 15,
+      "organisation": "Fingo Africa",
+      "stage": "pre-seed",
+      "amount": 200000,
+      "currency": "USD",
+      "date": null,
+      "precision": null,
+      "investors": [],
+      "quote": "following a $200,000 pre-seed round",
+      "source": null
+    },
+    {
+      "record": 16,
+      "organisation": "FlexPay",
+      "stage": null,
+      "amount": null,
+      "currency": null,
+      "date": "2023-09-05",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "Renew Capital",
+          "lead": false
+        }
+      ],
+      "quote": "Renew Capital announced an investment on September 5, 2023, without disclosing its amount or round label.",
+      "source": null
+    },
+    {
+      "record": 17,
+      "organisation": "Hisa",
+      "stage": "pre-seed",
+      "amount": 250000,
+      "currency": "USD",
+      "date": "2024-09",
+      "precision": "month",
+      "investors": [],
+      "quote": "Citizen Digital reported $250,000 in pre-seed funding and a $5 million post-money valuation in September 2024.",
+      "source": null
+    },
+    {
+      "record": 22,
+      "organisation": "Kopo Kopo",
+      "stage": "series-b",
+      "amount": 2100000,
+      "currency": "USD",
+      "date": "2015-12",
+      "precision": "month",
+      "investors": [],
+      "quote": "Disrupt Africa also reported a US$2.1 million internal round in December 2015.",
+      "source": null
+    },
+    {
+      "record": 23,
+      "organisation": "Kwara",
+      "stage": "seed",
+      "amount": 3000000,
+      "currency": "USD",
+      "date": "2023-01",
+      "precision": "month",
+      "investors": [],
+      "quote": "TechCrunch reported a $3 million seed extension in January 2023, bringing total seed funding to $7 million.",
+      "source": null
+    },
+    {
+      "record": 24,
+      "organisation": "Lami Technologies",
+      "stage": "seed",
+      "amount": 3700000,
+      "currency": "USD",
+      "date": "2022-08-02",
+      "precision": "day",
+      "investors": [],
+      "quote": "Lami announced a US$3.7 million seed extension on 2 August 2022",
+      "source": null
+    },
+    {
+      "record": 24,
+      "organisation": "Lami Technologies",
+      "stage": "seed",
+      "amount": 1800000,
+      "currency": "USD",
+      "date": "2021",
+      "precision": "year",
+      "investors": [],
+      "quote": "following a US$1.8 million 2021 seed round",
+      "source": null
+    },
+    {
+      "record": 29,
+      "organisation": "mTek",
+      "stage": null,
+      "amount": 1250000,
+      "currency": "USD",
+      "date": "2024-03",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "Verod-Kepple Africa Ventures",
+          "lead": false
+        },
+        {
+          "name": "Founders Factory Africa",
+          "lead": false
+        }
+      ],
+      "quote": "US$1.25 million from Verod-Kepple Africa Ventures and Founders Factory Africa, reported March 2024.",
+      "source": null
+    },
+    {
+      "record": 30,
+      "organisation": "MyCredit Limited",
+      "stage": "debt",
+      "amount": 3000000,
+      "currency": "USD",
+      "date": "2026-02-10",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "Triodos Microfinance Fund",
+          "lead": false
+        },
+        {
+          "name": "Triodos Fair Share Fund",
+          "lead": false
+        }
+      ],
+      "quote": "Triodos Investment Management reported a USD 3 million senior debt facility provided through Triodos Microfinance Fund and Triodos Fair Share Fund (10 February 2026).",
+      "source": null
+    },
+    {
+      "record": 30,
+      "organisation": "MyCredit Limited",
+      "stage": "debt",
+      "amount": 2600000,
+      "currency": "USD",
+      "date": "2023-02",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "Oikocredit",
+          "lead": false
+        }
+      ],
+      "quote": "Earlier Oikocredit financing of USD 2.6 million was announced in February 2023.",
+      "source": null
+    },
+    {
+      "record": 31,
+      "organisation": "Ndovu",
+      "stage": "pre-seed",
+      "amount": null,
+      "currency": null,
+      "date": "2021-10",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "4DX Ventures",
+          "lead": false
+        },
+        {
+          "name": "Plug and Play Tech Center",
+          "lead": false
+        },
+        {
+          "name": "Future Africa",
+          "lead": false
+        },
+        {
+          "name": "Oui Capital",
+          "lead": false
+        }
+      ],
+      "quote": "Investor Oui Capital reports an undisclosed pre-seed round in October 2021, with participation by 4DX Ventures, Plug and Play Tech Center, Future Africa and Oui Capital.",
+      "source": null
+    },
+    {
+      "record": 39,
+      "organisation": "Pezesha",
+      "stage": "pre-series-a",
+      "amount": 11000000,
+      "currency": "USD",
+      "date": "2022-08-30",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "Women's World Banking Capital Partners II",
+          "lead": true
+        }
+      ],
+      "quote": "US$11 million announced 30 August 2022: US$6 million equity and US$5 million debt. Company announcement says led by Women’s World Banking Capital Partners II",
+      "source": null
+    },
+    {
+      "record": 40,
+      "organisation": "Power Financial Wellness",
+      "stage": "seed",
+      "amount": 3000000,
+      "currency": "USD",
+      "date": "2023-02-14",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "DOB Equity",
+          "lead": true
+        },
+        {
+          "name": "Bolt by QED Investors",
+          "lead": false
+        },
+        {
+          "name": "Quona Capital",
+          "lead": false
+        },
+        {
+          "name": "Zephyr Acorn",
+          "lead": false
+        },
+        {
+          "name": "Norrsken Accelerator",
+          "lead": false
+        }
+      ],
+      "quote": "TechCrunch reported a $3 million seed round led by DOB Equity, with Bolt by QED Investors, Quona Capital, Zephyr Acorn and Norrsken Accelerator participating (Feb 14, 2023).",
+      "source": null
+    },
+    {
+      "record": 40,
+      "organisation": "Power Financial Wellness",
+      "stage": null,
+      "amount": null,
+      "currency": null,
+      "date": "2024-12-26",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "Renew Capital",
+          "lead": false
+        }
+      ],
+      "quote": "Renew Capital separately announced an investment on Dec 26, 2024, without disclosing an amount or round type",
+      "source": null
+    },
+    {
+      "record": 41,
+      "organisation": "Pula",
+      "stage": "series-b",
+      "amount": 20000000,
+      "currency": "USD",
+      "date": "2024-04",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "BlueOrchard",
+          "lead": true
+        },
+        {
+          "name": "IFC",
+          "lead": false
+        },
+        {
+          "name": "Bill & Melinda Gates Foundation",
+          "lead": false
+        },
+        {
+          "name": "Hesabu Capital",
+          "lead": false
+        }
+      ],
+      "quote": "Closed USD 20 million Series B in April 2024, led by BlueOrchard; IFC, Bill & Melinda Gates Foundation, Hesabu Capital and existing shareholders participated.",
+      "source": null
+    },
+    {
+      "record": 48,
+      "organisation": "SunCulture",
+      "stage": "series-b",
+      "amount": 27500000,
+      "currency": "USD",
+      "date": "2024-04",
+      "precision": "month",
+      "investors": [],
+      "quote": "investor and press reports disclose US$27.5 million, announced in April 2024.",
+      "source": null
+    },
+    {
+      "record": 48,
+      "organisation": "SunCulture",
+      "stage": "debt",
+      "amount": 2000000,
+      "currency": "USD",
+      "date": null,
+      "precision": null,
+      "investors": [
+        {
+          "name": "British International Investment",
+          "lead": false
+        }
+      ],
+      "quote": "a US$2 million British International Investment debt facility",
+      "source": null
+    },
+    {
+      "record": 49,
+      "organisation": "Tanda",
+      "stage": "pre-series-a",
+      "amount": null,
+      "currency": null,
+      "date": "2022-10",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "HAVAÍC",
+          "lead": false
+        },
+        {
+          "name": "DFS Lab",
+          "lead": false
+        }
+      ],
+      "quote": "HAVAÍC reported in October 2022 that it completed a follow-on investment as part of an ongoing pre-Series A round with three other investors, including DFS Lab.",
+      "source": null
+    },
+    {
+      "record": 53,
+      "organisation": "Turaco",
+      "stage": null,
+      "amount": null,
+      "currency": null,
+      "date": "2026-09",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "3IF Ventures",
+          "lead": false
+        }
+      ],
+      "quote": "WeeTracker reported an undisclosed investment from 3IF Ventures in September 2026.",
+      "source": "https://weetracker.com/2026/09/27/turaco-investment-3if-ventures-africa-insurance/"
+    },
+    {
+      "record": 53,
+      "organisation": "Turaco",
+      "stage": "series-a",
+      "amount": 10000000,
+      "currency": "USD",
+      "date": "2022-09",
+      "precision": "month",
+      "investors": [],
+      "quote": "TechCrunch reported a $10 million Series A equity round in September 2022.",
+      "source": "https://techcrunch.com/2022/09/15/kenyas-insurtech-turaco-maintains-1-billion-user-target-as-it-raises-10m-funding/"
+    },
+    {
+      "record": 64,
+      "organisation": "Amitruck",
+      "stage": "seed",
+      "amount": 4000000,
+      "currency": "USD",
+      "date": "2022-02-01",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "Better Tomorrow Ventures",
+          "lead": true
+        }
+      ],
+      "quote": "Announced $4 million seed round on 1 February 2022, led by Better Tomorrow Ventures",
+      "source": null
+    },
+    {
+      "record": 71,
+      "organisation": "Leta",
+      "stage": "seed",
+      "amount": 5000000,
+      "currency": "USD",
+      "date": "2025-03",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "Speedinvest",
+          "lead": true
+        },
+        {
+          "name": "Google Africa Investment Fund",
+          "lead": false
+        },
+        {
+          "name": "Equator",
+          "lead": false
+        }
+      ],
+      "quote": "TechCrunch reported a $5 million seed round in March 2025 led by Speedinvest, with Google’s Africa Investment Fund and Equator participating.",
+      "source": null
+    },
+    {
+      "record": 71,
+      "organisation": "Leta",
+      "stage": null,
+      "amount": null,
+      "currency": null,
+      "date": "2025-07",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "Waarde Capital",
+          "lead": false
+        }
+      ],
+      "quote": "WeeTracker later reported additional strategic backing from Waarde Capital in July 2025; amount undisclosed.",
+      "source": null
+    },
+    {
+      "record": 71,
+      "organisation": "Leta",
+      "stage": "pre-seed",
+      "amount": 3000000,
+      "currency": "USD",
+      "date": "2022-11",
+      "precision": "month",
+      "investors": [],
+      "quote": "Earlier $3 million pre-seed announced November 2022.",
+      "source": null
+    },
+    {
+      "record": 73,
+      "organisation": "Lori Systems",
+      "stage": "bridge",
+      "amount": 2000000,
+      "currency": "USD",
+      "date": "2025-04",
+      "precision": "month",
+      "investors": [
+        {
+          "name": "Delta40",
+          "lead": true
+        },
+        {
+          "name": "Future Africa",
+          "lead": false
+        },
+        {
+          "name": "FP Capital",
+          "lead": false
+        }
+      ],
+      "quote": "Reported $2 million raised; led by Delta40, with Future Africa, FP Capital and others participating.",
+      "source": null
+    },
+    {
+      "record": 73,
+      "organisation": "Lori Systems",
+      "stage": "series-a",
+      "amount": null,
+      "currency": null,
+      "date": "2019",
+      "precision": "year",
+      "investors": [],
+      "quote": "Earlier 2019 Series A amount was explicitly undisclosed.",
+      "source": null
+    },
+    {
+      "record": 79,
+      "organisation": "Senga",
+      "stage": "seed",
+      "amount": null,
+      "currency": null,
+      "date": "2023-02-09",
+      "precision": "day",
+      "investors": [
+        {
+          "name": "EchoVC",
+          "lead": false
+        }
+      ],
+      "quote": "EchoVC announced a seed investment on 9 February 2023; its announcement does not disclose an amount.",
+      "source": null
+    },
+    {
+      "record": 90,
+      "organisation": "Rim Nextgen",
+      "stage": "grant",
+      "amount": 4000,
+      "currency": "CAD",
+      "date": "2023",
+      "precision": "year",
+      "investors": [],
+      "quote": "Third place in the 2023 Jim Leech Mastercard Foundation Fellowship pitch competition; awarded CAD 4,000 in seed funding.",
+      "source": null
+    },
+    {
+      "record": 93,
+      "organisation": "Gwiji for Women",
+      "stage": "grant",
+      "amount": 30000,
+      "currency": "USD",
+      "date": "2023",
+      "precision": "year",
+      "investors": [],
+      "quote": "followed by $30,000 in 2023 through the Aurora Tech Award",
+      "source": "https://hapakenya.com/2023/03/09/kenyas-elizabeth-mwangi-wins-30k-in-the-2023-aurora-tech-award/"
+    },
+    {
+      "record": 95,
+      "organisation": "Tausi App",
+      "stage": "pre-seed",
+      "amount": 100000,
+      "currency": "USD",
+      "date": "2022",
+      "precision": "year",
+      "investors": [
+        {
+          "name": "Adanian Labs Africa",
+          "lead": false
+        }
+      ],
+      "quote": "Disrupt Africa reported a US$100,000 pre-seed round from Adanian Labs Africa in 2022.",
+      "source": null
+    }
+  ],
+  "not_loaded": [
+    {
+      "record": 4,
+      "organisation": "Bismart Insurance",
+      "what": "USD 10,000 / KES 1,000,000 Women in Tech award",
+      "reason": "The two reports give different currencies and amounts."
+    },
+    {
+      "record": 5,
+      "organisation": "Blancosy Ltd",
+      "what": "Tony Elumelu Foundation seed funding",
+      "reason": "No amount and no date."
+    },
+    {
+      "record": 9,
+      "organisation": "Churpy",
+      "what": "$15 million from Trade Development Bank",
+      "reason": "Lending capital for onward SME loans, not funding of the company."
+    },
+    {
+      "record": 16,
+      "organisation": "FlexPay",
+      "what": "$785,000 cumulative funding",
+      "reason": "A running total, not a round."
+    },
+    {
+      "record": 17,
+      "organisation": "Hisa",
+      "what": "Earlier angel round",
+      "reason": "No amount and no date."
+    },
+    {
+      "record": 23,
+      "organisation": "Kwara",
+      "what": "The seed round before the extension",
+      "reason": "Only implied by the $7 million total; not stated as a round."
+    },
+    {
+      "record": 37,
+      "organisation": "Pesapal Limited",
+      "what": "KCB Group minority investment",
+      "reason": "Agreed but subject to approval; no closing verified."
+    },
+    {
+      "record": 45,
+      "organisation": "Shukran",
+      "what": "Seed round listed by a directory",
+      "reason": "The research could not confirm it as a closed round."
+    },
+    {
+      "record": 48,
+      "organisation": "SunCulture",
+      "what": "US$4 million expansion of the BII debt facility",
+      "reason": "Timing not given, and it extends the facility already recorded."
+    },
+    {
+      "record": 64,
+      "organisation": "Amitruck",
+      "what": "Earlier pre-seed",
+      "reason": "No amount and no date."
+    },
+    {
+      "record": 70,
+      "organisation": "Kabisa",
+      "what": "Rwanda Green Fund grant",
+      "reason": "Only a combined portfolio figure is published."
+    },
+    {
+      "record": 76,
+      "organisation": "Quikk",
+      "what": "Backers named on the About page",
+      "reason": "No round, amount or date."
+    },
+    {
+      "record": 92,
+      "organisation": "T-Bin Limited",
+      "what": "$50K claimed; USD 2.5 million sought",
+      "reason": "No date or breakdown for the first; the second is a target."
+    },
+    {
+      "record": 93,
+      "organisation": "Gwiji for Women",
+      "what": "Initial funding in 2020",
+      "reason": "No amount and no source named."
+    },
+    {
+      "record": 94,
+      "organisation": "Ubuntu Universe",
+      "what": "Fellowship grant of up to USD 100,000",
+      "reason": "A programme maximum; disbursement not confirmed."
+    },
+    {
+      "record": 98,
+      "organisation": "Signvrse",
+      "what": "$2 million via Google.org accelerator; £60,000 Africa Prize",
+      "reason": "The individual allocation is not confirmed by Google; the prize went to a person."
+    }
+  ]
+}
