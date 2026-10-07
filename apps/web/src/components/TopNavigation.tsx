@@ -1,13 +1,14 @@
 import { VIEWS, type View } from '@atlas/schema';
 import { useState } from 'react';
 import { VIEW_LABELS } from '../entities';
+import { PAGES, pageUrl } from '../pages';
 import { Icon } from './ui';
 
 /**
  * The pin mark from the logo beside the wordmark. The wordmark is set in text:
  * the logo file's dark "eco" lettering is made for light backgrounds.
  */
-function Logo() {
+export function Logo() {
   const [hasImage, setHasImage] = useState(true);
   return (
     <a href={import.meta.env.BASE_URL} title="ecoSight home" className="flex items-center gap-2">
@@ -52,6 +53,16 @@ export function TopNavigation({
           >
             {VIEW_LABELS[item]}
           </button>
+        ))}
+        {/* The other pages. The lenses above stay on this one. */}
+        {PAGES.filter((page) => page.id !== 'map').map((page) => (
+          <a
+            key={page.id}
+            href={pageUrl(page.id)}
+            className="flex items-center border-b-2 border-transparent px-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-mute hover:text-ink"
+          >
+            {page.label}
+          </a>
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-1.5">

@@ -453,6 +453,38 @@ export function coInvestment(sql: Sql, id: string, limit: number, scope: Omit<Gr
   });
 }
 
+/**
+ * Every link of the kinds asked for, with the nodes at its ends: the whole
+ * network at once. When that is more than `limit` nodes, the best connected are
+ * kept and the answer says it is partial.
+ */
+export function overview(sql: Sql, limit: number, scope: Omit<GraphScope, 'exempt'>) {
+  const full: GraphScope = { ...scope, exempt: [] };
+  return withinTimeLimit(sql, async (tx) => {
+    const rows = await tx<EdgeRow[]>`
+      select e.kind, e.source, e.target, e.ref_id, e.label from graph_edge e
+      where true ${edgeConditions(sql, full)}
+    `;
+    const neighbours = new Map<string, Set<string>>();
+    const link = (a: string, b: string) => (neighbours.get(a) ?? neighbours.set(a, new Set()).get(a)!).add(b);
+    for (const row of rows) {
+      link(row.source, row.target);
+      link(row.target, row.source);
+    }
+    const ranked = [...neighbours.keys()].sort(
+      (a, b) => neighbours.get(b)!.size - neighbours.get(a)!.size || byKindThenId(a, b),
+    );
+    const kept = new Set(ranked.slice(0, limit));
+    const edges = await buildEdges(tx, rows.filter((row) => kept.has(row.source) && kept.has(row.target)));
+    return {
+      nodes: await buildNodes(sql, tx, full, [...kept], edges),
+      edges,
+      truncated: ranked.length > kept.size,
+      total_nodes: ranked.length,
+    };
+  });
+}
+
 /** Organisations with the most distinct neighbours, as starting points. */
 export function mostConnected(sql: Sql, limit: number, type: OrgType | undefined, scope: Omit<GraphScope, 'exempt'>) {
   const full: GraphScope = { ...scope, exempt: [] };

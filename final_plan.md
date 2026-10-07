@@ -21,18 +21,22 @@ Checks pass: 71 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, 
 
 | | Count |
 |---|---|
-| Organisations published | 122 |
-| Organisations on the map | 109, in 10 countries |
+| Organisations published | 213 |
+| Organisations on the map | 200, in 18 countries |
 | Startups | 69, all in Nairobi |
-| Investors, accelerators, hubs and funders | 53 on record, 40 on the map |
+| Investors, accelerators, hubs and funders | 69 published |
+| Universities | 35 |
+| Public bodies | 29 |
+| NGOs | 12 |
 | Funding rounds | 36, for 25 organisations; USD 112.13 million in rounds with a stated dollar amount |
-| People named as founders | 134 |
-| Drafts held back for review | 33 |
+| People named as founders | 141 |
+| Drafts held back for review | 37 |
 | Events | 0 |
 
 - **Startups dataset** (`datasets/nairobi-startups-2026-10-06/`): 100 rows; the 69 marked verified are published, 31 are drafts.
 - **Funding rounds** (`curation/nairobi_startups_funding_rounds.json`): read by hand from the startups dataset's funding notes, each with the words it was read from, plus 16 items deliberately not recorded as rounds.
 - **Investors dataset** (`datasets/nairobi-investors-2026-10-07/`): 25 rows; 23 published, 2 drafts. Five were merged into investors already known from funding rounds.
+- **East Africa dataset** (`datasets/east-africa-2026-10-07/`): 100 universities, public bodies, NGOs and innovation hubs in nine countries; 96 published, 4 drafts. Five were merged into organisations already on record. Each row's type, city, country code and sector tags were set by hand in `curation/east_africa_100_organizations.mapping.json`. 68 are placed on a building or street, 32 at their city's centre.
 - **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
@@ -46,15 +50,19 @@ Office and event layers; organisation detail with funding and connections; event
 
 ### Web (React, Tailwind, MapLibre)
 
-Two pages.
+Four pages.
 
 **Landing page** at `/`. Hero over a live world map with figures from the product's own records, audience bar, the problem as a table beside the same records on a map, layer cards, an explore preview from the world down to Nairobi, three use cases, the relationship chain, example signals marked as demo data, a globe with connections, closing call to action and footer.
 
 **Map app** at `/map/`. Top navigation with six lenses; navy map with a marker shape per entity type; clustering that lists records sharing one spot; floating layer control; four heatmaps (funding, and startup, investor and accelerator density, each in its own colour); dark, light and terrain styles; collapsible intelligence panels that follow the filters; entity details with funding, sources and one-click graph navigation; search command palette; filter drawer with ten kinds of filter; status bar; share links; bottom sheets on small screens.
 
+**Graph page** at `/graph/`. Opens on the whole network of investments, programmes and organised events; any organisation can be made the starting point. Nodes use the map's shapes and colours and links are styled by kind. Click for details, double-click or a button to bring in a node's other connections, click a link for the rounds behind it. Six kinds of link can be switched on and off, with people, places and sectors off to begin with. A path finder, co-investor and shared-investor lists, a list of everything in view, and share links that restore the graph. Reached from "View connections" in the map's details panel, and leads back with "Show on map".
+
+**Dashboard** at `/dashboard/`. One tab per kind of organisation: startups, investors, accelerators, NGOs, innovation hubs, universities, government and corporates. Each has headline figures, bar charts (by country and sector; by stage and most raised for startups; largest portfolios for investors) and a table that sorts, searches, narrows by country and pages. A row opens the record's details with links to the map and the graph.
+
 ### Pipeline (Python)
 
-- `atlas import-orgs`: dataset importer with a dry-run report, column mappings for other datasets, cached geocoding that refuses lookalike matches, merging into records already on file, and placement in any city.
+- `atlas import-orgs`: dataset importer with a dry-run report, column mappings for other datasets, cached geocoding that refuses lookalike matches, merging into records already on file, values a curator sets for one row, and address lookup in any city.
 - `atlas import-rounds`: loads curated rounds and refuses any whose quote is not in the stored note.
 - `atlas import-locations`: places organisations that have no office at a named city.
 - `atlas crawl`: raw document store and two RSS crawlers (TechCabal, Disrupt Africa).
@@ -80,7 +88,8 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 | 1.2 | Check the investors placed abroad | `curation/investor_headquarters.json`: 17 placements from general knowledge, and 13 not placed that the owner may know |
 | 1.3 | Check the 36 curated rounds | Investor types are the curator's classification; a bare "$" is read as US dollars; one round is dated by its announcement, not its close; one round counts equity and debt together |
 | 1.4 | Check the investors import | One investor in the dataset is treated as the same organisation as a differently named investor in a funding round; two rows are held as drafts. Both judgments are in the mapping file under `curation/` |
-| 1.5 | Review the 33 drafts | In particular the 6 startups marked inactive or unclear |
+| 1.5 | Review the 37 drafts | In particular the 6 startups marked inactive or unclear, and the 4 East African bodies held back: two replaced by successor agencies, one the research calls historical, one whose status is unclear |
+| 1.5b | Check the East Africa import | `curation/east_africa_100_organizations.mapping.json`: the type and sector tags given to each of the 100 rows are the curator's reading of the dataset's descriptions. Leadership was loaded only where a person is named as a founder (11 people at 6 organisations) |
 | 1.6 | Merge the `beyond-kenya` branch | Needs a pull request into `main` |
 | 1.7 | Confirm the decisions listed in section 1 | They were taken on recommendation, not signed off |
 | 1.8 | Copy the reference screenshot into `docs/reference/` | The map app has never been compared with it |
@@ -120,10 +129,12 @@ Items 3.5 to 3.8 are next and need nothing from the owner.
 | 3.2 | Graph model | Backend | One `Entity` label plus a kind label; relationships `INVESTED_IN`, `ACCELERATED_AT`, `ORGANISED`, `HAS_ROLE`, `LOCATED_IN`, `IN_SECTOR`; a uniqueness constraint on id and a spatial point index, with the index statement checked against the Memgraph version used |
 | 3.3 | Memgraph in the local Docker setup | Backend | **Deferred** with 3.4 and 3.11. Beside Postgres, with a volume, and a start-up script for constraints and indexes |
 | 3.4 | Projection worker | Backend | **Deferred.** Asynchronous Python over Bolt. Copies published records and their relationships from Postgres in batches, idempotently; a full rebuild and an incremental sync. Drafts never leave Postgres. Relationship types come from a fixed list |
-| 3.5 | ~~Graph API~~ | Done, not yet deployed | Answered by Postgres through a `graph_edge` view (migration 0008). Five routes: `/graph/neighbourhood` (depth 1 to 3, capped), `/graph/expand` (paged), `/graph/path`, `/graph/co-investment`, `/graph/top`. All take the kinds of link and the map's filters; each query has a 3-second limit and the routes share search's smaller rate allowance. People, places and sectors are followed only when asked for. 25 tests on the sample data. The hosted database and function still need the migration, `harden.sql` and a redeploy |
-| 3.6 | Graph explorer page | Frontend | **Next.** A third page at `/graph/`. Specified in `frontend_plan.md` section 15 |
-| 3.7 | Links between the map and the graph | Frontend | "View connections" from the details panel opens the graph on that organisation; "Show on map" from the graph does the reverse; both are share links |
-| 3.8 | Tests | Both | API tests for each graph query on the sample data; browser tests for the explorer page. When Memgraph arrives: a check that it matches Postgres after a sync |
+| 3.5 | ~~Graph API~~ | Done | Answered by Postgres through a `graph_edge` view (migration 0008). Six routes: `/graph/overview` (the whole network, capped), `/graph/neighbourhood` (depth 1 to 3, capped), `/graph/expand` (paged), `/graph/path`, `/graph/co-investment`, `/graph/top`. All take the kinds of link and the map's filters; each query has a 3-second limit and the routes share search's smaller rate allowance. People, places and sectors are followed only when asked for. Deployed |
+| 3.6 | ~~Graph explorer page~~ | Done | At `/graph/`, drawn in SVG with a force layout worked out in one go, so the same graph always looks the same. Not done from the specification: the map's filters on this page, a radial layout, and paging beyond 40 neighbours per expansion |
+| 3.7 | ~~Links between the map and the graph~~ | Done | "View connections" in the map's and the dashboard's details panels; "Show on map" from the graph. Both are share links |
+| 3.8 | ~~Tests~~ | Done for now | 28 API tests for the graph queries and six browser tests for the page. When Memgraph arrives: a check that it matches Postgres after a sync |
+| 3.8b | ~~Dashboard of tables~~ | Done | At `/dashboard/`, fed by a new `/orgs` list route. Not built: export to a file, and an events table (there are no events) |
+| 3.8c | Relationship data | Data | **The graph is thin.** 37 investment links and nothing else between organisations: no programme, event or partnership links. The 96 East African institutions have no links at all. Needs relationship datasets (3.9) |
 | 3.9 | Ingestors, through the review queue | Backend | Relationship CSVs first (the importer already reads organisations). Then external APIs and other databases, once the owner names them. Each matches incoming names to existing records before proposing anything |
 | 3.10 | Pitch decks | Owner + backend | Upload, private storage, extraction by a language model, and review before anything is published. Blocked on the owner: decks are confidential, and their text would go to a hosted model |
 | 3.11 | Deploy Memgraph | Owner + backend | **Deferred until there is revenue.** On a host with enough memory and a persistent volume at `/var/lib/memgraph`, with the worker as its own service and a written procedure for rebuilding the graph from Postgres |
@@ -141,7 +152,7 @@ The data the graph starts with is modest: about 120 organisations, 37 investor-t
 | 4.2 | Startups outside Kenya | Data | The importer accepts them (`City`, `Country`, optionally `Latitude` and `Longitude`); no dataset has been supplied |
 | 4.3 | Sources for the investors placed abroad | Data | Replace general-knowledge cities with sourced addresses; place the 13 that are missing |
 | 4.4 | ~~Keep city-level records out of the density layers~~ | Done | The four heatmaps count only records whose position means something; the layer list says so |
-| 4.5 | Street-level address lookup outside Nairobi | Backend | Records elsewhere sit at their city's centre unless the dataset gives coordinates |
+| 4.5 | ~~Street-level address lookup outside Nairobi~~ | Done | An address is looked up within about 30 km of its city's centre, with the same refusal of lookalike matches. A university or public body whose address is not found is placed where the map names it. Otherwise the city's centre |
 | 4.6 | Per-country summary | Both | Records, rounds and investors by country; the country filter exists |
 | 4.7 | Currency conversion | Backend | One round is in Canadian dollars and is left out of dollar totals |
 | 4.8 | Founded year | Data | The filter and the card support it; neither dataset has the column |
@@ -192,7 +203,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 8.1 | End-to-end tests for the core loop | Frontend | **Mostly done.** Eleven browser tests run in CI on both pages: loading and counts, search, following connections, filters, share links, minimising panels, the phone layout, and the landing page with and without the API. Not covered: anything drawn on the map itself (markers, heatmaps, lines), because the tests block the public basemap to stay independent of it |
+| 8.1 | End-to-end tests for the core loop | Frontend | **Mostly done.** Twenty browser tests run in CI on all four pages: loading and counts, search, following connections, filters, share links, minimising panels, the phone layout, and the landing page with and without the API. Not covered: anything drawn on the map itself (markers, heatmaps, lines), because the tests block the public basemap to stay independent of it |
 | 8.2 | Performance checks in CI | Frontend | First map on a mid-range phone, filter change under 300 ms |
 | 8.3 | Accessibility pass on both pages | Frontend | Keyboard paths, contrast, screen-reader labels |
 | 8.4 | Compare the map app with the reference screenshot | Frontend | Depends on 1.8 |
@@ -225,7 +236,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 7 | Advanced map | Selection, time, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility, missing pages | Backups, security, legal | Medium, then Critical |
 
-Step 2 is done apart from small follow-ups. The graph API (3.5) is built; the explorer page (3.6) is next. Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
+Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); what the graph needs now is relationship data (3.8c, 3.9). Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
 
 ## 4. Waiting on the owner
 

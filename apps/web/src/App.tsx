@@ -28,7 +28,7 @@ import {
 } from './api';
 import { AccessGate } from './components/AccessGate';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
-import { EntityDetails, type Detail } from './components/EntityDetails';
+import { ActionLink, EntityDetails, type Detail } from './components/EntityDetails';
 import { FilterPanel } from './components/FilterPanel';
 import { LayerControl, MapLegend } from './components/LayerControl';
 import { ActivityPanel, CityList, EcosystemOverview, TopSectors, type SectorShare } from './components/LeftPanel';
@@ -42,7 +42,8 @@ import { BASEMAPS, DEFAULT_CAMERA } from './config';
 import { HEAT_LAYERS, POINT_LAYERS, VIEW_LAYERS } from './entities';
 import { greatCircle } from './lib/geo';
 import { buildSignals } from './lib/signals';
-import type { MapAdapter } from './map/adapter';
+import { graphUrlFor } from './pages';
+import type { MapAdapter, PickedRecord } from './map/adapter';
 
 const initial = decodeUrlState(location.hash);
 const CITY_ZOOM = 11;
@@ -361,21 +362,27 @@ export function App() {
     [select, flyTo],
   );
 
-  function openStack(layerId: string, records: Record<string, unknown>[]) {
-    const layer = POINT_LAYERS.find((entry) => entry.id === layerId);
-    if (!layer) return;
-    const kind = layerId === 'events' ? 'event' : 'org';
+  /** Markers were clicked. One record opens; several that share the spot are listed, whatever their kinds. */
+  function pickOnMap(records: PickedRecord[]) {
     const items = new Map<string, Stack['items'][number]>();
-    for (const record of records) {
+    for (const { layer: layerId, properties: record } of records) {
+      const layer = POINT_LAYERS.find((entry) => entry.id === layerId);
+      const kind = layerId === 'events' ? 'event' : 'org';
       const id = record[kind === 'event' ? 'event_id' : 'org_id'];
-      if (typeof id !== 'string' || items.has(id)) continue;
+      if (!layer || typeof id !== 'string' || items.has(id)) continue;
       const meta = kind === 'event' ? record.venue : [record.sector, record.stage].filter(Boolean).join(' · ');
-      items.set(id, { selection: { kind, id }, name: String(record.name ?? ''), meta: String(meta ?? '') });
+      items.set(id, { layer, selection: { kind, id }, name: String(record.name ?? ''), meta: String(meta ?? '') });
     }
+    if (items.size === 0) return;
+    if (items.size === 1) {
+      setStack(null);
+      select([...items.values()][0]!.selection);
+      return;
+    }
+    const order = (item: Stack['items'][number]) => POINT_LAYERS.indexOf(item.layer);
     setStack({
-      layer,
-      items: [...items.values()].sort((a, b) => a.name.localeCompare(b.name)),
-      cityLevel: records.every((record) => record.precision === 'city'),
+      items: [...items.values()].sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name)),
+      cityLevel: records.every((record) => record.properties.precision === 'city'),
     });
     setSelected(undefined);
     setRightOpen(true);
@@ -498,6 +505,7 @@ export function App() {
         setStack(null);
       }}
       back={stack ? { label: `${stack.items.length} at this location`, onBack: () => setSelected(undefined) } : undefined}
+      actions={(org) => <ActionLink href={graphUrlFor(org.id)}>View connections</ActionLink>}
     />
   ) : (
     stack && <StackList stack={stack} onSelect={select} onClose={() => setStack(null)} />
@@ -551,13 +559,7 @@ export function App() {
             initialCamera={initial.camera ?? DEFAULT_CAMERA}
             data={layerData}
             enabled={enabled}
-            onSelect={(layerId, properties) => {
-              const id = layerId === 'events' ? properties.event_id : properties.org_id;
-              if (typeof id !== 'string') return;
-              setStack(null);
-              select({ kind: layerId === 'events' ? 'event' : 'org', id });
-            }}
-            onSelectMany={openStack}
+            onPick={pickOnMap}
             onCamera={() => setCamera((tick) => tick + 1)}
             onReady={() => setMapReady(true)}
           />

@@ -6,7 +6,12 @@ import { readFile } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 
 const BUDGET_KB = 600;
-const PAGES = { 'Landing page': 'index.html', 'Map app': 'map/index.html' };
+const PAGES = {
+  'Landing page': 'index.html',
+  'Map app': 'map/index.html',
+  'Graph page': 'graph/index.html',
+  'Dashboard page': 'dashboard/index.html',
+};
 const dist = new URL('../apps/web/dist/', import.meta.url);
 
 let over = false;

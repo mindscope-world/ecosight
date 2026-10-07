@@ -327,3 +327,40 @@ export const GraphCoInvestment = Type.Object({
 });
 
 export const GraphTop = Type.Object({ organisations: Type.Array(GraphNode) });
+
+export const GraphOverview = Type.Object({
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // True when the network has more connected nodes than the limit; the best connected are kept.
+  truncated: Type.Boolean(),
+  total_nodes: Type.Integer(),
+});
+
+// One row of the data tables: what is on record about an organisation, without its sources.
+export const OrgRow = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  name: Type.String(),
+  types: Type.Array(OrgType),
+  sectors: Type.Array(Type.String()),
+  stage: Nullable(Type.String()),
+  city: Nullable(Type.String()),
+  country: Nullable(Type.String()),
+  precision: Nullable(Type.Union([Type.Literal('address'), Type.Literal('area'), Type.Literal('city')])),
+  founded_year: Nullable(Type.Integer()),
+  is_active: Type.Boolean(),
+  website_domain: Nullable(Type.String()),
+  raised_usd: Type.Number(),
+  // Published rounds it raised, and distinct investors named in them.
+  rounds: Type.Integer(),
+  investors: Type.Integer(),
+  // Companies it has backed, and the latest round it took part in.
+  portfolio: Type.Integer(),
+  last_invested_on: Nullable(Type.String({ format: 'date' })),
+  // Organisations that went through a programme it runs.
+  participants: Type.Integer(),
+  people: Type.Integer(),
+  last_verified_at: Nullable(Type.String({ format: 'date-time' })),
+});
+export type OrgRow = Static<typeof OrgRow>;
+
+export const OrgList = Type.Object({ total: Type.Integer(), organisations: Type.Array(OrgRow) });

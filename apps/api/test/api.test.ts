@@ -75,6 +75,42 @@ describe('GET /orgs/:id', () => {
   });
 });
 
+describe('GET /orgs', () => {
+  it('lists published organisations by name, with what is on record about each', async () => {
+    const res = await app.inject('/orgs');
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const [counted] = await sql<{ published: number }[]>`select count(*)::int as published from organisation where status = 'published'`;
+    const published = counted!.published;
+    expect(body.total).toBe(published);
+    expect(body.organisations).toHaveLength(published);
+    const names = body.organisations.map((org: any) => org.name);
+    expect(names).toEqual([...names].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+
+    const fund = body.organisations.find((org: any) => org.name === 'Sample Fund 01');
+    expect(fund).toMatchObject({ types: ['fund'], portfolio: 6, city: 'Nairobi', country: 'KE', rounds: 0 });
+    const startup = body.organisations.find((org: any) => org.name === 'Sample Startup 05');
+    expect(startup).toMatchObject({ raised_usd: 500000, rounds: 1, investors: 1, portfolio: 0 });
+    const accelerator = body.organisations.find((org: any) => org.name === 'Sample Accelerator 01');
+    expect(accelerator.participants).toBe(2);
+    expect(body.organisations.find((org: any) => org.name === 'Sample Startup 01').people).toBe(1);
+  });
+
+  it('narrows by kind and by the map filters, and pages', async () => {
+    const funds = (await app.inject('/orgs?type=fund')).json();
+    expect(funds.total).toBe(8);
+    expect(funds.organisations.every((org: any) => org.types.includes('fund'))).toBe(true);
+
+    const page = (await app.inject('/orgs?type=fund&limit=3&offset=6')).json();
+    expect(page.total).toBe(8);
+    expect(page.organisations).toHaveLength(2);
+
+    const funded = (await app.inject('/orgs?fr=1')).json();
+    expect(funded.organisations.every((org: any) => org.raised_usd >= 1)).toBe(true);
+    expect((await app.inject('/orgs?type=bank')).statusCode).toBe(400);
+  });
+});
+
 describe('events', () => {
   it('lists upcoming published events and serves their detail', async () => {
     const layer = (await app.inject('/layers/events.geojson')).json();
@@ -408,10 +444,12 @@ describe('GET /openapi.json', () => {
       '/graph/co-investment',
       '/graph/expand',
       '/graph/neighbourhood',
+      '/graph/overview',
       '/graph/path',
       '/graph/top',
       '/layers/events.geojson',
       '/layers/offices.geojson',
+      '/orgs',
       '/orgs/{id}',
       '/rounds/{id}',
       '/search',

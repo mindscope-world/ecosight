@@ -246,6 +246,32 @@ describe('GET /graph/co-investment', () => {
   });
 });
 
+describe('GET /graph/overview', () => {
+  it('returns the whole network of the kinds asked for', async () => {
+    const res = await app.inject('/graph/overview');
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // The fund with its six companies; the accelerator with two startups and a meetup.
+    expect(body.nodes).toHaveLength(11);
+    expect(body.edges).toHaveLength(9);
+    expect(body).toMatchObject({ truncated: false, total_nodes: 11 });
+    expect(body.nodes[0]).toMatchObject({ name: 'Sample Fund 01', degree: 6, hidden: 0 });
+  });
+
+  it('keeps the best connected when there are too many, and says so', async () => {
+    const body = (await app.inject('/graph/overview?limit=3')).json();
+    expect(body.nodes).toHaveLength(3);
+    expect(body).toMatchObject({ truncated: true, total_nodes: 11 });
+    expect(body.nodes.map((node: any) => node.name).slice(0, 2)).toEqual(['Sample Fund 01', 'Sample Accelerator 01']);
+  });
+
+  it('adds people, places and sectors when asked', async () => {
+    const body = (await app.inject('/graph/overview?kinds=has_role,invested_in&limit=400')).json();
+    expect(body.nodes.filter((node: any) => node.kind === 'person')).toHaveLength(1);
+    expect(body.edges.filter((edge: any) => edge.kind === 'has_role')).toHaveLength(1);
+  });
+});
+
 describe('GET /graph/top', () => {
   it('ranks organisations by how many others they are linked to', async () => {
     const res = await app.inject('/graph/top?limit=3');

@@ -190,9 +190,16 @@ export function storeAccessKey(key: string): void {
   } catch {}
 }
 
-async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function getJson<T>(path: string, signal?: AbortSignal, body?: unknown): Promise<T> {
   const key = storedAccessKey();
-  const res = await fetch(API_URL + path, { signal, headers: key ? { 'x-access-key': key } : undefined });
+  const headers: Record<string, string> = {};
+  if (key) headers['x-access-key'] = key;
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  const res = await fetch(API_URL + path, {
+    signal,
+    headers,
+    ...(body !== undefined ? { method: 'POST', body: JSON.stringify(body) } : {}),
+  });
   if (res.status === 401) throw new AccessError('An access key is required');
   if (!res.ok) throw new Error(`${path} responded ${res.status}`);
   return res.json() as Promise<T>;
@@ -226,3 +233,123 @@ export const fetchStats = (signal?: AbortSignal) => getData<Stats>('stats.json',
 /** Totals and activity for the records passing the filters. Always from the API. */
 export const fetchFilteredStats = (filters: Filters, signal?: AbortSignal) =>
   getJson<Stats>(`/stats?${encodeFilters(filters).join('&')}`, signal);
+
+/** One row of the data tables. */
+export interface OrgRow {
+  id: string;
+  name: string;
+  types: OrgType[];
+  sectors: string[];
+  stage: string | null;
+  city: string | null;
+  country: string | null;
+  precision: 'address' | 'area' | 'city' | null;
+  founded_year: number | null;
+  is_active: boolean;
+  website_domain: string | null;
+  raised_usd: number;
+  rounds: number;
+  investors: number;
+  portfolio: number;
+  last_invested_on: string | null;
+  participants: number;
+  people: number;
+  last_verified_at: string | null;
+}
+
+/** Every published organisation, fetched a page at a time. */
+export async function fetchOrgRows(signal?: AbortSignal): Promise<OrgRow[]> {
+  const rows: OrgRow[] = [];
+  for (;;) {
+    const page = await getJson<{ total: number; organisations: OrgRow[] }>(`/orgs?limit=500&offset=${rows.length}`, signal);
+    rows.push(...page.organisations);
+    if (rows.length >= page.total || page.organisations.length === 0) return rows;
+  }
+}
+
+export const EDGE_KINDS = ['invested_in', 'accelerated_at', 'organised', 'has_role', 'located_in', 'in_sector'] as const;
+export type EdgeKind = (typeof EDGE_KINDS)[number];
+
+export interface GraphNode {
+  /** Kind and key together: org:<id>, event:<id>, person:<id>, place:<country>/<city>, sector:<name>. */
+  id: string;
+  kind: 'organisation' | 'event' | 'person' | 'place' | 'sector';
+  ref: string | null;
+  name: string;
+  types: OrgType[];
+  sectors: string[];
+  city: string | null;
+  country: string | null;
+  detail: string | null;
+  degree: number;
+  /** Neighbours the answer did not include. */
+  hidden: number;
+}
+
+export interface GraphRound {
+  id: string;
+  stage: string | null;
+  amount_usd: number | null;
+  announced_on: string | null;
+  announced_precision: 'day' | 'month' | 'year' | null;
+  is_lead: boolean;
+  source_url: string | null;
+}
+
+export interface GraphEdge {
+  id: string;
+  kind: EdgeKind;
+  source: string;
+  target: string;
+  label: string | null;
+  rounds: GraphRound[];
+}
+
+export interface GraphAnswer {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  truncated?: boolean;
+}
+
+export interface GraphPath extends GraphAnswer {
+  found: boolean;
+  length: number | null;
+  searched_all: boolean;
+}
+
+interface GraphTie {
+  organisation: Omit<GraphNode, 'degree' | 'hidden'>;
+  shared: { id: string; name: string }[];
+}
+
+export interface CoInvestment {
+  co_investors: GraphTie[];
+  shared_investors: GraphTie[];
+}
+
+const kindsQuery = (kinds: readonly EdgeKind[]) => `kinds=${kinds.join(',')}`;
+
+export const fetchGraphOverview = (kinds: readonly EdgeKind[], signal?: AbortSignal) =>
+  getJson<GraphAnswer & { total_nodes: number }>(`/graph/overview?limit=300&${kindsQuery(kinds)}`, signal);
+
+export const fetchNeighbourhood = (id: string, kinds: readonly EdgeKind[], signal?: AbortSignal) =>
+  getJson<GraphAnswer>(`/graph/neighbourhood?id=${encodeURIComponent(id)}&limit=150&${kindsQuery(kinds)}`, signal);
+
+export const expandNode = (id: string, known: string[], kinds: readonly EdgeKind[], signal?: AbortSignal) =>
+  getJson<GraphAnswer & { remaining: number }>(`/graph/expand?${kindsQuery(kinds)}`, signal, {
+    id,
+    known: known.slice(0, 500),
+    limit: 40,
+  });
+
+export const fetchPath = (from: string, to: string, kinds: readonly EdgeKind[], signal?: AbortSignal) =>
+  getJson<GraphPath>(
+    `/graph/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&${kindsQuery(kinds)}`,
+    signal,
+  );
+
+export const fetchCoInvestment = (orgId: string, signal?: AbortSignal) =>
+  getJson<CoInvestment>(`/graph/co-investment?id=${encodeURIComponent(orgId)}`, signal);
+
+export const fetchMostConnected = (signal?: AbortSignal) =>
+  getJson<{ organisations: GraphNode[] }>('/graph/top?limit=8', signal);

@@ -117,7 +117,7 @@ VITE_DEMO_DATA=false \
 pnpm --filter @atlas/web build --base=/ecosight/        # output in apps/web/dist/
 ```
 
-The build holds code only. Before publishing, check that `apps/web/dist/` has no
+The build holds code only: four pages (`/`, `map/`, `graph/`, `dashboard/`). Before publishing, check that `apps/web/dist/` has no
 `data/` folder, then put its contents, plus an empty `.nojekyll` file, on the
 `gh-pages` branch as a single commit and force-push it. Pages serves that branch
 from its root.

@@ -10,6 +10,7 @@ import {
   GraphError,
   mostConnected,
   neighbourhood,
+  overview,
   nodeId,
   parseKinds,
   shortestPath,
@@ -19,6 +20,7 @@ import {
   GraphCoInvestment,
   GraphExpansion,
   GraphNeighbourhood,
+  GraphOverview,
   GraphPath,
   GraphTop,
   OrgType,
@@ -68,6 +70,22 @@ export const graphRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
       config,
     },
     async (req) => neighbourhood(sql, nodeId(req.query.id), req.query.depth ?? 1, req.query.limit ?? 150, scopeOf(req.query)),
+  );
+
+  app.get(
+    '/graph/overview',
+    {
+      schema: {
+        summary: 'Every link of the kinds asked for, with the nodes at its ends',
+        querystring: Type.Object({
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 400, default: 250, description: 'Most nodes to return' })),
+          ...Scope,
+        }),
+        response: { 200: GraphOverview, ...errors },
+      },
+      config,
+    },
+    async (req) => overview(sql, req.query.limit ?? 250, scopeOf(req.query)),
   );
 
   app.post(

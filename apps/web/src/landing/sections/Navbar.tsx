@@ -7,6 +7,8 @@ const LINKS = [
   { label: 'Ecosystems', href: `${MAP_URL}#v=1&p=ecosystems` },
   { label: 'Startups', href: `${MAP_URL}#v=1&p=startups` },
   { label: 'Investors', href: `${MAP_URL}#v=1&p=investors` },
+  { label: 'Connections', href: `${import.meta.env.BASE_URL}graph/` },
+  { label: 'Dashboard', href: `${import.meta.env.BASE_URL}dashboard/` },
   { label: 'Insights', href: '#signals' },
 ];
 

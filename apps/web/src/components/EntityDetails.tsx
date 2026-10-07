@@ -72,7 +72,15 @@ function amountOf(round: OrgDetail['rounds'][number]): string {
   return formatMoney(round.amount_original, round.currency);
 }
 
-function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Selection) => void }) {
+function OrgBody({
+  org,
+  onSelect,
+  actions,
+}: {
+  org: OrgDetail;
+  onSelect: (selection: Selection) => void;
+  actions?: (org: OrgDetail) => ReactNode;
+}) {
   const layer = layerForTypes(org.types);
   const hq = org.offices[0];
   const latest = org.rounds[0];
@@ -110,6 +118,7 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
             }
           />
         </div>
+        {actions && <div className="mt-3 flex flex-wrap gap-1.5">{actions(org)}</div>}
       </div>
 
       {org.description && (
@@ -274,6 +283,7 @@ export function EntityDetails({
   onSelect,
   onClose,
   back,
+  actions,
 }: {
   detail: Detail;
   /** Return to the list this record was picked from, when there is one. */
@@ -281,6 +291,8 @@ export function EntityDetails({
   /** Open a connected record; the map follows. */
   onSelect: (selection: Selection) => void;
   onClose: () => void;
+  /** Links shown under an organisation's headline figures, such as to another page. */
+  actions?: (org: OrgDetail) => ReactNode;
 }) {
   return (
     <div aria-live="polite">
@@ -299,8 +311,17 @@ export function EntityDetails({
       </div>
       {detail.status === 'loading' && <p className="px-3 text-mute">Loading…</p>}
       {detail.status === 'error' && <p className="px-3 text-mute">This record could not be loaded.</p>}
-      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} />}
+      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} actions={actions} />}
       {detail.status === 'event' && <EventBody event={detail.event} onSelect={onSelect} />}
     </div>
+  );
+}
+
+/** A link styled as a small button, for the actions under an organisation's figures. */
+export function ActionLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} className="flex h-7 items-center rounded border border-line px-2 text-xs hover:border-accent hover:text-accent">
+      {children}
+    </a>
   );
 }

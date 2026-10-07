@@ -384,7 +384,7 @@ How the brief's open points were settled:
 
 ## 15. Graph explorer page
 
-Added Oct 7, 2026. Not built. This is the interface for step 3 of `final_plan.md`; the engine behind it is described in `docs/adr/0003-graph-engine.md`.
+Added Oct 7, 2026. **Built the same day**, at `/graph/`; what differs from this specification is listed under "As built" at the end of the section. This is the interface for step 3 of `final_plan.md`; the engine behind it is described in `docs/adr/0003-graph-engine.md`.
 
 ### What it is for
 
@@ -477,4 +477,25 @@ The canvas fills the screen. Controls and details become bottom sheets, as in th
 - A share link reopens the same graph, expanded the same way, with the same node selected.
 - A draft organisation never appears, and neither does a link to one.
 - Every link shown can be opened to see where it came from.
+
+### As built
+
+- **Opens on the whole network**, not an empty start screen: every investment, programme and event link on record, up to 300 nodes. The owner asked for all known relations to be shown at once. `GraphStart` is the search box and the most connected list in the left panel.
+- **Drawn in SVG with d3-force**, not Cytoscape or Sigma: the layout is worked out in one go, so it does not animate and the same graph always looks the same. The page's first load is about 90 KB.
+- **Not built:** `GraphFilters` (the API accepts the map's filters; the page does not offer them yet), the radial layout, paging past 40 neighbours per expansion, and pinch-zoom on touch screens (the buttons work).
+
+## 16. Dashboard page
+
+Added and built Oct 7, 2026, at `/dashboard/`. The folder is not called `data`: that name is kept out of git and out of builds for the private data files.
+
+The map shows where organisations are and the graph how they are connected. This page shows what is on record about them, as tables.
+
+- **Tabs**, one per kind the map draws: startups, investors, accelerators, NGOs, innovation hubs, universities, government, corporates. Each shows its count. An organisation of two kinds is listed under both.
+- **Figures** for the open tab: how many, in how many countries and cities, how many are placed on a street or building, and one that fits the kind (raised on record for startups, portfolios on record for investors).
+- **Charts** as labelled bars in the tab's colour: by country, by sector; by stage and most raised for startups; largest portfolios on record for investors and accelerators. Each figure is written beside its bar.
+- **Table** with columns that fit the kind. Click a heading to sort (figures largest first), search by name, sector or city, narrow to a country, 25 rows a page. A dash means nothing is on record.
+- **A row opens the record** in the same details panel as the map, with "Show on map" and "View connections".
+- **Share link:** the address holds the open tab and the selected record.
+
+Not built: export to a file, column choice, and an events table.
 
