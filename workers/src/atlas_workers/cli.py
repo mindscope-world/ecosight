@@ -167,6 +167,22 @@ def cmd_links(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_convert(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .fx import Rates, apply, plan, summarise
+
+    with psycopg.connect(config.database_url()) as conn:
+        conversions = plan(conn, Rates(config.REPO_ROOT / "data" / "fx-cache.json"))
+        print(summarise(conversions))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to save.")
+            return 0
+        apply(conn, conversions, date.today().isoformat())
+    print("\nSaved.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="atlas")
     commands = parser.add_subparsers(required=True)
@@ -213,6 +229,10 @@ def main() -> int:
     ties.add_argument("--apply", action="store_true", help="write to the database")
     ties.add_argument("--snapshot", default=date.today().isoformat(), help="date the research was done (YYYY-MM-DD)")
     ties.set_defaults(run=cmd_links)
+
+    convert = commands.add_parser("convert-rounds", help="give rounds in other currencies a US dollar amount (dry run unless --apply)")
+    convert.add_argument("--apply", action="store_true", help="write to the database")
+    convert.set_defaults(run=cmd_convert)
 
     args = parser.parse_args()
     return args.run(args)

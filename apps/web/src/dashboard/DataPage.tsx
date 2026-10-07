@@ -7,11 +7,14 @@ import { Icon, MicroLabel, ShapeIcon, useMediaQuery } from '../components/ui';
 import { DEMO_DATA } from '../config';
 import { POINT_LAYERS, TYPE_LABELS, type PointLayerDef } from '../entities';
 import { countryName, formatCount, formatPartialDate, formatUsd } from '../lib/format';
-import { graphUrlFor, mapUrlFor } from '../pages';
+import { graphUrlFor, mapUrlFor, pageUrl } from '../pages';
+import { summariseCountries } from './countries';
 
 /** One tab per kind of organisation the map draws. Events have no table yet: there are none on record. */
 const TABS = POINT_LAYERS.filter((layer) => layer.id !== 'events');
 const PAGE_SIZE = 25;
+/** The tab that is not a kind of organisation: every kind, by country. */
+const COUNTRIES = 'countries';
 
 interface Column {
   key: string;
@@ -144,10 +147,85 @@ function Tile({ label, value, note }: { label: string; value: string; note?: str
   );
 }
 
+/** Every kind of organisation side by side, one row per country, counted where each is based. */
+function CountrySummary({ rows }: { rows: OrgRow[] }) {
+  const countries = useMemo(() => summariseCountries(rows, TABS), [rows]);
+  const placed = countries.filter((row) => row.country !== null);
+  const name = (code: string | null) => (code ? countryName(code) : 'No office on record');
+  const cell = 'h-8 px-2.5 text-right tabular-nums';
+  const figure = (value: number) => (value > 0 ? formatCount(value) : <span className="text-mute">—</span>);
+  return (
+    <>
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Tile label="Countries" value={formatCount(placed.length)} note="with an organisation based there" />
+        <Tile label="Organisations" value={formatCount(rows.length)} note="published" />
+        <Tile label="Rounds on record" value={formatCount(rows.reduce((sum, row) => sum + row.rounds, 0))} />
+        <Tile label="Raised on record" value={formatUsd(rows.reduce((sum, row) => sum + row.raised_usd, 0))} note="in US dollars, converted where needed" />
+      </div>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <BarList title="Organisations by country" color="#22d3ee" rows={topWithOther(placed.map((row) => ({ label: name(row.country), value: row.organisations })), 9)} />
+        <BarList
+          title="Raised by country"
+          color="#22d3ee"
+          format={formatUsd}
+          rows={placed.filter((row) => row.raised_usd > 0).sort((a, b) => b.raised_usd - a.raised_usd).slice(0, 10).map((row) => ({ label: name(row.country), value: row.raised_usd }))}
+          note="Money raised by organisations based in each country, from rounds with an amount on record."
+        />
+      </div>
+      <div className="mt-4 overflow-x-auto rounded border border-line">
+        <table className="w-full border-collapse text-left">
+          <thead className="bg-panel">
+            <tr>
+              {['Country', 'Organisations', 'Cities', ...TABS.map((item) => item.label), 'Rounds', 'Raised'].map((heading, index) => (
+                <th
+                  key={heading}
+                  scope="col"
+                  className={`h-8 whitespace-nowrap border-b border-line px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-mute ${index ? 'text-right' : ''}`}
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {countries.map((row) => (
+              <tr key={row.country ?? 'none'} className="border-b border-line/60 last:border-b-0">
+                <th scope="row" className="h-8 whitespace-nowrap px-2.5 text-left font-medium">
+                  {row.country ? (
+                    <a href={pageUrl('map', `v=1&fk=${row.country}`)} className="hover:text-accent" title="Open the map with only this country's records">
+                      {name(row.country)}
+                    </a>
+                  ) : (
+                    <span className="text-mute">{name(null)}</span>
+                  )}
+                </th>
+                <td className={cell}>{formatCount(row.organisations)}</td>
+                <td className={cell}>{figure(row.cities)}</td>
+                {TABS.map((item) => (
+                  <td key={item.id} className={cell}>
+                    {figure(row.kinds[item.id] ?? 0)}
+                  </td>
+                ))}
+                <td className={cell}>{figure(row.rounds)}</td>
+                <td className={cell}>{row.raised_usd > 0 ? formatUsd(row.raised_usd) : <span className="text-mute">—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-4 text-[11px] leading-snug text-mute">
+        An organisation is counted in the country of its headquarters. One of two kinds, such as an incubator that also
+        invests, is counted under both, so the kinds can add up to more than the total. A country's name opens the map
+        with only its records.
+      </p>
+    </>
+  );
+}
+
 function decode(hash: string): { tab: string; selected: string | null } {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const tab = params.get('t');
-  return { tab: TABS.some((layer) => layer.id === tab) ? tab! : TABS[0]!.id, selected: params.get('s') };
+  return { tab: tab === COUNTRIES || TABS.some((layer) => layer.id === tab) ? tab! : TABS[0]!.id, selected: params.get('s') };
 }
 
 const initial = decode(location.hash);
@@ -193,7 +271,8 @@ export function DataPage() {
     return () => controller.abort();
   }, [selected]);
 
-  const layer = TABS.find((item) => item.id === tab)!;
+  // The by-country tab has no kind of its own; it borrows the first for the hooks below and shows none of it.
+  const layer = TABS.find((item) => item.id === tab) ?? TABS[0]!;
   const inTab = (item: PointLayerDef, row: OrgRow) => item.types.some((type) => row.types.includes(type));
   const all = useMemo(() => (rows ?? []).filter((row) => inTab(layer, row)), [rows, layer]);
   const columns = COLUMNS[tab] ?? OTHER_COLUMNS;
@@ -314,12 +393,26 @@ export function DataPage() {
                   <span className="text-[11px] tabular-nums text-mute">{rows ? rows.filter((row) => inTab(item, row)).length : ''}</span>
                 </button>
               ))}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === COUNTRIES}
+                onClick={() => pickTab(COUNTRIES)}
+                className={`flex h-9 shrink-0 items-center gap-2 border-b-2 px-2.5 ${
+                  tab === COUNTRIES ? 'border-accent text-ink' : 'border-transparent text-mute hover:text-ink'
+                }`}
+              >
+                By country
+                <span className="text-[11px] tabular-nums text-mute">{rows ? new Set(rows.map((row) => row.country).filter(Boolean)).size : ''}</span>
+              </button>
             </div>
 
             {failed && <p role="alert" className="mt-4 text-warn">The records could not be loaded.</p>}
             {!rows && !failed && <p className="mt-4 text-mute">Loading the records…</p>}
 
-            {rows && (
+            {rows && tab === COUNTRIES && <CountrySummary rows={rows} />}
+
+            {rows && tab !== COUNTRIES && (
               <>
                 <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
                   <Tile label={layer.label} value={formatCount(all.length)} note="published" />

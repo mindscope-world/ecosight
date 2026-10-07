@@ -63,6 +63,7 @@ Four pages.
 
 ### Pipeline (Python)
 
+- `atlas convert-rounds`: US dollar figures for rounds reported in another currency, at published reference rates, with the basis recorded.
 - `atlas import-links`: relationships between organisations from a CSV, published only when both organisations are on record and the row has a source; the rest go to the review queue.
 - `atlas import-orgs`: dataset importer with a dry-run report, column mappings for other datasets, cached geocoding that refuses lookalike matches, merging into records already on file, values a curator sets for one row, and address lookup in any city.
 - `atlas import-rounds`: loads curated rounds and refuses any whose quote is not in the stored note.
@@ -156,8 +157,8 @@ The data the graph starts with is modest: about 120 organisations, 37 investor-t
 | 4.3 | Sources for the investors placed abroad | Data | Replace general-knowledge cities with sourced addresses; place the 13 that are missing |
 | 4.4 | ~~Keep city-level records out of the density layers~~ | Done | The four heatmaps count only records whose position means something; the layer list says so |
 | 4.5 | ~~Street-level address lookup outside Nairobi~~ | Done | An address is looked up within about 30 km of its city's centre, with the same refusal of lookalike matches. A university or public body whose address is not found is placed where the map names it. Otherwise the city's centre |
-| 4.6 | Per-country summary | Both | Records, rounds and investors by country; the country filter exists |
-| 4.7 | Currency conversion | Backend | One round is in Canadian dollars and is left out of dollar totals |
+| 4.6 | ~~Per-country summary~~ | Done | A "By country" tab on the dashboard: one row per country with organisations, cities, each kind, rounds and money raised, counted where each organisation is based, with bars for organisations and money by country. A country's name opens the map filtered to it. Worked out in the browser from the rows the dashboard already loads |
+| 4.7 | ~~Currency conversion~~ | Done | `atlas convert-rounds` gives rounds in another currency a US dollar figure at the European Central Bank reference rate (through the free Frankfurter service): the day's rate for a round dated to a day, the period's average for one dated to a month or year. The original amount is kept and the rate and its basis are stored with the round. The one Canadian-dollar round is converted. **Limits:** currencies the ECB does not publish, the Kenyan shilling among them, are left unconverted; and `import-rounds` rebuilds rounds, so run `convert-rounds` after it |
 | 4.8 | Founded year | Data | The filter and the card support it; neither dataset has the column |
 | 4.9 | Business contacts and logos | Owner + backend | Decide whether public business emails and phones are stored and shown; add a logo field |
 | 4.10 | Partners and directors of investors | Owner | The investors dataset lists them; only founders are loaded today |

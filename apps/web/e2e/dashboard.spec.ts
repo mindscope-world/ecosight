@@ -52,3 +52,24 @@ test('a row opens the record, with ways on to the map and the graph', async ({ p
   await expect(page).toHaveURL(/\/graph\/#v=1&n=org/);
   await expect(page.locator('footer')).toContainText('Nodes7');
 });
+
+test('the by-country tab puts every kind side by side for each country', async ({ page }) => {
+  await page.goto('/dashboard/');
+  await page.getByRole('tab', { name: /By country/ }).click();
+  await expect(page).toHaveURL(/#v=1&t=countries/);
+  await expect(page.getByText('Organisations by country')).toBeVisible();
+
+  // The sample is all in Kenya: one row, with its 48 organisations split by kind.
+  const row = page.locator('tbody tr');
+  await expect(row).toHaveCount(1);
+  await expect(row.getByRole('rowheader')).toHaveText('Kenya');
+  const cells = row.getByRole('cell');
+  await expect(cells.nth(0)).toHaveText('48');
+  await expect(cells.nth(2)).toHaveText('30'); // startups
+  await expect(cells.nth(3)).toHaveText('10'); // investors
+  await expect(row.getByRole('link', { name: 'Kenya' })).toHaveAttribute('href', /\/map\/#v=1&fk=KE/);
+
+  // The address reopens the same tab.
+  await page.reload();
+  await expect(page.getByRole('tab', { name: /By country/ })).toHaveAttribute('aria-selected', 'true');
+});

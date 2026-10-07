@@ -496,6 +496,7 @@ The map shows where organisations are and the graph how they are connected. This
 - **Charts** as labelled bars in the tab's colour: by country, by sector; by stage and most raised for startups; largest portfolios on record for investors and accelerators. Each figure is written beside its bar.
 - **Table** with columns that fit the kind. Click a heading to sort (figures largest first), search by name, sector or city, narrow to a country, 25 rows a page. A dash means nothing is on record.
 - **A row opens the record** in the same details panel as the map, with "Show on map" and "View connections".
+- **By country:** a last tab with one row per country: organisations, cities, each kind, rounds and money raised, counted where each organisation is based. A country's name opens the map filtered to it.
 - **Share link:** the address holds the open tab and the selected record.
 
 Not built: export to a file, column choice, and an events table.

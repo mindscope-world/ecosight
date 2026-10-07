@@ -56,7 +56,10 @@ uv run atlas import-links ../curation/stated_relationships.csv --snapshot 2026-1
 uv run atlas import-links ../curation/stated_relationships.csv --snapshot 2026-10-07 --apply
 ```
 
-Load it after the organisations it names. A row is published when both
+After loading or reloading rounds, run `uv run atlas convert-rounds --apply` so rounds
+reported in another currency count in dollar totals.
+
+Load a relationships file after the organisations it names. A row is published when both
 organisations are on record and published and it has a source. Any other row is
 not loaded: it is put in the review queue with the reason. A funding round with a
 stage, amount or date belongs in a rounds file instead.
