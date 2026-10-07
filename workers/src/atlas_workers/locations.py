@@ -21,6 +21,8 @@ class Placement:
     city: str
     country: str
     basis: str
+    # The page the city was taken from, when it was looked up and not simply known.
+    source: str | None = None
     org_id: str | None = None
     centre: Place | None = None
     problem: str | None = None
@@ -30,7 +32,9 @@ def read_file(path: Path) -> tuple[dict, list[Placement]]:
     doc = json.loads(path.read_text())
     placements = []
     for row in doc["placements"]:
-        item = Placement(row["name"], row["city"], row["country"].upper(), row.get("basis", doc.get("basis", "")))
+        item = Placement(
+            row["name"], row["city"], row["country"].upper(), row.get("basis", doc.get("basis", "")), row.get("source")
+        )
         if not re.fullmatch(r"[A-Z]{2}", item.country):
             item.problem = f"country must be a two-letter code, not {row['country']!r}"
         elif not item.basis.strip():
@@ -104,13 +108,13 @@ def apply(conn, doc: dict, placements: list[Placement], key: str) -> None:
                 (item.org_id, item.city, item.country, item.centre.lon, item.centre.lat),
             )
             office_id = cur.fetchone()[0]
-            # No link, a stated basis and a middling confidence: this is how the card shows it.
+            # A stated basis, a link where the city was looked up, and a middling confidence: this is how the card shows it.
             cur.execute(
                 """
-                insert into field_source (record_type, record_id, field, method, quote, confidence)
-                values ('organisation', %s, 'office', 'manual', %s, %s) returning id
+                insert into field_source (record_type, record_id, field, source_url, method, quote, confidence)
+                values ('organisation', %s, 'office', %s, 'manual', %s, %s) returning id
                 """,
-                (item.org_id, item.basis, doc.get("confidence", 0.5)),
+                (item.org_id, item.source, item.basis, doc.get("confidence", 0.5)),
             )
             source_id = cur.fetchone()[0]
             cur.execute(
