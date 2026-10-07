@@ -21,7 +21,7 @@ import { NodePicker, type Picked } from '../graph/NodePicker';
 import { KIND_LABELS } from '../graph/style';
 import { countryName, formatDate } from '../lib/format';
 
-type Tab = 'pending' | 'settled';
+type Tab = 'pending' | 'archived' | 'settled';
 
 const button = 'h-8 rounded border px-3 text-xs font-semibold disabled:opacity-40';
 
@@ -73,7 +73,8 @@ function Side({
 function Card({ item, onDone }: { item: ReviewItem; onDone: () => void }) {
   const [from, setFrom] = useState<Picked | null>(null);
   const [to, setTo] = useState<Picked | null>(null);
-  const [rejecting, setRejecting] = useState(false);
+  // Rejecting and archiving both ask for an optional note before they go ahead.
+  const [setting, setSetting] = useState<'reject' | 'archive' | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -82,12 +83,12 @@ function Card({ item, onDone }: { item: ReviewItem; onDone: () => void }) {
   const proposal = item.proposal;
   const layer = org ? layerForTypes(org.types) : undefined;
 
-  const act = (action: 'approve' | 'reject' | 'reopen') => {
+  const act = (action: 'approve' | 'reject' | 'archive' | 'reopen') => {
     setBusy(true);
     setProblem(null);
     // The picker hands back a graph node id; the API wants the record's own.
     const idOf = (picked: Picked | null) => picked?.id.replace(/^org:/, '');
-    settleReview(item.id, action, action === 'approve' ? { from_id: idOf(from), to_id: idOf(to) } : action === 'reject' ? { note: note.trim() || undefined } : {})
+    settleReview(item.id, action, action === 'approve' ? { from_id: idOf(from), to_id: idOf(to) } : action === 'reopen' ? {} : { note: note.trim() || undefined })
       .then(onDone)
       .catch((error) => {
         setProblem(error instanceof ApiError && error.detail ? error.detail : 'That did not work. Try again.');
@@ -149,7 +150,8 @@ function Card({ item, onDone }: { item: ReviewItem; onDone: () => void }) {
           {item.reviewed_by && item.reviewed_at && (
             <>
               {' · '}
-              <span className={item.status === 'approved' ? 'text-good' : 'text-warn'}>{item.status}</span> by {item.reviewed_by},{' '}
+              <span className={item.status === 'approved' ? 'text-good' : item.status === 'archived' ? 'text-accent' : 'text-warn'}>{item.status}</span> by{' '}
+              {item.reviewed_by},{' '}
               {formatDate(item.reviewed_at)}
             </>
           )}
@@ -162,34 +164,48 @@ function Card({ item, onDone }: { item: ReviewItem; onDone: () => void }) {
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {pending && !rejecting && (
+        {pending && !setting && (
           <>
             <button type="button" disabled={busy || !ready} className={`${button} border-accent bg-accent text-bg`} onClick={() => act('approve')}>
               Approve and publish
             </button>
-            <button type="button" disabled={busy} className={`${button} border-line hover:bg-raised`} onClick={() => setRejecting(true)}>
+            <button type="button" disabled={busy} className={`${button} border-line hover:bg-raised`} onClick={() => setSetting('reject')}>
               Reject
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              title="Not wrong, but too incomplete or unverified to publish yet. It is kept in the archive and can be reopened."
+              className={`${button} border-line hover:bg-raised`}
+              onClick={() => setSetting('archive')}
+            >
+              Archive
             </button>
             {!ready && <span className="text-[11px] text-mute">Choose the record for the name that is not on record, or reject.</span>}
           </>
         )}
-        {pending && rejecting && (
+        {pending && setting && (
           <>
             <label className="min-w-0 flex-1">
-              <span className="sr-only">Why it is rejected</span>
+              <span className="sr-only">{setting === 'reject' ? 'Why it is rejected' : 'What is missing'}</span>
               <input
                 autoFocus
                 value={note}
                 maxLength={500}
-                placeholder="Why (optional)"
+                placeholder={setting === 'reject' ? 'Why (optional)' : 'What is missing or unverified (optional)'}
                 onChange={(event) => setNote(event.target.value)}
                 className="h-8 w-full rounded border border-line bg-bg px-2 text-xs placeholder:text-mute"
               />
             </label>
-            <button type="button" disabled={busy} className={`${button} border-warn text-warn`} onClick={() => act('reject')}>
-              Confirm rejection
+            <button
+              type="button"
+              disabled={busy}
+              className={`${button} ${setting === 'reject' ? 'border-warn text-warn' : 'border-accent text-accent'}`}
+              onClick={() => act(setting)}
+            >
+              {setting === 'reject' ? 'Confirm rejection' : 'Move to the archive'}
             </button>
-            <button type="button" disabled={busy} className={`${button} border-line`} onClick={() => setRejecting(false)}>
+            <button type="button" disabled={busy} className={`${button} border-line`} onClick={() => setSetting(null)}>
               Cancel
             </button>
           </>
@@ -273,7 +289,8 @@ export function ReviewPage() {
           {(
             [
               ['pending', 'Waiting', list?.pending],
-              ['settled', 'Settled by reviewers', list?.settled],
+              ['archived', 'Archived', list?.archived],
+              ['settled', 'Approved or rejected', list?.settled],
             ] as const
           ).map(([id, label, count]) => (
             <button
@@ -291,7 +308,13 @@ export function ReviewPage() {
         </div>
         {!list && <p className="mt-4 text-mute">Loading…</p>}
         {list && list.items.length === 0 && (
-          <p className="mt-4 text-mute">{tab === 'pending' ? 'Nothing is waiting for review.' : 'No decisions have been made here yet.'}</p>
+          <p className="mt-4 text-mute">
+            {tab === 'pending'
+              ? 'Nothing is waiting for review.'
+              : tab === 'archived'
+                ? 'Nothing has been archived. Records that are incomplete or unverified can be set aside here from the waiting list.'
+                : 'No decisions have been made here yet.'}
+          </p>
         )}
         {groups.map(
           ([title, items]) =>
@@ -319,8 +342,9 @@ export function ReviewPage() {
         <div className="mx-auto max-w-[1100px] px-4 py-4">
           <h1 className="m-0 text-lg font-semibold">Review queue</h1>
           <p className="m-0 mt-0.5 max-w-3xl text-mute">
-            What the importers would not publish by their own rules. Approving publishes it; rejecting keeps it out. Each
-            decision is recorded with who made it, and can be reopened.
+            What the importers would not publish by their own rules. Approving publishes it; rejecting keeps it out;
+            archiving sets aside what is incomplete or unverified until more is known. Each decision is recorded with who
+            made it, and can be reopened.
           </p>
           {content}
         </div>

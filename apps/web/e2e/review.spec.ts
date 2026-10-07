@@ -1,5 +1,8 @@
 import { expect, test } from './fixtures';
 
+// These tests move items in and out of the one queue, so they take turns.
+test.describe.configure({ mode: 'serial' });
+
 // The test API treats every request as the sample's reviewer. The sample has
 // three items waiting: two draft organisations, and a relationship that names
 // an organisation nobody has on record.
@@ -46,7 +49,7 @@ test('a rejected item leaves the queue with its note, and can be reopened', asyn
   await expect(page.getByRole('tab', { name: /Waiting/ })).toContainText('2');
   await expect(page.getByRole('listitem').filter({ hasText: 'Sample Draft 02' })).toHaveCount(0);
 
-  await page.getByRole('tab', { name: /Settled/ }).click();
+  await page.getByRole('tab', { name: /Approved or rejected/ }).click();
   const settled = page.getByRole('listitem').filter({ hasText: 'Sample Draft 02' });
   await expect(settled).toContainText('rejected by reviewer@example.org');
   await expect(settled).toContainText('Reviewer’s note: Checked by a browser test');
@@ -56,4 +59,25 @@ test('a rejected item leaves the queue with its note, and can be reopened', asyn
   await expect(page.getByRole('tab', { name: /Waiting/ })).toContainText('3');
   await page.getByRole('tab', { name: /Waiting/ }).click();
   await expect(page.getByRole('listitem').filter({ hasText: 'Sample Draft 02' })).toHaveCount(1);
+});
+
+test('an incomplete record can be archived, found in the archive, and reopened', async ({ page }) => {
+  await page.goto('/review/');
+  const card = page.getByRole('listitem').filter({ hasText: 'Sample Draft 01' });
+  await expect(card.getByRole('button', { name: 'Archive' })).toBeVisible();
+  await card.getByRole('button', { name: 'Archive' }).click();
+  await card.getByLabel('What is missing').fill('No address yet');
+  await card.getByRole('button', { name: 'Move to the archive' }).click();
+  await expect(page.getByRole('tab', { name: /Archived/ })).toContainText('1');
+  await expect(page.getByRole('listitem').filter({ hasText: 'Sample Draft 01' })).toHaveCount(0);
+
+  // It is in the archive, not among the approved and rejected.
+  await page.getByRole('tab', { name: /Archived/ }).click();
+  const archived = page.getByRole('listitem').filter({ hasText: 'Sample Draft 01' });
+  await expect(archived).toContainText('archived by reviewer@example.org');
+  await expect(archived).toContainText('Reviewer’s note: No address yet');
+
+  // Put it back, so the sample is as it was.
+  await archived.getByRole('button', { name: 'Reopen' }).click();
+  await expect(page.getByRole('tab', { name: /Archived/ })).toContainText('0');
 });

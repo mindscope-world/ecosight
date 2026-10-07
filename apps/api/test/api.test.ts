@@ -454,6 +454,7 @@ describe('GET /openapi.json', () => {
       '/orgs/{id}',
       '/review/items',
       '/review/items/{id}/approve',
+      '/review/items/{id}/archive',
       '/review/items/{id}/reject',
       '/review/items/{id}/reopen',
       '/rounds/{id}',

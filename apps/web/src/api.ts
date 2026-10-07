@@ -411,7 +411,7 @@ export const fetchMe = () => (me ??= getJson<Me>('/me'));
 export interface ReviewItem {
   id: string;
   kind: 'organisation' | 'relationship' | 'other';
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'archived';
   reason: string | null;
   note: string | null;
   source: string | null;
@@ -445,15 +445,18 @@ export interface ReviewItem {
 
 export interface ReviewList {
   pending: number;
+  /** Set aside as incomplete or unverified. */
+  archived: number;
+  /** Approved or rejected by a reviewer. */
   settled: number;
   items: ReviewItem[];
 }
 
-export const fetchReview = (status: 'pending' | 'settled', signal?: AbortSignal) =>
+export const fetchReview = (status: 'pending' | 'archived' | 'settled', signal?: AbortSignal) =>
   getJson<ReviewList>(`/review/items?status=${status}`, signal);
 
 export const settleReview = (
   id: string,
-  action: 'approve' | 'reject' | 'reopen',
+  action: 'approve' | 'reject' | 'archive' | 'reopen',
   body: { from_id?: string; to_id?: string; source_url?: string; note?: string } = {},
 ) => getJson<ReviewItem>(`/review/items/${id}/${action}`, undefined, body);

@@ -513,10 +513,10 @@ In the header of every page. Signed out, it offers sign-in: an email address, th
 
 For reviewers. Anyone else is told so, and offered sign-in.
 
-- **Two tabs:** what is waiting, and what reviewers have settled.
+- **Three tabs:** what is waiting, what has been archived, and what has been approved or rejected.
 - **An organisation** is shown with its kind, place, sectors, description, website and how many sources it has, and why it was held.
 - **A proposed relationship** is shown as "this, relation, that" with the words and the link it rests on. A name that is not on record is marked, with a search box to choose the record it means; it cannot be approved until both sides are known.
-- **Approve and publish**, or **Reject** with an optional note. A settled item can be **reopened**, except an approved relationship.
+- **Approve and publish**, **Reject**, or **Archive**, the last two with an optional note. Rejecting says the record is wrong. Archiving says it may be right but is too incomplete or unverified to publish yet; it stays out of the product and can be found again in the archive. Anything decided can be **reopened**, except an approved relationship.
 - Each decision shows who made it and when.
 
 Not built: editing a record before approving it, merging duplicates, and filters over the queue.

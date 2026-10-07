@@ -136,6 +136,30 @@ describe('the review queue', () => {
     await sql`delete from audit_log where record_id = ${item.id}`;
   });
 
+  it('sets an incomplete record aside in an archive of its own, until it is reopened', async () => {
+    const item = (await queue()).items[0];
+    const archived = await post(`/review/items/${item.id}/archive`, reviewer, { note: 'No address or website yet' });
+    expect(archived.statusCode).toBe(200);
+    expect(archived.json()).toMatchObject({
+      status: 'archived', note: 'No address or website yet', reviewed_by: 'reviewer@example.org', organisation: { status: 'draft' },
+    });
+    try {
+      // Out of the waiting list, not among the decisions, and still not published.
+      expect(await queue()).toMatchObject({ pending: 2, archived: 1, settled: 0 });
+      expect((await queue('archived')).items.map((entry: any) => entry.id)).toEqual([item.id]);
+      expect((await queue('settled')).items).toEqual([]);
+      expect((await app.inject({ url: `/orgs/${item.organisation.id}`, headers: reviewer })).statusCode).toBe(404);
+      expect((await post(`/review/items/${item.id}/approve`, reviewer)).statusCode).toBe(409);
+      expect((await post(`/review/items/${item.id}/archive`, as('viewer-token'))).statusCode).toBe(403);
+    } finally {
+      expect((await post(`/review/items/${item.id}/reopen`, reviewer)).json()).toMatchObject({ status: 'pending', note: null });
+    }
+    expect(await queue()).toMatchObject({ pending: 3, archived: 0 });
+    const log = await sql`select previous_value, new_value from audit_log where record_id = ${item.id} order by id`;
+    expect(log.map((row) => [row.previous_value, row.new_value])).toEqual([['pending', 'archived'], ['archived', 'pending']]);
+    await sql`delete from audit_log where record_id = ${item.id}`;
+  });
+
   it('publishes a proposed relationship only once both organisations are known', async () => {
     const item = (await queue()).items[2];
     const blocked = await post(`/review/items/${item.id}/approve`, reviewer);

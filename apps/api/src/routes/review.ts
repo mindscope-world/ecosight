@@ -17,7 +17,7 @@ interface Row {
   id: string;
   record_type: string;
   record_id: string | null;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'archived';
   reason: string | null;
   created_at: Date;
   reviewed_at: Date | null;
@@ -115,6 +115,9 @@ export const reviewRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
     from review_item r left join app_user u on u.id = r.reviewed_by
   `;
 
+  // Items loaded together share a timestamp; within one import they keep the order of its rows.
+  const rowNumber = sql`case when r.payload->>'record' ~ '^[0-9]+$' then (r.payload->>'record')::int end`;
+
   async function load(id: string): Promise<Row | undefined> {
     const [row] = await sql<Row[]>`${select} where r.id = ${id}`;
     return row;
@@ -133,24 +136,33 @@ export const reviewRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
       schema: {
         summary: 'The review queue: what is waiting, or what reviewers have settled',
         querystring: Type.Object({
-          status: Type.Optional(Type.Union([Type.Literal('pending'), Type.Literal('settled')], { default: 'pending' })),
+          status: Type.Optional(
+            Type.Union([Type.Literal('pending'), Type.Literal('archived'), Type.Literal('settled')], { default: 'pending' }),
+          ),
         }),
         response: { 200: ReviewList, 401: ErrorBody, 403: ErrorBody },
       },
     },
     async (request, reply) => {
       if (!reviewer(request, reply)) return reply;
-      const settled = request.query.status === 'settled';
+      const tab = request.query.status ?? 'pending';
+      // Settled means decided for good, one way or the other; what was set aside has a list of its own.
+      const where = {
+        pending: sql`r.status = 'pending'`,
+        archived: sql`r.status = 'archived'`,
+        settled: sql`r.reviewed_by is not null and r.status in ('approved', 'rejected')`,
+      }[tab];
       const rows = await sql<Row[]>`
         ${select}
-        where ${settled ? sql`r.reviewed_by is not null` : sql`r.status = 'pending'`}
-        order by ${settled ? sql`r.reviewed_at desc` : sql`r.record_type, r.created_at, r.id`}
+        where ${where}
+        order by ${tab === 'pending' ? sql`r.record_type, r.created_at, ${rowNumber} nulls last, r.id` : sql`r.reviewed_at desc nulls last, r.id`}
         limit 300
       `;
       const known = await knownOrganisations();
-      const [counts] = await sql<{ pending: number; settled: number }[]>`
+      const [counts] = await sql<{ pending: number; archived: number; settled: number }[]>`
         select count(*) filter (where status = 'pending')::int as pending,
-               count(*) filter (where reviewed_by is not null)::int as settled
+               count(*) filter (where status = 'archived')::int as archived,
+               count(*) filter (where reviewed_by is not null and status in ('approved', 'rejected'))::int as settled
         from review_item
       `;
       return { ...counts!, items: rows.map((row) => describe(row, known)) };
@@ -263,36 +275,43 @@ export const reviewRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
     },
   );
 
-  app.post(
-    '/review/items/:id/reject',
-    {
-      schema: {
-        summary: 'Decide that an item is not to be published',
-        params,
-        body: Type.Object({ note: Type.Optional(Type.String({ maxLength: 500 })) }),
-        response: answers,
+  // Rejecting and archiving are the same act with a different verdict: the item
+  // leaves the waiting list, unpublished. Rejected says it is wrong; archived
+  // says it may be right but there is not enough to publish yet.
+  for (const [action, verdict, summary] of [
+    ['reject', 'rejected', 'Decide that an item is not to be published'],
+    ['archive', 'archived', 'Set an item aside: not wrong, but too incomplete or unverified to publish yet'],
+  ] as const)
+    app.post(
+      `/review/items/:id/${action}`,
+      {
+        schema: {
+          summary,
+          params,
+          body: Type.Object({ note: Type.Optional(Type.String({ maxLength: 500 })) }),
+          response: answers,
+        },
       },
-    },
-    async (request, reply) => {
-      const user = reviewer(request, reply);
-      if (!user) return reply;
-      const item = await load(request.params.id);
-      if (!item) return reply.code(404).send({ error: 'No such item in the queue' });
-      if (item.status !== 'pending') return reply.code(409).send({ error: 'This item has already been settled' });
-      const note = text(request.body.note);
-      await sql.begin(async (tx) => {
-        await tx`
-          update review_item set
-            status = 'rejected', reviewed_by = ${user.id}, reviewed_at = now(),
-            payload = payload || ${tx.json({ review_note: note })}
-          where id = ${item.id}`;
-        await tx`
-          insert into audit_log (actor, record_type, record_id, field, previous_value, new_value)
-          values (${user.id}, 'review_item', ${item.id}, 'status', '"pending"', '"rejected"')`;
-      });
-      return describe((await load(item.id))!, await knownOrganisations());
-    },
-  );
+      async (request, reply) => {
+        const user = reviewer(request, reply);
+        if (!user) return reply;
+        const item = await load(request.params.id);
+        if (!item) return reply.code(404).send({ error: 'No such item in the queue' });
+        if (item.status !== 'pending') return reply.code(409).send({ error: 'This item has already been settled' });
+        const note = text(request.body.note);
+        await sql.begin(async (tx) => {
+          await tx`
+            update review_item set
+              status = ${verdict}, reviewed_by = ${user.id}, reviewed_at = now(),
+              payload = payload || ${tx.json({ review_note: note })}
+            where id = ${item.id}`;
+          await tx`
+            insert into audit_log (actor, record_type, record_id, field, previous_value, new_value)
+            values (${user.id}, 'review_item', ${item.id}, 'status', '"pending"', ${tx.json(verdict)})`;
+        });
+        return describe((await load(item.id))!, await knownOrganisations());
+      },
+    );
 
   app.post(
     '/review/items/:id/reopen',

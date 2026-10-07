@@ -388,10 +388,10 @@ export const Me = Type.Object({
 export const ReviewItem = Type.Object({
   id: Type.String({ format: 'uuid' }),
   kind: Type.Union([Type.Literal('organisation'), Type.Literal('relationship'), Type.Literal('other')]),
-  status: Type.Union([Type.Literal('pending'), Type.Literal('approved'), Type.Literal('rejected')]),
+  status: Type.Union([Type.Literal('pending'), Type.Literal('approved'), Type.Literal('rejected'), Type.Literal('archived')]),
   // Why it was not published by the importer's own rules.
   reason: Nullable(Type.String()),
-  // What the reviewer wrote when rejecting it.
+  // What the reviewer wrote when rejecting or archiving it.
   note: Nullable(Type.String()),
   // The import it came from.
   source: Nullable(Type.String()),
@@ -431,6 +431,9 @@ export type ReviewItem = Static<typeof ReviewItem>;
 
 export const ReviewList = Type.Object({
   pending: Type.Integer(),
+  // Set aside as incomplete or unverified.
+  archived: Type.Integer(),
+  // Approved or rejected by a reviewer.
   settled: Type.Integer(),
   items: Type.Array(ReviewItem),
 });
