@@ -68,18 +68,49 @@ function OrgImage({ org, color }: { org: OrgDetail; color: string }) {
   );
 }
 
-function OrgButton({ org, onSelect }: { org: OrgLink; onSelect: (selection: Selection) => void }) {
+/**
+ * The lines the map draws from the selected record to those it is connected to,
+ * and the means to hide and show each. Given only where there is a map.
+ */
+export interface LineControl {
+  /** 'on' or 'off' for a connection the map can draw a line to; 'none' when the other record has no place on it. */
+  state: (orgId: string) => 'on' | 'off' | 'none';
+  toggle: (orgId: string) => void;
+}
+
+function OrgButton({ org, onSelect, lines }: { org: OrgLink; onSelect: (selection: Selection) => void; lines?: LineControl }) {
   const layer = layerForTypes(org.types);
+  const line = lines?.state(org.id);
   return (
-    <button
-      type="button"
-      className="flex h-6 w-full items-center gap-2 text-left hover:text-accent"
-      title="Open and show on the map"
-      onClick={() => onSelect({ kind: 'org', id: org.id })}
-    >
-      {layer && <ShapeIcon shape={layer.shape} color={layer.color} size={11} />}
-      <span className="truncate">{org.name}</span>
-    </button>
+    <div className="flex h-6 items-center gap-2">
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-accent"
+        title="Open and show on the map"
+        onClick={() => onSelect({ kind: 'org', id: org.id })}
+      >
+        {layer && <ShapeIcon shape={layer.shape} color={layer.color} size={11} />}
+        <span className="truncate">{org.name}</span>
+      </button>
+      {line && line !== 'none' && (
+        <button
+          type="button"
+          aria-pressed={line === 'on'}
+          title={line === 'on' ? `Hide the line to ${org.name} on the map` : `Show the line to ${org.name} on the map`}
+          className={`shrink-0 rounded border px-1.5 text-[11px] leading-5 hover:border-accent hover:text-accent ${
+            line === 'on' ? 'border-line text-mute' : 'border-accent text-accent'
+          }`}
+          onClick={() => lines!.toggle(org.id)}
+        >
+          {line === 'on' ? 'Hide line' : 'Show line'}
+        </button>
+      )}
+      {line === 'none' && (
+        <span className="shrink-0 text-[11px] text-mute" title="This record has no office on record, so the map cannot draw a line to it">
+          not on map
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -105,10 +136,12 @@ function OrgBody({
   org,
   onSelect,
   actions,
+  lines,
 }: {
   org: OrgDetail;
   onSelect: (selection: Selection) => void;
   actions?: (org: OrgDetail) => ReactNode;
+  lines?: LineControl;
 }) {
   const layer = layerForTypes(org.types);
   const hq = org.offices[0];
@@ -221,16 +254,21 @@ function OrgBody({
 
       <Block title="Connections">
         {connected === 0 && <p className="m-0 text-mute">No connections recorded yet.</p>}
+        {lines && investors.length + portfolio.length + programs.length + affiliations.length > 0 && (
+          <p className="m-0 mb-2 text-[11px] leading-snug text-mute">
+            The map draws a line to each of these. Hide or show a line with the button beside it.
+          </p>
+        )}
         <Group label="Investors" count={investors.length}>
-          {investors.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} />)}
+          {investors.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} lines={lines} />)}
         </Group>
         <Group label="Portfolio" count={portfolio.length}>
-          {portfolio.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} />)}
+          {portfolio.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} lines={lines} />)}
         </Group>
         <Group label="Programs" count={programs.length}>
           {programs.map((item) => (
             <div key={`${item.name}-${item.organisation.id}`}>
-              <OrgButton org={item.organisation} onSelect={onSelect} />
+              <OrgButton org={item.organisation} onSelect={onSelect} lines={lines} />
               <div className="-mt-1 pl-[19px] text-[11px] text-mute">{item.name}</div>
             </div>
           ))}
@@ -239,7 +277,7 @@ function OrgBody({
           <Group key={label} label={label} count={items.length}>
             {items.map((item) => (
               <div key={`${item.kind}-${item.organisation.id}`}>
-                <OrgButton org={item.organisation} onSelect={onSelect} />
+                <OrgButton org={item.organisation} onSelect={onSelect} lines={lines} />
                 {item.label && <div className="-mt-1 pl-[19px] text-[11px] text-mute">{item.label}</div>}
               </div>
             ))}
@@ -349,8 +387,11 @@ export function EntityDetails({
   onClose,
   back,
   actions,
+  lines,
 }: {
   detail: Detail;
+  /** On the map: the means to hide and show the line to each connection. */
+  lines?: LineControl;
   /** Return to the list this record was picked from, when there is one. */
   back?: { label: string; onBack: () => void };
   /** Open a connected record; the map follows. */
@@ -376,7 +417,7 @@ export function EntityDetails({
       </div>
       {detail.status === 'loading' && <p className="px-3 text-mute">Loading…</p>}
       {detail.status === 'error' && <p className="px-3 text-mute">This record could not be loaded.</p>}
-      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} actions={actions} />}
+      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} actions={actions} lines={lines} />}
       {detail.status === 'event' && <EventBody event={detail.event} onSelect={onSelect} />}
     </div>
   );

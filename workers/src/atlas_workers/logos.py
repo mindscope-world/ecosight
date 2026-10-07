@@ -4,10 +4,11 @@ The icon a site declares for itself is used: the one for a phone's home screen
 when there is one, since it is the largest and drawn to stand alone, else the
 largest icon it lists, else `/favicon.ico`. Only the organisation's own site is
 asked, within its robots.txt, two requests a site. The image is stored, so the
-app never fetches it from anywhere else. Large images are left out: a card
-needs an icon, not a banner.
+app never fetches it from anywhere else. A card needs an icon, not a banner, so
+an image over the size kept is drawn smaller and stored as that.
 """
 
+import io
 import re
 import time
 from dataclasses import dataclass
@@ -15,10 +16,15 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin
 
 import httpx
+from PIL import Image, UnidentifiedImageError
 
 from .crawl import robots_allows
 
 MAX_BYTES = 65536
+# The most that is read of an icon before it is given up on as not an icon at all.
+MAX_DOWNLOAD = 4 * 1024 * 1024
+# Sides to try, largest first, when an image has to be drawn smaller. A card shows it at 44 pixels.
+SHRINK_TO = (256, 160, 96)
 DELAY = 1.0
 
 
@@ -71,6 +77,28 @@ def image_type(data: bytes) -> str | None:
     return None
 
 
+def shrink(data: bytes) -> bytes | None:
+    """The same picture small enough to keep, as a PNG, or None when it cannot be redrawn.
+
+    Shape and transparency are kept. A drawing in SVG is left alone: it has no
+    pixels to reduce, and one that large is rarely an icon.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as picture:
+            picture.load()
+            picture = picture.convert("RGBA")
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        return None
+    for side in SHRINK_TO:
+        smaller = picture.copy()
+        smaller.thumbnail((side, side), Image.LANCZOS)
+        out = io.BytesIO()
+        smaller.save(out, format="PNG", optimize=True)
+        if out.tell() <= MAX_BYTES:
+            return out.getvalue()
+    return None
+
+
 @dataclass
 class Logo:
     organisation_id: str
@@ -101,14 +129,19 @@ def fetch_logo(client: httpx.Client, logo: Logo, pause: float = DELAY) -> None:
             response = client.get(url)
             if response.status_code != 200:
                 continue
-            if len(response.content) > MAX_BYTES:
-                too_big = True
+            data = response.content
+            kind = image_type(data)
+            if not kind:
                 continue
-            kind = image_type(response.content)
-            if kind:
-                logo.content_type, logo.image, logo.source_url = kind, response.content, str(response.url)
-                return
-        logo.note = "its icon is too large to keep" if too_big else "no icon found"
+            if len(data) > MAX_BYTES:
+                smaller = shrink(data) if kind != "image/svg+xml" and len(data) <= MAX_DOWNLOAD else None
+                if smaller is None:
+                    too_big = True
+                    continue
+                data, kind = smaller, "image/png"
+            logo.content_type, logo.image, logo.source_url = kind, data, str(response.url)
+            return
+        logo.note = "its icon is too large and could not be drawn smaller" if too_big else "no icon found"
     except (httpx.HTTPError, ValueError) as error:
         logo.note = f"site could not be read: {type(error).__name__}"
 

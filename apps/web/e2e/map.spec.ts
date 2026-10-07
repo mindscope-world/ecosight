@@ -128,13 +128,25 @@ test('the overview and activity figures lead to the records they count', async (
   await expect(page.locator('tbody tr')).toHaveCount(25);
 });
 
-test('a selected record offers to switch its lines on the map off and on', async ({ page }) => {
+test('the line to each connection of a selected record can be hidden and shown', async ({ page }) => {
   await page.goto('/map/');
   await search(page, 'Sample Fund 01');
   await page.getByRole('dialog', { name: 'Search' }).getByRole('option').first().click();
-  const lines = details(page).getByRole('button', { name: /Lines on/ });
-  await expect(lines).toHaveAttribute('aria-pressed', 'true');
-  await lines.click();
-  await expect(details(page).getByRole('button', { name: /Lines off/ })).toHaveAttribute('aria-pressed', 'false');
-});
+  await expect(details(page).getByRole('heading', { level: 2 })).toHaveText('Sample Fund 01');
 
+  // Beside each of the six companies it backs is the control for the line to it.
+  const hide = details(page).getByRole('button', { name: 'Hide line', exact: true });
+  await expect(hide).toHaveCount(6);
+  await hide.first().click();
+  await expect(hide).toHaveCount(5);
+  const show = details(page).getByRole('button', { name: 'Show line', exact: true });
+  await expect(show).toHaveCount(1);
+  await expect(show).toHaveAttribute('aria-pressed', 'false');
+  await show.click();
+  await expect(hide).toHaveCount(6);
+
+  // And one button for all of them at once.
+  await details(page).getByRole('button', { name: 'Hide all 6 lines' }).click();
+  await expect(details(page).getByRole('button', { name: 'Show all 6 lines' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(hide).toHaveCount(0);
+});

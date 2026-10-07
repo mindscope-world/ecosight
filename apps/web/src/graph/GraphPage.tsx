@@ -205,6 +205,14 @@ export function GraphPage() {
   const switchLinks = (ids: string[], on: boolean) =>
     setOff((now) => (on ? now.filter((id) => !ids.includes(id)) : [...now, ...ids.filter((id) => !now.includes(id))].slice(-MAX_OFF)));
   const linksOf = (id: string) => edges.filter((edge) => edge.source === id || edge.target === id);
+  // Every line in view by the two records it joins, hidden ones first so they are easy to find again.
+  const listedEdges = useMemo(
+    () =>
+      edges
+        .map((edge) => ({ edge, name: `${byId.get(edge.source)?.name ?? '?'} — ${byId.get(edge.target)?.name ?? '?'}` }))
+        .sort((a, b) => Number(offSet.has(b.edge.id)) - Number(offSet.has(a.edge.id)) || a.name.localeCompare(b.name)),
+    [edges, byId, offSet],
+  );
 
   const selectedNode = selected ? byId.get(selected) : undefined;
   const selectedEdge = selected ? graph.edges.get(selected) : undefined;
@@ -323,26 +331,40 @@ export function GraphPage() {
           People, places and sectors are off to begin with: almost everything is linked through a shared city or sector.
         </p>
       </Section>
-      {offInView.length > 0 && (
-        <Section id="graph-off" title="Links switched off" aside={`${offInView.length}`}>
-          <ul>
-            {offInView.map((edge) => (
-              <li key={edge.id} className="flex items-center gap-1">
-                <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-accent" title="Show this link's details" onClick={() => pick(edge.id)}>
-                  {byId.get(edge.source)?.name} — {byId.get(edge.target)?.name}
-                </button>
-                <button type="button" className="shrink-0 text-[11px] text-accent2 underline" onClick={() => switchLinks([edge.id], true)}>
-                  On
-                </button>
-              </li>
-            ))}
-          </ul>
-          <button type="button" className="mt-2 h-7 w-full rounded border border-line text-xs hover:bg-raised" onClick={() => setOff([])}>
-            Switch all back on
+      <Section id="graph-links" title="Lines" aside={offInView.length ? `${offInView.length} off` : `${edges.length}`}>
+        <p className="m-0 mb-2 text-[11px] leading-snug text-mute">
+          Untick a line to hide it, tick it to show it again. Hidden lines stay as faint dots. Only this view and its
+          share link change, never the records.
+        </p>
+        {offInView.length > 0 && (
+          <button type="button" className="mb-2 h-7 w-full rounded border border-accent text-xs text-accent hover:bg-raised" onClick={() => setOff([])}>
+            Show all {offInView.length} hidden line{offInView.length === 1 ? '' : 's'}
           </button>
-          <p className="m-0 mt-2 text-[11px] leading-snug text-mute">Off only in this view and its share link. The records are not changed.</p>
-        </Section>
-      )}
+        )}
+        <ul>
+          {listedEdges.slice(0, 150).map(({ edge, name }) => (
+            <li key={edge.id} data-off={offSet.has(edge.id) || undefined} className="flex h-6 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!offSet.has(edge.id)}
+                onChange={() => switchLinks([edge.id], offSet.has(edge.id))}
+                aria-label={`Show the line ${name}`}
+                className="accent-[var(--color-accent)]"
+              />
+              <button
+                type="button"
+                className={`min-w-0 flex-1 truncate text-left hover:text-accent ${offSet.has(edge.id) ? 'text-mute line-through' : ''}`}
+                title={`${name}: ${KIND_LABELS[edge.kind].toLowerCase()}. Open its details.`}
+                onClick={() => pick(edge.id)}
+              >
+                {name}
+              </button>
+            </li>
+          ))}
+        </ul>
+        {listedEdges.length > 150 && <p className="m-0 mt-1 text-[11px] text-mute">And {listedEdges.length - 150} more: click a line on the graph to reach it.</p>}
+        {edges.length === 0 && <p className="m-0 text-mute">No lines in view.</p>}
+      </Section>
       <Section id="graph-path" title="Find a path">
         <div className="space-y-1.5">
           <NodePicker label="From" value={from} onPick={setPathFrom} />
@@ -399,7 +421,7 @@ export function GraphPage() {
           title="Fade this record's lines in this view, or bring them back. The records are not changed."
           onClick={() => switchLinks(its.map((edge) => edge.id), allOff)}
         >
-          {allOff ? `Switch its ${its.length === 1 ? 'link' : `${its.length} links`} back on` : `Switch off its ${its.length === 1 ? 'link' : `${its.length} links`}`}
+          {allOff ? `Show its ${its.length === 1 ? 'line' : `${its.length} lines`}` : `Hide its ${its.length === 1 ? 'line' : `${its.length} lines`}`}
         </button>
       )}
       {node.hidden > 0 && (
@@ -466,9 +488,9 @@ export function GraphPage() {
               className={buttonClass}
               onClick={() => switchLinks([selectedEdge.id], offSet.has(selectedEdge.id))}
             >
-              {offSet.has(selectedEdge.id) ? 'Switch this link on' : 'Switch this link off'}
+              {offSet.has(selectedEdge.id) ? 'Show this line' : 'Hide this line'}
             </button>
-            {offSet.has(selectedEdge.id) && <span className="text-[11px] text-mute">Off in this view only.</span>}
+            {offSet.has(selectedEdge.id) && <span className="text-[11px] text-mute">Hidden in this view only.</span>}
           </div>
         </div>
         {selectedEdge.evidence.length > 0 && (
@@ -571,7 +593,7 @@ export function GraphPage() {
           <p className="m-0 leading-snug text-mute">
             Each mark is an organisation, drawn as on the map. A line is something on record between two of them. Click a
             mark for its details, double-click to bring in what it is connected to, and click a line to see what it stands
-            for. A line, or all of a record's lines, can be switched off to clear the view and switched back on.
+            for. To hide a line and show it again, use the ticks under Lines on the left, or click the line itself.
           </p>
         </Section>
         <Section id="graph-legend" title="Legend">
