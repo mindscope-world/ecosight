@@ -45,6 +45,7 @@ DELAY = 1.0
 # SerpAPI: search engine results as data, with a free monthly allowance.
 SEARCH_URL = "https://serpapi.com/search.json"
 SEARCH_DELAY = 1.0
+MAX_FAILURES_IN_A_ROW = 4
 # The page a person can open to see the same results.
 RESULT_PAGES = {"google": "https://www.google.com/search?q=", "duckduckgo": "https://duckduckgo.com/?q="}
 # Words that end a registered name and are dropped when looking for it in a result.
@@ -337,12 +338,23 @@ def find(
     if search is not None:
         # Someone with profiles already offered but none chosen is left for a person, not searched for.
         wanted = [p for p in people if not p.profile and not p.current and not p.note]
+        failed = 0
         try:
             for done, person in enumerate(wanted, 1):
                 progress("searching the web", done, len(wanted))
-                for profile, source in search.profiles(person.name, [person.organisation, *person.aliases]).items():
+                try:
+                    found = search.profiles(person.name, [person.organisation, *person.aliases])
+                except httpx.HTTPError as error:
+                    # One slow or dropped answer is passed over, and asked again on the next run.
+                    # Several in a row mean the service cannot be reached.
+                    failed += 1
+                    if failed >= MAX_FAILURES_IN_A_ROW:
+                        raise SearchStopped(f"{failed} requests in a row failed, the last with {error!r}") from error
+                    continue
+                failed = 0
+                for profile, source in found.items():
                     candidates.setdefault(person.organisation_id, {}).setdefault(profile, source)
-        except (SearchStopped, httpx.HTTPError) as error:
+        except SearchStopped as error:
             stopped = f"The search stopped early: {error}. What was found before that stands."
         _reassign(people, candidates)
     return people, stopped
