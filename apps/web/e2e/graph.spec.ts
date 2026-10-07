@@ -60,7 +60,7 @@ test('switching kinds of link off and on changes what is drawn', async ({ page }
   // People are followed only when asked for.
   await page.getByLabel('Founded or leads').check();
   await expect(status(page)).toContainText('Nodes5');
-  await expect(page).toHaveURL(/k=accelerated_at,organised,has_role/);
+  await expect(page).toHaveURL(/k=accelerated_at,organised,[a-z_,]*partner_of,has_role$/);
 });
 
 test('the path finder gives the chain between two organisations, or says there is none', async ({ page }) => {

@@ -316,7 +316,12 @@ export function App() {
       if (feature.properties.is_hq || !headquarters.has(feature.properties.org_id))
         headquarters.set(feature.properties.org_id, feature.geometry.coordinates as [number, number]);
     const ends: [number, number][] = [
-      ...[...org.connections.investors, ...org.connections.portfolio].flatMap((other) => {
+      ...[
+        ...org.connections.investors,
+        ...org.connections.portfolio,
+        ...org.connections.programs.map((item) => item.organisation),
+        ...org.connections.affiliations.map((item) => item.organisation),
+      ].flatMap((other) => {
         const place = headquarters.get(other.id);
         return place ? [place] : [];
       }),

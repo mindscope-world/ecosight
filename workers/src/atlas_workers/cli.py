@@ -149,6 +149,24 @@ def cmd_locations(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_links(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .links import apply, read_file, resolve, summarise
+
+    path = Path(args.file)
+    links = read_file(path)
+    with psycopg.connect(config.database_url()) as conn:
+        resolve(conn, links)
+        print(summarise(links))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to load.")
+            return 0
+        apply(conn, links, f"{path.stem}/links", args.snapshot)
+    print("\nLoaded.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="atlas")
     commands = parser.add_subparsers(required=True)
@@ -189,6 +207,12 @@ def main() -> int:
     places.add_argument("file")
     places.add_argument("--apply", action="store_true", help="write to the database")
     places.set_defaults(run=cmd_locations)
+
+    ties = commands.add_parser("import-links", help="load relationships between organisations from a CSV (dry run unless --apply)")
+    ties.add_argument("file")
+    ties.add_argument("--apply", action="store_true", help="write to the database")
+    ties.add_argument("--snapshot", default=date.today().isoformat(), help="date the research was done (YYYY-MM-DD)")
+    ties.set_defaults(run=cmd_links)
 
     args = parser.parse_args()
     return args.run(args)

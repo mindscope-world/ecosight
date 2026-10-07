@@ -482,6 +482,7 @@ The canvas fills the screen. Controls and details become bottom sheets, as in th
 
 - **Opens on the whole network**, not an empty start screen: every investment, programme and event link on record, up to 300 nodes. The owner asked for all known relations to be shown at once. `GraphStart` is the search box and the most connected list in the left panel.
 - **Drawn in SVG with d3-force**, not Cytoscape or Sigma: the layout is worked out in one go, so it does not animate and the same graph always looks the same. The page's first load is about 90 KB.
+- **More kinds of link than specified.** Besides the six in `RelationshipFilter` there are six ties between organisations: is part of, is hosted by, is a member of, was founded by, is backed by, is a partner of. They are on by default, and a selected link shows the words and the source it rests on. The details panel lists them from the organisation's own side ("Part of", "Hosts").
 - **Not built:** `GraphFilters` (the API accepts the map's filters; the page does not offer them yet), the radial layout, paging past 40 neighbours per expansion, and pinch-zoom on touch screens (the buttons work).
 
 ## 16. Dashboard page

@@ -37,10 +37,11 @@ Checks pass: 71 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, 
 - **Funding rounds** (`curation/nairobi_startups_funding_rounds.json`): read by hand from the startups dataset's funding notes, each with the words it was read from, plus 16 items deliberately not recorded as rounds.
 - **Investors dataset** (`datasets/nairobi-investors-2026-10-07/`): 25 rows; 23 published, 2 drafts. Five were merged into investors already known from funding rounds.
 - **East Africa dataset** (`datasets/east-africa-2026-10-07/`): 100 universities, public bodies, NGOs and innovation hubs in nine countries; 96 published, 4 drafts. Five were merged into organisations already on record. Each row's type, city, country code and sector tags were set by hand in `curation/east_africa_100_organizations.mapping.json`. 68 are placed on a building or street, 32 at their city's centre.
+- **Stated relationships** (`curation/stated_relationships.csv`): 19 ties read by hand from the two datasets' own text, each with the words it rests on. 16 are published; 3 name an organisation that is not on record and wait in the review queue.
 - **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
-### Database (Postgres, PostGIS, pgvector, pg_trgm; eight migrations)
+### Database (Postgres, PostGIS, pgvector, pg_trgm; nine migrations)
 
 Organisations with eleven entity types, other names they go by, founded year, active status and funding note; offices at address, area or city precision in any country; funding rounds with date precision; round investors; programs; events; people in roles; per-field sources with their stated basis; review queue; audit log; submissions; claims; private fund tables under row-level security; a view of per-organisation funding facts; full-text search; a rule that keeps angels at city level.
 
@@ -62,6 +63,7 @@ Four pages.
 
 ### Pipeline (Python)
 
+- `atlas import-links`: relationships between organisations from a CSV, published only when both organisations are on record and the row has a source; the rest go to the review queue.
 - `atlas import-orgs`: dataset importer with a dry-run report, column mappings for other datasets, cached geocoding that refuses lookalike matches, merging into records already on file, values a curator sets for one row, and address lookup in any city.
 - `atlas import-rounds`: loads curated rounds and refuses any whose quote is not in the stored note.
 - `atlas import-locations`: places organisations that have no office at a named city.
@@ -90,6 +92,7 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 | 1.4 | Check the investors import | One investor in the dataset is treated as the same organisation as a differently named investor in a funding round; two rows are held as drafts. Both judgments are in the mapping file under `curation/` |
 | 1.5 | Review the 37 drafts | In particular the 6 startups marked inactive or unclear, and the 4 East African bodies held back: two replaced by successor agencies, one the research calls historical, one whose status is unclear |
 | 1.5b | Check the East Africa import | `curation/east_africa_100_organizations.mapping.json`: the type and sector tags given to each of the 100 rows are the curator's reading of the dataset's descriptions. Leadership was loaded only where a person is named as a founder (11 people at 6 organisations) |
+| 1.5c | Check the stated relationships | `curation/stated_relationships.csv`: 16 ties published from the datasets' own wording. Judgments to confirm: a campus inside an innovation district is recorded as "hosted by" it; a startup with an office in a hub's building as "hosted by" the hub; a portfolio listing with no round as "backed by". Three rows wait in the queue because the other organisation is not on record |
 | 1.6 | Merge the `beyond-kenya` branch | Needs a pull request into `main` |
 | 1.7 | Confirm the decisions listed in section 1 | They were taken on recommendation, not signed off |
 | 1.8 | Copy the reference screenshot into `docs/reference/` | The map app has never been compared with it |
@@ -134,8 +137,8 @@ Items 3.5 to 3.8 are next and need nothing from the owner.
 | 3.7 | ~~Links between the map and the graph~~ | Done | "View connections" in the map's and the dashboard's details panels; "Show on map" from the graph. Both are share links |
 | 3.8 | ~~Tests~~ | Done for now | 28 API tests for the graph queries and six browser tests for the page. When Memgraph arrives: a check that it matches Postgres after a sync |
 | 3.8b | ~~Dashboard of tables~~ | Done | At `/dashboard/`, fed by a new `/orgs` list route. Not built: export to a file, and an events table (there are no events) |
-| 3.8c | Relationship data | Data | **The graph is thin.** 37 investment links and nothing else between organisations: no programme, event or partnership links. The 96 East African institutions have no links at all. Needs relationship datasets (3.9) |
-| 3.9 | Ingestors, through the review queue | Backend | Relationship CSVs first (the importer already reads organisations). Then external APIs and other databases, once the owner names them. Each matches incoming names to existing records before proposing anything |
+| 3.8c | Relationship data | Data | **The graph is still thin**, though less so: 37 investment links, 3 programme places and 13 other ties (part of, hosted by, member of, founded by, backed by), on 79 organisations. Most of the East African institutions still have no links. Needs relationship datasets from the owner: programme cohorts, partnerships, grants. The file format is in `datasets/README.md` |
+| 3.9 | Ingestors, through the review queue | Backend | **Relationship CSVs: done.** `atlas import-links` reads "from, relation, to" rows with a source link and a quote. A row whose two organisations are both published and which has a source is loaded; every other row goes to the review queue with its reason. No organisation is created from a name and no name is matched by guesswork. Six new kinds of tie live in `organisation_link` (migration 0009); programme places use the programme tables. First file loaded: 19 relationships stated in the datasets already held, 16 published and 3 queued. **Still to do:** external APIs and other databases, once the owner names them |
 | 3.10 | Pitch decks | Owner + backend | Upload, private storage, extraction by a language model, and review before anything is published. Blocked on the owner: decks are confidential, and their text would go to a hosted model |
 | 3.11 | Deploy Memgraph | Owner + backend | **Deferred until there is revenue.** On a host with enough memory and a persistent volume at `/var/lib/memgraph`, with the worker as its own service and a written procedure for rebuilding the graph from Postgres |
 | 3.12 | Founders' universities | Owner | `FOUNDER_ALMA_MATER` is in the proposal. It is personal data of a kind the product has avoided so far and needs a decision before any is loaded |
@@ -236,7 +239,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 7 | Advanced map | Selection, time, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility, missing pages | Backups, security, legal | Medium, then Critical |
 
-Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); what the graph needs now is relationship data (3.8c, 3.9). Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
+Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); the relationship importer is built and the first ties are loaded (3.9). What the graph needs now is more relationship data from the owner (3.8c), and the review screen (5.2) to settle what the importer queues. Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
 
 ## 4. Waiting on the owner
 

@@ -38,6 +38,29 @@ The importer identifies a dataset by its file name, so a file can move between
 folders without being treated as a new dataset. Do not rename a file that has
 already been loaded.
 
+## Relationships
+
+A relationships file is a CSV with one tie per row:
+
+| Column | Holds |
+|--------|-------|
+| `from` | An organisation's name, as it is on record or another name it goes by |
+| `relation` | `part of`, `hosted by`, `member of`, `founded by`, `funded by` (or `backed by`), `partner of`, or `accelerated at` for a programme. The reverse wordings `hosts`, `founded`, `funds` and `invested in` are understood too |
+| `to` | The other organisation |
+| `label` | Optional. A few words on the tie; for a programme, its name |
+| `source` | A link to where this is stated. A row without one is not published |
+| `quote` | Optional. The words it rests on |
+
+```sh
+uv run atlas import-links ../curation/stated_relationships.csv --snapshot 2026-10-07          # dry run
+uv run atlas import-links ../curation/stated_relationships.csv --snapshot 2026-10-07 --apply
+```
+
+Load it after the organisations it names. A row is published when both
+organisations are on record and published and it has a source. Any other row is
+not loaded: it is put in the review queue with the reason. A funding round with a
+stage, amount or date belongs in a rounds file instead.
+
 ## Adding a dataset
 
 1. Make a folder `<place>-<what>-<research date>/` and put the file in it.

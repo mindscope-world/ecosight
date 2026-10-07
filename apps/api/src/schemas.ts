@@ -78,6 +78,11 @@ export const OrgDetail = Type.Object({
     portfolio: Type.Array(OrgLink),
     programs: Type.Array(Type.Object({ name: Type.String(), organisation: OrgLink })),
     events: Type.Array(Type.Object({ id: Type.String({ format: 'uuid' }), name: Type.String() })),
+    // Other ties to organisations: part of, hosted by, member of, founded by, backed by, partner of.
+    // `outgoing` is true when this organisation is the one that is part of, hosted by, and so on.
+    affiliations: Type.Array(
+      Type.Object({ kind: Type.String(), outgoing: Type.Boolean(), label: Nullable(Type.String()), organisation: OrgLink }),
+    ),
     people: Type.Array(Type.Object({ name: Type.String(), role: Type.String() })),
   }),
   sources: Type.Array(FieldSource),
@@ -264,6 +269,12 @@ export const GraphEdge = Type.Object({
     Type.Literal('invested_in'),
     Type.Literal('accelerated_at'),
     Type.Literal('organised'),
+    Type.Literal('part_of'),
+    Type.Literal('hosted_by'),
+    Type.Literal('member_of'),
+    Type.Literal('founded_by'),
+    Type.Literal('funded_by'),
+    Type.Literal('partner_of'),
     Type.Literal('has_role'),
     Type.Literal('located_in'),
     Type.Literal('in_sector'),
@@ -284,6 +295,8 @@ export const GraphEdge = Type.Object({
       source_url: Nullable(Type.String()),
     }),
   ),
+  // What a tie between organisations, or a place on a programme, was read from. Empty for other kinds.
+  evidence: Type.Array(Type.Object({ source_url: Nullable(Type.String()), quote: Nullable(Type.String()) })),
 });
 export type GraphEdge = Static<typeof GraphEdge>;
 

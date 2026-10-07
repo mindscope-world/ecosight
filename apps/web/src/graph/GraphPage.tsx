@@ -413,6 +413,25 @@ export function GraphPage() {
           </div>
           {selectedEdge.label && <p className="m-0 mt-2">{selectedEdge.label}</p>}
         </div>
+        {selectedEdge.evidence.length > 0 && (
+          <section className="border-t border-line px-3 py-2.5">
+            <MicroLabel>Source</MicroLabel>
+            <ul className="mt-1.5 space-y-2">
+              {selectedEdge.evidence.map((item, index) => (
+                <li key={index}>
+                  {item.quote && <p className="m-0 leading-snug">“{item.quote}”</p>}
+                  {item.source_url && /^https?:\/\//i.test(item.source_url) ? (
+                    <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-accent2 underline">
+                      {new URL(item.source_url).hostname}
+                    </a>
+                  ) : (
+                    <span className="text-[11px] text-mute">No link recorded</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {selectedEdge.rounds.length > 0 && (
           <section className="border-t border-line px-3 py-2.5">
             <MicroLabel>Rounds · {selectedEdge.rounds.length}</MicroLabel>

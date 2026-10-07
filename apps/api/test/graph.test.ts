@@ -246,6 +246,51 @@ describe('GET /graph/co-investment', () => {
   });
 });
 
+describe('ties between organisations', () => {
+  it('are links of their own kinds, with their source, and show on both organisations', async () => {
+    const hub = ids['sample-accelerator-01']!;
+    const fund = ids['sample-fund-02']!;
+    const [link] = await sql`
+      insert into organisation_link (source_id, target_id, kind, label, status)
+      values (${hub}, ${fund}, 'hosted_by', 'Shares its office', 'draft') returning id`;
+    await sql`
+      insert into field_source (record_type, record_id, field, source_url, method, quote)
+      values ('organisation_link', ${link!.id}, 'link', 'https://example.org/tie', 'manual', 'hosted by the fund')`;
+    try {
+      // A draft tie is not shown anywhere.
+      expect((await app.inject(`/graph/neighbourhood?id=${fund}`)).json().nodes).toHaveLength(1);
+      expect((await app.inject(`/orgs/${fund}`)).json().connections.affiliations).toEqual([]);
+
+      await sql`update organisation_link set status = 'published' where id = ${link!.id}`;
+      const body = (await app.inject(`/graph/neighbourhood?id=${fund}`)).json();
+      expect(body.nodes.map((node: any) => node.name).sort()).toEqual(['Sample Accelerator 01', 'Sample Fund 02']);
+      expect(body.edges).toHaveLength(1);
+      expect(body.edges[0]).toMatchObject({
+        kind: 'hosted_by', source: org('sample-accelerator-01'), target: org('sample-fund-02'), label: 'Shares its office',
+        evidence: [{ source_url: 'https://example.org/tie', quote: 'hosted by the fund' }],
+      });
+
+      // The same tie reads from either side in the details.
+      const hosted = (await app.inject(`/orgs/${hub}`)).json().connections.affiliations;
+      expect(hosted).toEqual([
+        { kind: 'hosted_by', outgoing: true, label: 'Shares its office', organisation: expect.objectContaining({ name: 'Sample Fund 02' }) },
+      ]);
+      const host = (await app.inject(`/orgs/${fund}`)).json().connections.affiliations;
+      expect(host[0]).toMatchObject({ outgoing: false, organisation: { name: 'Sample Accelerator 01' } });
+
+      // It joins what were two separate parts of the network.
+      const path = (await app.inject(`/graph/path?from=${ids['sample-startup-01']}&to=${fund}`)).json();
+      expect(path).toMatchObject({ found: true, length: 2 });
+      // And can be left out like any other kind.
+      const without = (await app.inject(`/graph/neighbourhood?id=${fund}&kinds=invested_in`)).json();
+      expect(without.nodes).toHaveLength(1);
+    } finally {
+      await sql`delete from field_source where record_id = ${link!.id}`;
+      await sql`delete from organisation_link where id = ${link!.id}`;
+    }
+  });
+});
+
 describe('GET /graph/overview', () => {
   it('returns the whole network of the kinds asked for', async () => {
     const res = await app.inject('/graph/overview');

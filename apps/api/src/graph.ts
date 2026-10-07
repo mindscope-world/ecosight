@@ -8,7 +8,9 @@ import type { GraphEdge, GraphNode, OrgType } from './schemas.js';
 // query. That is enough for a graph of this size; a graph database takes over
 // the walking when the data outgrows it (ADR 0003).
 
-export const EDGE_KINDS = ['invested_in', 'accelerated_at', 'organised', 'has_role', 'located_in', 'in_sector'] as const;
+/** Ties between two organisations kept in organisation_link. */
+export const LINK_KINDS = ['part_of', 'hosted_by', 'member_of', 'founded_by', 'funded_by', 'partner_of'] as const;
+export const EDGE_KINDS = ['invested_in', 'accelerated_at', 'organised', ...LINK_KINDS, 'has_role', 'located_in', 'in_sector'] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
 /**
@@ -16,7 +18,7 @@ export type EdgeKind = (typeof EDGE_KINDS)[number];
  * asked for, and so are places and sectors: nearly everything is "connected"
  * through Nairobi or fintech, which says nothing.
  */
-export const DEFAULT_KINDS: EdgeKind[] = ['invested_in', 'accelerated_at', 'organised'];
+export const DEFAULT_KINDS: EdgeKind[] = ['invested_in', 'accelerated_at', 'organised', ...LINK_KINDS];
 
 /** Longest any one graph query may run. */
 const QUERY_TIMEOUT_MS = 3000;
@@ -72,6 +74,7 @@ export function parseKinds(given: string | undefined): EdgeKind[] {
   return kinds as EdgeKind[];
 }
 
+const isLinkKind = (kind: string) => (LINK_KINDS as readonly string[]).includes(kind);
 const orgUuid = (id: string) => (id.startsWith('org:') ? id.slice(4) : null);
 const rank = (id: string) => KIND_ORDER.indexOf(id.slice(0, id.indexOf(':')));
 const byKindThenId = (a: string, b: string) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0);
@@ -243,7 +246,7 @@ async function buildEdges(tx: Tx, rows: EdgeRow[]): Promise<GraphEdge[]> {
     const id = `${row.kind}|${row.source}|${row.target}`;
     let edge = edges.get(id);
     if (!edge) {
-      edge = { id, kind: row.kind, source: row.source, target: row.target, label: null, rounds: [], refs: [], labels: new Set() };
+      edge = { id, kind: row.kind, source: row.source, target: row.target, label: null, rounds: [], evidence: [], refs: [], labels: new Set() };
       edges.set(id, edge);
     }
     if (row.ref_id && !edge.refs.includes(row.ref_id)) edge.refs.push(row.ref_id);
@@ -267,6 +270,24 @@ async function buildEdges(tx: Tx, rows: EdgeRow[]): Promise<GraphEdge[]> {
       from funding_round r where r.id = any(${roundIds}::uuid[])
     `;
     for (const round of found) rounds.set(round.id, round);
+  }
+
+  // A tie between organisations, or a place on a programme, carries the source it was read from.
+  const sourced = [...edges.values()].filter((edge) => edge.kind === 'accelerated_at' || isLinkKind(edge.kind));
+  if (sourced.length) {
+    const found = await tx<{ record_id: string; field: string; source_url: string | null; quote: string | null }[]>`
+      select s.record_id, s.field, s.source_url, s.quote from field_source s
+      where s.record_type in ('organisation_link', 'program')
+        and s.record_id = any(${sourced.flatMap((edge) => edge.refs)}::uuid[])
+      order by s.source_url
+    `;
+    for (const edge of sourced) {
+      // A programme's sources are kept per participant; a tie's are its own.
+      const field = edge.kind === 'accelerated_at' ? `participant:${edge.source.slice(4)}` : 'link';
+      edge.evidence = found
+        .filter((row) => edge.refs.includes(row.record_id) && row.field === field)
+        .map(({ source_url, quote }) => ({ source_url, quote }));
+    }
   }
 
   return [...edges.values()]

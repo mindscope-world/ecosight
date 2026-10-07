@@ -113,6 +113,17 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
               from event e
               where e.organiser_id = g.id and e.status = 'published'
             ), '[]'::jsonb),
+            'affiliations', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                'kind', l.kind, 'outgoing', l.source_id = g.id, 'label', l.label,
+                'organisation', jsonb_build_object('id', x.id, 'name', x.name, 'types', x.types)
+              ) order by l.kind, x.name)
+              from organisation_link l
+              join organisation x
+                on x.id = case when l.source_id = g.id then l.target_id else l.source_id end
+                and x.status = 'published'
+              where l.status = 'published' and (l.source_id = g.id or l.target_id = g.id)
+            ), '[]'::jsonb),
             'people', coalesce((
               select jsonb_agg(jsonb_build_object('name', pr.name, 'role', pr.role) order by pr.name)
               from person_role pr

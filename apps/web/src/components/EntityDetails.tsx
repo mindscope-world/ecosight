@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { EventDetail, OrgDetail, OrgLink } from '../api';
 import { layerForTypes, POINT_LAYERS, TYPE_LABELS } from '../entities';
 import { formatDate, formatDateTime, formatMoney, formatPartialDate, formatUsd } from '../lib/format';
+import { AFFILIATION_LABELS } from '../graph/style';
 import { Icon, MicroLabel, ShapeIcon } from './ui';
 
 export type Detail =
@@ -84,8 +85,14 @@ function OrgBody({
   const layer = layerForTypes(org.types);
   const hq = org.offices[0];
   const latest = org.rounds[0];
-  const { investors, portfolio, programs, events, people } = org.connections;
-  const connected = investors.length + portfolio.length + programs.length + events.length + people.length;
+  const { investors, portfolio, programs, events, people, affiliations } = org.connections;
+  const connected = investors.length + portfolio.length + programs.length + events.length + people.length + affiliations.length;
+  // Ties grouped by how they read from this organisation's side: "Part of", "Hosts".
+  const ties = new Map<string, typeof affiliations>();
+  for (const item of affiliations) {
+    const label = AFFILIATION_LABELS[item.kind]?.[item.outgoing ? 0 : 1] ?? item.kind;
+    ties.set(label, [...(ties.get(label) ?? []), item]);
+  }
   // Investors and programs are described by what they back, not by what they raised.
   const company = org.types.includes('startup');
   return (
@@ -195,6 +202,16 @@ function OrgBody({
             </div>
           ))}
         </Group>
+        {[...ties].map(([label, items]) => (
+          <Group key={label} label={label} count={items.length}>
+            {items.map((item) => (
+              <div key={`${item.kind}-${item.organisation.id}`}>
+                <OrgButton org={item.organisation} onSelect={onSelect} />
+                {item.label && <div className="-mt-1 pl-[19px] text-[11px] text-mute">{item.label}</div>}
+              </div>
+            ))}
+          </Group>
+        ))}
         <Group label="Events" count={events.length}>
           {events.map((item) => {
             const pin = POINT_LAYERS.find((entry) => entry.id === 'events')!;

@@ -71,6 +71,8 @@ export interface OrgDetail {
     portfolio: OrgLink[];
     programs: { name: string; organisation: OrgLink }[];
     events: { id: string; name: string }[];
+    /** `outgoing` is true when this organisation is the one that is part of, hosted by, and so on. */
+    affiliations: { kind: string; outgoing: boolean; label: string | null; organisation: OrgLink }[];
     people: { name: string; role: string }[];
   };
   sources: {
@@ -267,7 +269,9 @@ export async function fetchOrgRows(signal?: AbortSignal): Promise<OrgRow[]> {
   }
 }
 
-export const EDGE_KINDS = ['invested_in', 'accelerated_at', 'organised', 'has_role', 'located_in', 'in_sector'] as const;
+export const LINK_KINDS = ['part_of', 'hosted_by', 'member_of', 'founded_by', 'funded_by', 'partner_of'] as const;
+export type LinkKind = (typeof LINK_KINDS)[number];
+export const EDGE_KINDS = ['invested_in', 'accelerated_at', 'organised', ...LINK_KINDS, 'has_role', 'located_in', 'in_sector'] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
 export interface GraphNode {
@@ -303,6 +307,8 @@ export interface GraphEdge {
   target: string;
   label: string | null;
   rounds: GraphRound[];
+  /** What a tie between organisations, or a place on a programme, was read from. */
+  evidence: { source_url: string | null; quote: string | null }[];
 }
 
 export interface GraphAnswer {
