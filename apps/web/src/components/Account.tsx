@@ -73,7 +73,8 @@ export function SignInForm({ compact = false }: { compact?: boolean }) {
 
 /** The account control in the header: sign in, or who is signed in and what they can reach. */
 export function AccountMenu({ me }: { me: Me | null }) {
-  const [open, setOpen] = useState(false);
+  // The landing page's "Sign in" arrives with ?signin, which opens this straight away.
+  const [open, setOpen] = useState(() => new URLSearchParams(location.search).has('signin'));
   const menu = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;

@@ -196,3 +196,52 @@ describe('the review queue', () => {
     expect((await queue()).pending).toBe(3);
   });
 });
+
+describe('saved views', () => {
+  const view = { name: 'Fintech in Nairobi', page: 'map', state: 'v=1&fs=fintech' };
+
+  it('belong to the signed-in user, and to nobody else', async () => {
+    expect((await app.inject({ url: '/me/saved', headers: { 'x-access-key': 'the-key' } })).statusCode).toBe(401);
+    const saved = await post('/me/saved', reviewer, view);
+    expect(saved.statusCode).toBe(200);
+    const { id } = saved.json();
+    try {
+      expect((await app.inject({ url: '/me/saved', headers: reviewer })).json().views).toEqual([
+        { id, ...view, created_at: expect.any(String) },
+      ]);
+      // The viewer sees none of it, and cannot remove it.
+      expect((await app.inject({ url: '/me/saved', headers: as('viewer-token') })).json().views).toEqual([]);
+      const theft = await app.inject({ method: 'DELETE', url: `/me/saved/${id}`, headers: as('viewer-token') });
+      expect(theft.json()).toEqual({ removed: false });
+      expect((await post('/me/saved', reviewer, { ...view, name: '   ' })).statusCode).toBe(422);
+      expect((await post('/me/saved', reviewer, { ...view, page: 'review' })).statusCode).toBe(400);
+    } finally {
+      const gone = await app.inject({ method: 'DELETE', url: `/me/saved/${id}`, headers: reviewer });
+      expect(gone.json()).toEqual({ removed: true });
+    }
+    expect((await app.inject({ url: '/me/saved', headers: reviewer })).json().views).toEqual([]);
+  });
+});
+
+describe('GET /notifications', () => {
+  it('lists what was published since a time, newest first, and never drafts', async () => {
+    const all = (await app.inject({ url: '/notifications?since=2000-01-01T00:00:00Z', headers: as('viewer-token') })).json();
+    const [counts] = await sql`
+      select (select count(*) from organisation where status = 'published')::int
+           + (select count(*) from funding_round where status = 'published')::int as total`;
+    expect(all.total).toBe(counts!.total);
+    expect(all.items).toHaveLength(20);
+    expect(all.items.some((item: any) => item.label.startsWith('Sample Draft'))).toBe(false);
+    const times = all.items.map((item: any) => item.at);
+    expect(times).toEqual([...times].sort().reverse());
+
+    const none = (await app.inject({ url: '/notifications?since=2999-01-01T00:00:00Z', headers: as('viewer-token') })).json();
+    expect(none).toEqual({ total: 0, items: [], waiting_review: null });
+  });
+
+  it('tells reviewers how much is waiting, and nobody else', async () => {
+    expect((await app.inject({ url: '/notifications', headers: reviewer })).json().waiting_review).toBe(3);
+    expect((await app.inject({ url: '/notifications', headers: as('viewer-token') })).json().waiting_review).toBeNull();
+    expect((await app.inject({ url: '/notifications', headers: { 'x-access-key': 'the-key' } })).json().waiting_review).toBeNull();
+  });
+});

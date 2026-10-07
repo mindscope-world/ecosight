@@ -41,7 +41,7 @@ Checks pass: 71 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, 
 - **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
-### Database (Postgres, PostGIS, pgvector, pg_trgm; eleven migrations)
+### Database (Postgres, PostGIS, pgvector, pg_trgm; twelve migrations)
 
 Organisations with eleven entity types, other names they go by, founded year, active status and funding note; offices at address, area or city precision in any country; funding rounds with date precision; round investors; programs; events; people in roles; per-field sources with their stated basis; review queue; audit log; submissions; claims; private fund tables under row-level security; a view of per-organisation funding facts; full-text search; a rule that keeps angels at city level.
 
@@ -175,10 +175,10 @@ The drafts, and the output of the pipeline and the importers, are approved on th
 |---|------|-------|-------|
 | 5.1 | Sign-in and roles | Backend | **Magic link: done.** Sign-in by emailed link through Supabase, with no library: the session is kept in the browser and sent with each request, and the API checks it with the project. Signing in proves an address; the `app_user` table (migration 0010, kept with `pnpm users`) says whether it is let in and as viewer, reviewer or admin. The shared access key still opens the app for reading. Proved on the live API with a temporary account in each role. **Not done:** Google and LinkedIn, which need OAuth apps only the owner can create; and a mail service, without which Supabase emails only the project's own members |
 | 5.2 | Review queue screen | Both | **Approve, reject, archive and reopen: done.** `/review/`, for reviewers only. Draft organisations and proposed relationships are listed with why each was held. Approving publishes; rejecting keeps it out, with a note; archiving sets aside what is incomplete or unverified, in a list of its own, until more is known. Any of the three can be reopened. For a relationship naming an organisation that is not on record, the reviewer chooses the record it means. Every decision is recorded with who made it and written to the audit log, and reloading a dataset keeps it. **Not done:** editing a record's fields, merging duplicates, and reopening an approved relationship |
-| 5.3 | Profile menu, saved locations, notifications | Both | The header icons are placeholders today |
+| 5.3 | ~~Profile menu, saved locations, notifications~~ | Done | The header's three icons work on every page. **Account:** sign in, who is signed in, sign out. **Saved views:** the page as it stands, under a name, to open again; kept with the account (migration 0012), or in the browser for someone who came in with the access key. **What is new:** what has been published since the reader last opened the list, and for reviewers how many items are waiting. Not built: notifications by email, and alerts on a saved view |
 | 5.4 | Submit an organisation or event; claim a profile by work email | Both | Tables exist |
 | 5.5 | Takedown and opt-out handling | Both | People named as founders must be able to ask for removal |
-| 5.6 | Sign in and sign up from the landing page | Frontend | "Sign in" is inactive and "Join the ecosystem" opens the repository |
+| 5.6 | Sign in and sign up from the landing page | Frontend | **Sign in: done.** The landing page's "Sign in" opens the map with the sign-in form showing. **Sign up** is not open: an address is let in only when it is on the list, so "Join the ecosystem" still opens the repository. That changes with 5.4 |
 
 ### Step 6 — Keep the data fresh (Medium)
 

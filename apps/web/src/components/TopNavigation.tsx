@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { VIEW_LABELS } from '../entities';
 import { PAGES, pageUrl } from '../pages';
 import { AccountMenu, canReview, useMe } from './Account';
+import { NotificationsMenu, SavedMenu } from './HeaderMenus';
 import { Icon } from './ui';
 
 /**
@@ -96,19 +97,8 @@ export function TopNavigation({
             <span className="rounded-sm bg-accent px-1 text-[10px] font-semibold text-bg">{activeFilters}</span>
           )}
         </button>
-        {/* Account features arrive with sign-in; shown so the header's shape is final. */}
-        {(['bell', 'bookmark'] as const).map((name) => (
-          <button
-            key={name}
-            type="button"
-            disabled
-            title={`${{ bell: 'Notifications', bookmark: 'Saved locations' }[name]}: not built yet`}
-            aria-label={{ bell: 'Notifications', bookmark: 'Saved locations' }[name]}
-            className="hidden h-7 w-7 place-items-center rounded text-mute/50 sm:grid"
-          >
-            <Icon name={name} size={15} />
-          </button>
-        ))}
+        <NotificationsMenu />
+        <SavedMenu page="map" me={me} />
         <AccountMenu me={me} />
       </div>
     </header>

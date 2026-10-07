@@ -460,3 +460,33 @@ export const settleReview = (
   action: 'approve' | 'reject' | 'archive' | 'reopen',
   body: { from_id?: string; to_id?: string; source_url?: string; note?: string } = {},
 ) => getJson<ReviewItem>(`/review/items/${id}/${action}`, undefined, body);
+
+export interface SavedView {
+  id: string;
+  name: string;
+  page: 'map' | 'graph' | 'dashboard';
+  /** The view's share-link state, without the leading #. */
+  state: string;
+  created_at: string;
+}
+
+export const fetchSaved = () => getJson<{ views: SavedView[] }>('/me/saved').then((answer) => answer.views);
+export const saveView = (view: Pick<SavedView, 'name' | 'page' | 'state'>) => getJson<SavedView>('/me/saved', undefined, view);
+export async function removeSaved(id: string): Promise<void> {
+  const token = await bearer();
+  const key = storedAccessKey();
+  await fetch(`${API_URL}/me/saved/${id}`, {
+    method: 'DELETE',
+    headers: { ...(key ? { 'x-access-key': key } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+  });
+}
+
+export interface Notifications {
+  total: number;
+  items: { kind: 'organisation' | 'round'; organisation_id: string; label: string; detail: string | null; at: string }[];
+  /** Items waiting in the review queue. Null for anyone who is not a reviewer. */
+  waiting_review: number | null;
+}
+
+export const fetchNotifications = (since: string | null) =>
+  getJson<Notifications>(`/notifications${since ? `?since=${encodeURIComponent(since)}` : ''}`);

@@ -509,6 +509,13 @@ Added and built Oct 7, 2026.
 
 In the header of every page. Signed out, it offers sign-in: an email address, then a link by email, with no password. Signed in, it shows the address and role, a way to the review queue for reviewers, and sign out. The access screen offers the same sign-in beside the access key, and says so plainly when a signed-in address has not been given access.
 
+### Saved views and what is new
+
+The bookmark and the bell beside the account menu.
+
+- **Saved views.** "Save this view" keeps the page as it stands (place, layers, filters, selection, or the graph or table in view) under a name. The list opens any of them again, from any page. With an account they are kept with it; someone who came in with the access key has them in that browser only, and is told so.
+- **What is new.** A count on the bell of what has been published since the list was last opened, the newest twenty listed, each opening its record on the map. A reviewer also sees how many items are waiting, with a way to the queue.
+
 ### Review queue, at `/review/`
 
 For reviewers. Anyone else is told so, and offered sign-in.

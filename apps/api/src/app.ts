@@ -6,6 +6,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify from 'fastify';
 import type { User, Verifier } from './auth.js';
 import type { Sql } from './db.js';
+import { accountRoutes } from './routes/account.js';
 import { eventRoutes } from './routes/events.js';
 import { graphRoutes } from './routes/graph.js';
 import { layerRoutes } from './routes/layers.js';
@@ -115,6 +116,7 @@ export async function buildApp({
   await app.register(statsRoutes, { sql });
   await app.register(graphRoutes, { sql });
   await app.register(reviewRoutes, { sql });
+  await app.register(accountRoutes, { sql });
 
   return app;
 }

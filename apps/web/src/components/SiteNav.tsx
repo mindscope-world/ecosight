@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { PAGES, pageUrl, type AnyPage } from '../pages';
 import { AccountMenu, canReview, useMe } from './Account';
+import { NotificationsMenu, SavedMenu } from './HeaderMenus';
 import { Logo } from './TopNavigation';
 
 const linkClass = (current: boolean) =>
@@ -29,6 +30,8 @@ export function SiteNav({ current, children }: { current: AnyPage; children?: Re
       </nav>
       <div className="ml-auto flex items-center gap-1.5">
         {children}
+        <NotificationsMenu />
+        {current !== 'review' && <SavedMenu page={current} me={me} />}
         <AccountMenu me={me} />
       </div>
     </header>

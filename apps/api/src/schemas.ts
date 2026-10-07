@@ -437,3 +437,31 @@ export const ReviewList = Type.Object({
   settled: Type.Integer(),
   items: Type.Array(ReviewItem),
 });
+
+export const SavedView = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  name: Type.String(),
+  page: Type.Union([Type.Literal('map'), Type.Literal('graph'), Type.Literal('dashboard')]),
+  // The view's share-link state, without the leading #.
+  state: Type.String(),
+  created_at: Type.String({ format: 'date-time' }),
+});
+export type SavedView = Static<typeof SavedView>;
+
+export const Notifications = Type.Object({
+  // Everything published since the time asked about; `items` holds the newest twenty.
+  total: Type.Integer(),
+  items: Type.Array(
+    Type.Object({
+      kind: Type.Union([Type.Literal('organisation'), Type.Literal('round')]),
+      organisation_id: Type.String({ format: 'uuid' }),
+      label: Type.String(),
+      // For a round, its stage.
+      detail: Nullable(Type.String()),
+      at: Type.String({ format: 'date-time' }),
+    }),
+  ),
+  // Items waiting in the review queue. Null for anyone who is not a reviewer.
+  waiting_review: Nullable(Type.Integer()),
+});
+export type Notifications = Static<typeof Notifications>;
