@@ -69,3 +69,32 @@
   border-color: var(--color-mute) !important;
   font-size: 10px;
 }
+
+/* The card beside a marker under the pointer. It never takes the pointer itself, or it would flicker. */
+.atlas-hover {
+  pointer-events: none;
+}
+
+.atlas-hover .maplibregl-popup-content {
+  padding: 6px 9px;
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  background: var(--color-panel);
+  color: var(--color-ink);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.5);
+}
+
+.atlas-hover .maplibregl-popup-content strong {
+  display: block;
+  font-weight: 600;
+}
+
+.atlas-hover .maplibregl-popup-content div div {
+  color: var(--color-mute);
+}
+
+.atlas-hover .maplibregl-popup-tip {
+  display: none;
+}

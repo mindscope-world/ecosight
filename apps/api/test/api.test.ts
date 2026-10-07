@@ -91,6 +91,10 @@ describe('GET /orgs', () => {
     expect(fund).toMatchObject({ types: ['fund'], portfolio: 6, city: 'Nairobi', country: 'KE', rounds: 0 });
     const startup = body.organisations.find((org: any) => org.name === 'Sample Startup 05');
     expect(startup).toMatchObject({ raised_usd: 500000, rounds: 1, investors: 1, portfolio: 0 });
+    // Dates the dashboard narrows its tables by.
+    expect(startup.added_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(startup.last_round_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(fund.last_round_on).toBeNull();
     const accelerator = body.organisations.find((org: any) => org.name === 'Sample Accelerator 01');
     expect(accelerator.participants).toBe(2);
     expect(body.organisations.find((org: any) => org.name === 'Sample Startup 01').people).toBe(1);
@@ -165,7 +169,7 @@ describe('GET /rounds/:id', () => {
     expect(accelerator.connections.events).toEqual([expect.objectContaining({ name: 'Sample Meetup 01' })]);
 
     const first = (await app.inject(`/orgs/${await id('sample-startup-01')}`)).json();
-    expect(first.connections.people).toEqual([{ name: 'Sample Founder', role: 'Co-founder' }]);
+    expect(first.connections.people).toEqual([{ name: 'Sample Founder', role: 'Co-founder', linkedin_url: null }]);
     expect(first.connections.programs[0].organisation.name).toBe('Sample Accelerator 01');
     expect(first.founded_year).toBeGreaterThan(2009);
   });

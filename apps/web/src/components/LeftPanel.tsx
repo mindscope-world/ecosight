@@ -1,5 +1,7 @@
 import type { CityStat, Stats } from '../api';
+import { dashboardHash } from '../dashboard/subsets';
 import { formatCount, trend } from '../lib/format';
+import { pageUrl } from '../pages';
 import { MicroLabel, Section, Tone } from './ui';
 
 export interface SectorShare {
@@ -8,41 +10,55 @@ export interface SectorShare {
   share: number;
 }
 
-function BigNumber({ value, label }: { value: number; label: string }) {
-  return (
-    <div>
-      <div className="text-[22px] font-semibold leading-tight tabular-nums">{formatCount(value)}</div>
+/** A headline figure that leads to the records it counts: a table on the dashboard, or a view of the map. */
+function BigNumber({ value, label, href, onClick, title }: { value: number; label: string; title: string; href?: string; onClick?: () => void }) {
+  const body = (
+    <>
+      <div className="text-[22px] font-semibold leading-tight tabular-nums group-hover:text-accent">{formatCount(value)}</div>
       <MicroLabel>{label}</MicroLabel>
-    </div>
+    </>
+  );
+  return href ? (
+    <a href={href} title={title} className="group block">
+      {body}
+    </a>
+  ) : (
+    <button type="button" title={title} className="group block text-left" onClick={onClick}>
+      {body}
+    </button>
   );
 }
 
 export function EcosystemOverview({
   counts,
   filtered,
+  onEvents,
 }: {
   counts: { startups: number; investors: number; accelerators: number; events: number };
   filtered: boolean;
+  /** Show the events on the map. */
+  onEvents: () => void;
 }) {
   return (
     <Section id="overview" title="Ecosystem overview" aside={filtered ? 'filtered' : undefined}>
       <div className="grid grid-cols-2 gap-x-3 gap-y-3 pt-1">
-        <BigNumber value={counts.startups} label="Startups" />
-        <BigNumber value={counts.investors} label="Investors" />
-        <BigNumber value={counts.accelerators} label="Accelerators" />
-        <BigNumber value={counts.events} label="Upcoming events" />
+        <BigNumber value={counts.startups} label="Startups" href={pageUrl('dashboard', dashboardHash('startups'))} title="List the startups on the dashboard" />
+        <BigNumber value={counts.investors} label="Investors" href={pageUrl('dashboard', dashboardHash('investors'))} title="List the investors on the dashboard" />
+        <BigNumber value={counts.accelerators} label="Accelerators" href={pageUrl('dashboard', dashboardHash('accelerators'))} title="List the accelerators on the dashboard" />
+        <BigNumber value={counts.events} label="Upcoming events" onClick={onEvents} title="Show the events on the map" />
       </div>
     </Section>
   );
 }
 
-export function ActivityPanel({ stats }: { stats: Stats }) {
+export function ActivityPanel({ stats, onEvents }: { stats: Stats; onEvents: () => void }) {
   const { activity } = stats;
+  // Each figure leads to the rows it counts, on the dashboard.
   const rows = [
-    { label: 'Startups added', period: '30 days', ...activity.startups_added },
-    { label: 'Funding rounds', period: '30 days', ...activity.rounds_announced },
-    { label: 'Active investors', period: '12 months', ...activity.active_investors },
-    { label: 'Programs added', period: '30 days', ...activity.programs_added },
+    { label: 'Startups added', period: '30 days', to: dashboardHash('startups', 'added'), what: 'the startups added', ...activity.startups_added },
+    { label: 'Funding rounds', period: '30 days', to: dashboardHash('startups', 'rounds'), what: 'the startups with a round announced', ...activity.rounds_announced },
+    { label: 'Active investors', period: '12 months', to: dashboardHash('investors', 'active'), what: 'the investors active', ...activity.active_investors },
+    { label: 'Programs added', period: '30 days', to: dashboardHash('accelerators', 'programs'), what: 'the organisations with a programme added', ...activity.programs_added },
   ];
   return (
     <Section id="activity" title="Ecosystem activity">
@@ -57,7 +73,13 @@ export function ActivityPanel({ stats }: { stats: Stats }) {
                 title={`Last ${row.period}, compared with the ${row.period} before (${row.previous}). A dash means the earlier period was empty.`}
               >
                 <td className="text-mute">
-                  {row.label} <span className="text-[10px]">{row.period.replace(' days', 'd').replace(' months', 'mo')}</span>
+                  <a
+                    href={pageUrl('dashboard', row.to)}
+                    className="hover:text-accent hover:underline"
+                    aria-label={`${row.label}, last ${row.period}: list ${row.what} on the dashboard`}
+                  >
+                    {row.label} <span className="text-[10px]">{row.period.replace(' days', 'd').replace(' months', 'mo')}</span>
+                  </a>
                 </td>
                 <td className="w-10 text-right font-medium tabular-nums">{formatCount(row.current)}</td>
                 <td className="w-14 text-right text-[11px]">
@@ -68,7 +90,9 @@ export function ActivityPanel({ stats }: { stats: Stats }) {
           })}
           <tr className="h-6">
             <td className="text-mute">
-              Upcoming events <span className="text-[10px]">30d</span>
+              <button type="button" className="hover:text-accent hover:underline" title="Show the events on the map" onClick={onEvents}>
+                Upcoming events <span className="text-[10px]">30d</span>
+              </button>
             </td>
             <td className="w-10 text-right font-medium tabular-nums">{activity.events_next_30_days}</td>
             <td />

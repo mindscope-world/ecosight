@@ -107,3 +107,30 @@ test('investors with no office can be listed on their own', async ({ page }) => 
   await expect(page.getByRole('button', { name: /Not on the map/ })).toHaveCount(0);
   await expect(page.locator('tbody tr')).toHaveCount(25);
 });
+
+test('a list linked from the map holds only the rows its figure counts', async ({ page }) => {
+  // Three startups are given a round announced this week on the way to the page.
+  const today = new Date().toISOString().slice(0, 10);
+  await page.route('**/orgs?*', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    let changed = 0;
+    for (const row of body.organisations) {
+      row.last_round_on = row.types.includes('startup') && changed++ < 3 ? today : null;
+    }
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto('/dashboard/#v=1&t=startups&w=rounds');
+  await expect(page.getByRole('button', { name: /A round announced in the last 30 days/ })).toBeVisible();
+  await expect(page.locator('tbody tr')).toHaveCount(3);
+  await expect(page.getByText('1–3 of 3 (30 in all)')).toBeVisible();
+
+  // On a tab with nothing to list, the way out is offered where the rows would be.
+  await page.goto('/dashboard/#v=1&t=investors&w=rounds');
+  await page.reload();
+  await expect(page.getByText('Nothing on this tab fits.')).toBeVisible();
+  await page.getByRole('button', { name: 'Show every row', exact: true }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(10);
+});
+

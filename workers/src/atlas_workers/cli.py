@@ -192,6 +192,30 @@ def cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_profiles(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .crawl import make_client
+    from .profiles import apply, find, summarise
+
+    def progress(done: int, total: int) -> None:
+        print(f"\rreading organisations' own sites: {done} of {total}", end="", file=sys.stderr, flush=True)
+
+    with psycopg.connect(config.database_url()) as conn:
+        if args.web:
+            with make_client() as client:
+                people = find(conn, client, progress)
+            print(file=sys.stderr)
+        else:
+            people = find(conn, None)
+        print(summarise(people))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to save.")
+            return 0
+        print(f"\nSaved {apply(conn, people)} profile link(s).")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="atlas")
     commands = parser.add_subparsers(required=True)
@@ -242,6 +266,11 @@ def main() -> int:
     convert = commands.add_parser("convert-rounds", help="give rounds in other currencies a US dollar amount (dry run unless --apply)")
     convert.add_argument("--apply", action="store_true", help="write to the database")
     convert.set_defaults(run=cmd_convert)
+
+    profiles = commands.add_parser("find-profiles", help="find people's LinkedIn profile links without visiting LinkedIn (dry run unless --apply)")
+    profiles.add_argument("--web", action="store_true", help="also read each organisation's own website for links to its people's profiles")
+    profiles.add_argument("--apply", action="store_true", help="write to the database")
+    profiles.set_defaults(run=cmd_profiles)
 
     args = parser.parse_args()
     return args.run(args)

@@ -330,9 +330,21 @@ export function App() {
     return ends.map((end) => greatCircle([home.lon, home.lat], end));
   }, [selected, detail, offices]);
 
+  // Whether the lines from the selected record are drawn. The reader can switch them off.
+  const [linesOn, setLinesOn] = useStored('ecosight-lines', true);
   useEffect(() => {
-    if (mapReady) map.current?.setLinks(links);
-  }, [links, mapReady]);
+    if (mapReady) map.current?.setLinks(linesOn ? links : []);
+  }, [links, linesOn, mapReady]);
+
+  // Where the selected record is drawn, so the map can ring it: every office of an organisation in view.
+  const selectedPlaces = useMemo<[number, number][]>(() => {
+    if (!selected) return [];
+    const places =
+      selected.kind === 'event'
+        ? visibleEvents.features.filter((feature) => feature.properties.event_id === selected.id)
+        : visible.filter((feature) => feature.properties.org_id === selected.id);
+    return places.map((feature) => feature.geometry.coordinates as [number, number]);
+  }, [selected, visible, visibleEvents]);
 
   const flyTo = useCallback((lon: number, lat: number, zoom: number) => {
     const current = map.current?.getCamera().zoom ?? 0;
@@ -459,6 +471,7 @@ export function App() {
         events: counts.events ?? 0,
       }}
       filtered={filtered}
+      onEvents={() => changeView('events')}
     />
   );
   const leftContent = stats ? (
@@ -469,7 +482,7 @@ export function App() {
         </p>
       )}
       {overview}
-      <ActivityPanel stats={stats} />
+      <ActivityPanel stats={stats} onEvents={() => changeView('events')} />
       <TopSectors sectors={sectors} onPick={(sector) => setFilters({ ...filters, sectors: [sector] })} />
       <CityList
         id="markets"
@@ -510,7 +523,22 @@ export function App() {
         setStack(null);
       }}
       back={stack ? { label: `${stack.items.length} at this location`, onBack: () => setSelected(undefined) } : undefined}
-      actions={(org) => <ActionLink href={graphUrlFor(org.id)}>View connections</ActionLink>}
+      actions={(org) => (
+        <>
+          <ActionLink href={graphUrlFor(org.id)}>View connections</ActionLink>
+          {links.length > 0 && (
+            <button
+              type="button"
+              aria-pressed={linesOn}
+              title="The lines from this record to those it is connected to"
+              className={`flex h-7 items-center rounded border px-2 text-xs hover:border-accent hover:text-accent ${linesOn ? 'border-accent text-accent' : 'border-line'}`}
+              onClick={() => setLinesOn(!linesOn)}
+            >
+              {linesOn ? 'Lines on' : 'Lines off'} · {links.length}
+            </button>
+          )}
+        </>
+      )}
     />
   ) : (
     stack && <StackList stack={stack} onSelect={select} onClose={() => setStack(null)} />
@@ -564,6 +592,7 @@ export function App() {
             initialCamera={initial.camera ?? DEFAULT_CAMERA}
             data={layerData}
             enabled={enabled}
+            selectedPlaces={selectedPlaces}
             onPick={pickOnMap}
             onCamera={() => setCamera((tick) => tick + 1)}
             onReady={() => setMapReady(true)}

@@ -2,6 +2,7 @@ import type { FeatureCollection, LineString, Point } from 'geojson';
 import {
   Map as MapLibreMap,
   NavigationControl,
+  Popup,
   ScaleControl,
   setWorkerUrl,
   type ExpressionSpecification,
@@ -14,7 +15,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ELEVATION_TILES, LABEL_FONT, type Basemap } from '../config';
 import { SHAPE_PATHS } from '../entities';
-import type { Camera, HeatLayerSpec, MapAdapter, PickedRecord, PointLayerSpec } from './adapter';
+import type { Camera, HeatLayerSpec, HoverCard, MapAdapter, PickedRecord, PointLayerSpec } from './adapter';
 import { distinctRecords, indexSpots, markerId, sharedSpots, spotKey, type Placed, type SpotIndex } from './spots';
 import { tintStyle } from './tint';
 
@@ -25,6 +26,9 @@ const POINT_SUFFIXES = ['clusters', 'cluster-count', 'points'];
 const ICON_PIXELS = 48;
 const LINKS = 'links';
 const SHARED = 'shared-spots';
+const SELECTED = 'selected';
+// One beat of the ring around the selected record, in milliseconds.
+const PULSE_MS = 1600;
 // How far from the pointer, in pixels, a marker still counts as clicked.
 const CLICK_REACH = 5;
 // Past this zoom a cluster is records on the same spot: zooming will not part them.
@@ -58,6 +62,20 @@ function markerImage(spec: PointLayerSpec): ImageData {
   return context.getImageData(0, 0, ICON_PIXELS, ICON_PIXELS);
 }
 
+/** The hover card as elements. Text is set as text, so nothing in a record's name is read as markup. */
+function cardElement(card: HoverCard): HTMLElement {
+  const box = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = card.title;
+  box.append(title);
+  for (const line of card.lines) {
+    const row = document.createElement('div');
+    row.textContent = line;
+    box.append(row);
+  }
+  return box;
+}
+
 export class MapLibreAdapter implements MapAdapter {
   private readonly map: MapLibreMap;
   private readonly ready: Promise<void>;
@@ -66,6 +84,10 @@ export class MapLibreAdapter implements MapAdapter {
   private links: [number, number][][] = [];
   private spots: SpotIndex = { bySpot: new Map(), byMarker: new Map() };
   private pickListener: (records: PickedRecord[]) => void = () => {};
+  private describe: (record: PickedRecord) => HoverCard | null = () => null;
+  private readonly hoverPopup = new Popup({ closeButton: false, closeOnClick: false, offset: 14, maxWidth: '260px', className: 'atlas-hover' });
+  private highlight: [number, number][] = [];
+  private pulse = 0;
   private styleReady = false;
   private basemap: Basemap;
 
@@ -87,6 +109,7 @@ export class MapLibreAdapter implements MapAdapter {
       for (const id of this.layers.keys()) this.draw(id);
       this.drawLinks();
       this.drawShared();
+      this.drawHighlight();
     });
     // One listener for every layer. A listener per layer would each answer for
     // its own marker, and the last to answer would hide the others.
@@ -148,6 +171,75 @@ export class MapLibreAdapter implements MapAdapter {
       map.on('mouseenter', layer, () => (map.getCanvas().style.cursor = 'pointer'));
       map.on('mouseleave', layer, () => (map.getCanvas().style.cursor = ''));
     }
+    // A card beside the marker under the pointer, gone as soon as the pointer leaves it.
+    map.on('mousemove', `${id}-points`, (event) => {
+      const hit = event.features?.[0];
+      if (!hit || hit.geometry.type !== 'Point') return;
+      // The drawn copy of a marker is rounded to its tile; the record itself has the true place.
+      const placed = this.spots.byMarker.get(`${id}|${markerId(hit.properties ?? {})}`);
+      const card = this.describe({ layer: id, properties: placed?.properties ?? hit.properties ?? {} });
+      if (!card) return this.hoverPopup.remove();
+      const at = placed ? ([placed.lon, placed.lat] as [number, number]) : (hit.geometry.coordinates as [number, number]);
+      this.hoverPopup.setLngLat(at).setDOMContent(cardElement(card)).addTo(map);
+    });
+    map.on('mouseleave', `${id}-points`, () => this.hoverPopup.remove());
+    // The ring around the selected record stays above every layer of markers.
+    for (const layer of [`${SELECTED}-pulse`, `${SELECTED}-ring`]) if (map.getLayer(layer)) map.moveLayer(layer);
+  }
+
+  onHover(describe: (record: PickedRecord) => HoverCard | null): void {
+    this.describe = describe;
+  }
+
+  setHighlight(places: [number, number][]): void {
+    this.highlight = places;
+    const source = this.map.getSource<GeoJSONSource>(SELECTED);
+    if (source) source.setData(this.highlightData());
+    else this.drawHighlight();
+    this.beat();
+  }
+
+  private highlightData(): FeatureCollection<Point> {
+    return {
+      type: 'FeatureCollection',
+      features: this.highlight.map((coordinates) => ({ type: 'Feature', geometry: { type: 'Point', coordinates }, properties: {} })),
+    };
+  }
+
+  /** A steady ring round the selected marker, and a second that swells and fades. */
+  private drawHighlight(): void {
+    const map = this.map;
+    if (!this.styleReady || map.getSource(SELECTED)) return;
+    map.addSource(SELECTED, { type: 'geojson', data: this.highlightData() });
+    map.addLayer({
+      id: `${SELECTED}-pulse`,
+      type: 'circle',
+      source: SELECTED,
+      paint: { 'circle-radius': 16, 'circle-color': '#22d3ee', 'circle-opacity': 0.12, 'circle-stroke-width': 2, 'circle-stroke-color': '#22d3ee', 'circle-stroke-opacity': 0.6 },
+    });
+    map.addLayer({
+      id: `${SELECTED}-ring`,
+      type: 'circle',
+      source: SELECTED,
+      paint: { 'circle-radius': 15, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' },
+    });
+  }
+
+  /** Keeps the outer ring moving while something is selected. Still for readers who ask for less motion. */
+  private beat(): void {
+    cancelAnimationFrame(this.pulse);
+    if (!this.highlight.length || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const step = (now: number) => {
+      const map = this.map;
+      if (map.getLayer(`${SELECTED}-pulse`)) {
+        const t = (now % PULSE_MS) / PULSE_MS;
+        map.setPaintProperty(`${SELECTED}-pulse`, 'circle-radius', 15 + 20 * t);
+        map.setPaintProperty(`${SELECTED}-pulse`, 'circle-opacity', 0.22 * (1 - t));
+        map.setPaintProperty(`${SELECTED}-pulse`, 'circle-stroke-opacity', 0.9 * (1 - t));
+      }
+      this.pulse = requestAnimationFrame(step);
+    };
+    this.pulse = requestAnimationFrame(step);
   }
 
   onPick(listener: (records: PickedRecord[]) => void): void {
@@ -435,6 +527,8 @@ export class MapLibreAdapter implements MapAdapter {
   }
 
   destroy(): void {
+    cancelAnimationFrame(this.pulse);
+    this.hoverPopup.remove();
     this.map.remove();
   }
 }

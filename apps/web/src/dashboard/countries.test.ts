@@ -6,7 +6,7 @@ import { summariseCountries } from './countries';
 const org = (changes: Partial<OrgRow>): OrgRow => ({
   id: 'x', name: 'X', types: ['startup'], sectors: [], stage: null, city: 'Nairobi', country: 'KE', precision: 'address',
   founded_year: null, is_active: true, website_domain: null, raised_usd: 0, rounds: 0, investors: 0, portfolio: 0,
-  last_invested_on: null, participants: 0, people: 0, last_verified_at: null, ...changes,
+  last_invested_on: null, added_on: '2026-10-07', last_round_on: null, last_program_on: null, participants: 0, people: 0, last_verified_at: null, ...changes,
 });
 
 describe('per-country summary', () => {

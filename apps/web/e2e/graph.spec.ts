@@ -96,3 +96,35 @@ test('the map leads to the graph for the selected organisation', async ({ page }
   await expect(status(page)).toContainText('Nodes7');
   await expect(details(page).getByRole('heading', { level: 2 })).toHaveText('Sample Fund 01');
 });
+
+test('one link, or every link of a record, can be switched off and back on', async ({ page }) => {
+  await page.goto('/graph/');
+  await expect(status(page)).toContainText('Relationships9');
+
+  // All six of the fund's links at once.
+  await page.locator('#section-graph-list').getByRole('button', { name: /Sample Fund 01/ }).click();
+  await details(page).getByRole('button', { name: 'Switch off its 6 links' }).click();
+  await expect(status(page)).toContainText('(6 off)');
+  await expect(page.locator('svg [data-edge][data-off]')).toHaveCount(6);
+  // They stay drawn, faint, and are listed so each can be found again.
+  await expect(page.locator('svg [data-edge]')).toHaveCount(9);
+  await expect(page.locator('#section-graph-off li')).toHaveCount(6);
+  await expect(page).toHaveURL(/&o=/);
+
+  // One of them back on from the list, then from its own details.
+  await page.locator('#section-graph-off li').first().getByRole('button', { name: 'On', exact: true }).click();
+  await expect(status(page)).toContainText('(5 off)');
+  await page.locator('#section-graph-off li').first().getByRole('button').first().click();
+  await expect(details(page)).toContainText('Selected link');
+  await details(page).getByRole('button', { name: 'Switch this link on' }).click();
+  await expect(status(page)).toContainText('(4 off)');
+  await expect(details(page).getByRole('button', { name: 'Switch this link off' })).toBeVisible();
+
+  // The address carries what is off.
+  await page.reload();
+  await expect(status(page)).toContainText('(4 off)');
+  await page.locator('#section-graph-off').getByRole('button', { name: 'Switch all back on' }).click();
+  await expect(page.locator('svg [data-edge][data-off]')).toHaveCount(0);
+  await expect(page.locator('#section-graph-off')).toHaveCount(0);
+});
+

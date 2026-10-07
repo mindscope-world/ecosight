@@ -4,6 +4,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import type { Basemap } from '../config';
 import { HEAT_LAYERS, POINT_LAYERS } from '../entities';
 import type { MapAdapter, PickedRecord } from '../map/adapter';
+import { hoverCard } from '../map/hoverCard';
 import { MapLibreAdapter } from '../map/maplibreAdapter';
 
 /**
@@ -16,6 +17,7 @@ export function MapView({
   initialCamera,
   data,
   enabled,
+  selectedPlaces,
   onPick,
   onCamera,
   onReady,
@@ -27,6 +29,8 @@ export function MapView({
   /** Records per point layer, already filtered. */
   data: Record<string, FeatureCollection<Point>>;
   enabled: ReadonlySet<string>;
+  /** Where the selected record is drawn, to ring it. Empty when nothing is selected or it is not in view. */
+  selectedPlaces: [number, number][];
   /** Markers were clicked: every record at that spot, on any visible layer. */
   onPick: (records: PickedRecord[]) => void;
   onCamera: () => void;
@@ -35,8 +39,8 @@ export function MapView({
 }) {
   const container = useRef<HTMLDivElement>(null);
   // The map is created once; these keep its listeners pointed at the latest props.
-  const latest = useRef({ onPick, onCamera, onReady, data, enabled, basemap });
-  latest.current = { onPick, onCamera, onReady, data, enabled, basemap };
+  const latest = useRef({ onPick, onCamera, onReady, data, enabled, basemap, selectedPlaces });
+  latest.current = { onPick, onCamera, onReady, data, enabled, basemap, selectedPlaces };
   const applied = useRef(basemap);
 
   useEffect(() => {
@@ -51,6 +55,7 @@ export function MapView({
       for (const layer of HEAT_LAYERS) map.addHeatLayer({ id: layer.id, weight: layer.weight, ramp: layer.ramp });
       for (const layer of POINT_LAYERS) map.addPointLayer({ id: layer.id, color: layer.color, shape: layer.shape });
       map.onPick((records) => latest.current.onPick(records));
+      map.onHover(hoverCard);
       adapter.current = map;
       // The style may have been changed while the first one was still loading.
       if (latest.current.basemap !== applied.current) {
@@ -58,6 +63,7 @@ export function MapView({
         map.setBasemap(applied.current);
       }
       push(map, latest.current.data, latest.current.enabled);
+      map.setHighlight(latest.current.selectedPlaces);
       map.onCameraChange(() => latest.current.onCamera());
       latest.current.onReady();
     });
@@ -72,6 +78,10 @@ export function MapView({
   useEffect(() => {
     if (adapter.current) push(adapter.current, data, enabled);
   }, [adapter, data, enabled]);
+
+  useEffect(() => {
+    adapter.current?.setHighlight(selectedPlaces);
+  }, [adapter, selectedPlaces]);
 
   useEffect(() => {
     if (!adapter.current || applied.current === basemap) return;

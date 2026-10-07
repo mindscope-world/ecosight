@@ -113,6 +113,22 @@ status, and the details. Where the amount is in one and the date in the other, t
 gives the words for its date separately, as `date_quote`. Re-running `import-orgs` removes the rounds of the
 organisations it replaces, so run `import-rounds` again after it.
 
+```sh
+uv run atlas find-profiles                 # dry run: profile links among the sources already on record
+uv run atlas find-profiles --web           # also read each organisation's own website
+uv run atlas find-profiles --web --apply   # save what was found
+```
+
+`find-profiles` looks for the LinkedIn profile of each person on record, so a founder's
+name in an organisation's details can link to it. It never requests linkedin.com, whose
+terms forbid automated collection. It reads profile links that are already published
+elsewhere: among the organisation's sources on record, and with `--web` on the
+organisation's own home, team and about pages, where robots.txt allows, at most four
+pages a site and one request a second. A link is kept only when its address carries the
+person's first and last name and it is the only match for both the person and the
+profile; anything else is listed as not chosen. Only the address is stored, with the
+page it was found on. A person who has opted out is never looked up.
+
 Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on
 [Groq](https://console.groq.com) through LangChain and needs `GROQ_API_KEY` in
 `.env`. `GROQ_MODEL` changes the model (default `llama-3.3-70b-versatile`).

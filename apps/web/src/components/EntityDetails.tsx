@@ -230,9 +230,24 @@ function OrgBody({
         </Group>
         <Group label="People" count={people.length}>
           {people.map((person) => (
-            <div key={`${person.name}-${person.role}`} className="flex h-6 items-center justify-between">
-              <span>{person.name}</span>
-              <span className="text-[11px] text-mute">{person.role}</span>
+            <div key={`${person.name}-${person.role}`} className="flex h-6 items-center justify-between gap-2">
+              {person.linkedin_url && /^https:\/\/www\.linkedin\.com\/in\//.test(person.linkedin_url) ? (
+                <a
+                  href={person.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-accent2 underline"
+                  title={`${person.name} on LinkedIn (opens in a new tab)`}
+                >
+                  {person.name}
+                </a>
+              ) : (
+                <span className="shrink-0">{person.name}</span>
+              )}
+              {/* A long role gives way to the name, and can be read in full on hover. */}
+              <span className="min-w-0 truncate text-[11px] text-mute" title={person.role}>
+                {person.role}
+              </span>
             </div>
           ))}
         </Group>
