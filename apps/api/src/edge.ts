@@ -16,8 +16,11 @@ function start(): Promise<App> {
   const authUrl = process.env.AUTH_URL ?? process.env.SUPABASE_URL;
   const authKey = process.env.AUTH_KEY ?? process.env.SUPABASE_ANON_KEY;
   return buildApp({
-    // Each running copy keeps few connections: the host may run several at once.
-    sql: connect(process.env.DATABASE_URL, { max: 2 }),
+    // Each running copy keeps few connections, and gives them back when idle: the host runs
+    // several copies at once and keeps idle ones around, and the database's pooler has few places.
+    // No prepared statements, so the address can be a pooler that shares a connection between
+    // transactions. Nothing here needs more: every setting the queries make ends with its transaction.
+    sql: connect(process.env.DATABASE_URL, { max: 2, idle_timeout: 10, prepare: false }),
     rateLimit: Number(process.env.RATE_LIMIT_PER_MINUTE ?? 120),
     corsOrigins: process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean),
     trustProxy: true,
