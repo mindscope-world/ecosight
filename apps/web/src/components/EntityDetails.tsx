@@ -2,7 +2,7 @@ import type { Selection } from '@atlas/schema';
 import type { ReactNode } from 'react';
 import type { EventDetail, OrgDetail, OrgLink } from '../api';
 import { layerForTypes, POINT_LAYERS, TYPE_LABELS } from '../entities';
-import { formatDate, formatDateTime, formatMoney, formatPartialDate, formatUsd } from '../lib/format';
+import { formatDate, formatDateTime, formatMoney, formatPartialDate, formatUsd, initials } from '../lib/format';
 import { AFFILIATION_LABELS } from '../graph/style';
 import { Icon, MicroLabel, ShapeIcon } from './ui';
 
@@ -40,18 +40,77 @@ function SourceLink({ url }: { url: string | null }) {
   );
 }
 
-function OrgButton({ org, onSelect }: { org: OrgLink; onSelect: (selection: Selection) => void }) {
-  const layer = layerForTypes(org.types);
+/**
+ * The image on an organisation's card: its own logo where one is held, and
+ * otherwise its initials on its layer's colour, so every card has one.
+ */
+function OrgImage({ org, color }: { org: OrgDetail; color: string }) {
+  // Only an image the API itself supplied is drawn; nothing is fetched from another site.
+  if (org.logo && /^data:image\/[a-z0-9.+-]+;base64,/.test(org.logo))
+    return (
+      <img
+        src={org.logo}
+        alt={`${org.name} logo`}
+        width={44}
+        height={44}
+        // Logos are drawn for light pages as often as dark ones; a light tile suits both.
+        className="h-11 w-11 shrink-0 rounded-md border border-line bg-white object-contain p-1"
+      />
+    );
   return (
-    <button
-      type="button"
-      className="flex h-6 w-full items-center gap-2 text-left hover:text-accent"
-      title="Open and show on the map"
-      onClick={() => onSelect({ kind: 'org', id: org.id })}
+    <div
+      aria-hidden="true"
+      className="grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm font-semibold text-bg"
+      style={{ background: color }}
     >
-      {layer && <ShapeIcon shape={layer.shape} color={layer.color} size={11} />}
-      <span className="truncate">{org.name}</span>
-    </button>
+      {initials(org.name)}
+    </div>
+  );
+}
+
+/**
+ * The lines the map draws from the selected record to those it is connected to,
+ * and the means to hide and show each. Given only where there is a map.
+ */
+export interface LineControl {
+  /** 'on' or 'off' for a connection the map can draw a line to; 'none' when the other record has no place on it. */
+  state: (orgId: string) => 'on' | 'off' | 'none';
+  toggle: (orgId: string) => void;
+}
+
+function OrgButton({ org, onSelect, lines }: { org: OrgLink; onSelect: (selection: Selection) => void; lines?: LineControl }) {
+  const layer = layerForTypes(org.types);
+  const line = lines?.state(org.id);
+  return (
+    <div className="flex h-6 items-center gap-2">
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-accent"
+        title="Open and show on the map"
+        onClick={() => onSelect({ kind: 'org', id: org.id })}
+      >
+        {layer && <ShapeIcon shape={layer.shape} color={layer.color} size={11} />}
+        <span className="truncate">{org.name}</span>
+      </button>
+      {line && line !== 'none' && (
+        <button
+          type="button"
+          aria-pressed={line === 'on'}
+          title={line === 'on' ? `Hide the line to ${org.name} on the map` : `Show the line to ${org.name} on the map`}
+          className={`shrink-0 rounded border px-1.5 text-[11px] leading-5 hover:border-accent hover:text-accent ${
+            line === 'on' ? 'border-line text-mute' : 'border-accent text-accent'
+          }`}
+          onClick={() => lines!.toggle(org.id)}
+        >
+          {line === 'on' ? 'Hide line' : 'Show line'}
+        </button>
+      )}
+      {line === 'none' && (
+        <span className="shrink-0 text-[11px] text-mute" title="This record has no office on record, so the map cannot draw a line to it">
+          not on map
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -77,10 +136,12 @@ function OrgBody({
   org,
   onSelect,
   actions,
+  lines,
 }: {
   org: OrgDetail;
   onSelect: (selection: Selection) => void;
   actions?: (org: OrgDetail) => ReactNode;
+  lines?: LineControl;
 }) {
   const layer = layerForTypes(org.types);
   const hq = org.offices[0];
@@ -102,13 +163,18 @@ function OrgBody({
           {layer && <ShapeIcon shape={layer.shape} color={layer.color} />}
           {org.types.map((type) => TYPE_LABELS[type] ?? type).join(' · ')}
         </div>
-        <h2 className="mb-0.5 mt-1 text-lg font-semibold leading-tight">{org.name}</h2>
-        {org.sectors.length > 0 && <div className="text-accent">{org.sectors.join(' / ')}</div>}
-        {hq && (
-          <div className="text-mute">
-            {hq.city}, {hq.country}
+        <div className="mt-1.5 flex items-start gap-2.5">
+          <OrgImage org={org} color={layer?.color ?? '#8b9aa7'} />
+          <div className="min-w-0">
+            <h2 className="m-0 text-lg font-semibold leading-tight">{org.name}</h2>
+            {org.sectors.length > 0 && <div className="text-accent">{org.sectors.join(' / ')}</div>}
+            {hq && (
+              <div className="text-mute">
+                {hq.city}, {hq.country}
+              </div>
+            )}
           </div>
-        )}
+        </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
           <Fact label="Founded" value={org.founded_year ?? '—'} />
           {company ? (
@@ -188,16 +254,21 @@ function OrgBody({
 
       <Block title="Connections">
         {connected === 0 && <p className="m-0 text-mute">No connections recorded yet.</p>}
+        {lines && investors.length + portfolio.length + programs.length + affiliations.length > 0 && (
+          <p className="m-0 mb-2 text-[11px] leading-snug text-mute">
+            The map draws a line to each of these. Hide or show a line with the button beside it.
+          </p>
+        )}
         <Group label="Investors" count={investors.length}>
-          {investors.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} />)}
+          {investors.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} lines={lines} />)}
         </Group>
         <Group label="Portfolio" count={portfolio.length}>
-          {portfolio.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} />)}
+          {portfolio.map((item) => <OrgButton key={item.id} org={item} onSelect={onSelect} lines={lines} />)}
         </Group>
         <Group label="Programs" count={programs.length}>
           {programs.map((item) => (
             <div key={`${item.name}-${item.organisation.id}`}>
-              <OrgButton org={item.organisation} onSelect={onSelect} />
+              <OrgButton org={item.organisation} onSelect={onSelect} lines={lines} />
               <div className="-mt-1 pl-[19px] text-[11px] text-mute">{item.name}</div>
             </div>
           ))}
@@ -206,7 +277,7 @@ function OrgBody({
           <Group key={label} label={label} count={items.length}>
             {items.map((item) => (
               <div key={`${item.kind}-${item.organisation.id}`}>
-                <OrgButton org={item.organisation} onSelect={onSelect} />
+                <OrgButton org={item.organisation} onSelect={onSelect} lines={lines} />
                 {item.label && <div className="-mt-1 pl-[19px] text-[11px] text-mute">{item.label}</div>}
               </div>
             ))}
@@ -230,9 +301,24 @@ function OrgBody({
         </Group>
         <Group label="People" count={people.length}>
           {people.map((person) => (
-            <div key={`${person.name}-${person.role}`} className="flex h-6 items-center justify-between">
-              <span>{person.name}</span>
-              <span className="text-[11px] text-mute">{person.role}</span>
+            <div key={`${person.name}-${person.role}`} className="flex h-6 items-center justify-between gap-2">
+              {person.linkedin_url && /^https:\/\/www\.linkedin\.com\/in\//.test(person.linkedin_url) ? (
+                <a
+                  href={person.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-accent2 underline"
+                  title={`${person.name} on LinkedIn (opens in a new tab)`}
+                >
+                  {person.name}
+                </a>
+              ) : (
+                <span className="shrink-0">{person.name}</span>
+              )}
+              {/* A long role gives way to the name, and can be read in full on hover. */}
+              <span className="min-w-0 truncate text-[11px] text-mute" title={person.role}>
+                {person.role}
+              </span>
             </div>
           ))}
         </Group>
@@ -301,8 +387,11 @@ export function EntityDetails({
   onClose,
   back,
   actions,
+  lines,
 }: {
   detail: Detail;
+  /** On the map: the means to hide and show the line to each connection. */
+  lines?: LineControl;
   /** Return to the list this record was picked from, when there is one. */
   back?: { label: string; onBack: () => void };
   /** Open a connected record; the map follows. */
@@ -328,7 +417,7 @@ export function EntityDetails({
       </div>
       {detail.status === 'loading' && <p className="px-3 text-mute">Loading…</p>}
       {detail.status === 'error' && <p className="px-3 text-mute">This record could not be loaded.</p>}
-      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} actions={actions} />}
+      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} actions={actions} lines={lines} />}
       {detail.status === 'event' && <EventBody event={detail.event} onSelect={onSelect} />}
     </div>
   );

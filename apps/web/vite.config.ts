@@ -6,9 +6,23 @@ import { defineConfig, loadEnv } from 'vite';
 export default defineConfig(({ mode }) => {
   // One .env at the repo root serves the API, the database scripts and the app.
   const env = loadEnv(mode, '../..', '');
+  // Names this build. Each page carries it, and `version.json` beside the pages says which build is live,
+  // so a page left open or cached can tell it has been replaced (src/lib/freshness.ts).
+  const buildId = mode === 'production' ? new Date().toISOString() : '';
   return {
     envDir: '../..',
-    plugins: [react(), tailwindcss()],
+    define: { __BUILD_ID__: JSON.stringify(buildId) },
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'build-version',
+        apply: 'build',
+        generateBundle() {
+          this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: buildId }) });
+        },
+      },
+    ],
     worker: { format: 'es' },
     build: {
       rollupOptions: {

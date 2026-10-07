@@ -96,14 +96,14 @@ is the check. The function's settings are set once and kept by Supabase:
 
 ```sh
 npx supabase secrets set --project-ref <ref> \
-  DATABASE_URL="$SUPABASE_DB_URL" ACCESS_KEY="$ACCESS_KEY" \
+  DATABASE_URL="${SUPABASE_DB_URL/:5432\//:6543/}" ACCESS_KEY="$ACCESS_KEY" \
   CORS_ORIGINS=https://mindscope-world.github.io \
   AUTH_URL="$SUPABASE_URL" AUTH_KEY="$SUPABASE_PUBLISHABLE_KEY"
 ```
 
 | Setting | Why |
 |---------|-----|
-| `DATABASE_URL` | The `ecosight_app` connection string |
+| `DATABASE_URL` | The `ecosight_app` connection string, on the pooler's port 6543 (transaction mode), not 5432. On 5432 each copy of the function holds its connections for as long as it lives and the pooler has 15 places, so a few page loads use them up and the API answers 500 with "max clients reached in session mode". The importers and migrations keep using 5432 |
 | `ACCESS_KEY` | Required. Closes the API to anyone without it |
 | `CORS_ORIGINS` | Only the web app's address may call the API from a browser |
 | `AUTH_URL`, `AUTH_KEY` | The project's address and publishable key, with which the API checks sign-in tokens. The host does not allow a secret's name to begin with `SUPABASE_` |
@@ -125,6 +125,11 @@ The build holds code only: five pages (`/`, `map/`, `graph/`, `dashboard/`, `rev
 `data/` folder, then put its contents, plus an empty `.nojekyll` file, on the
 `gh-pages` branch as a single commit and force-push it. Pages serves that branch
 from its root.
+
+GitHub Pages lets a browser keep a page for ten minutes, and a tab can stay open far
+longer. Each build therefore writes its id to `version.json`, and every page checks that
+file when it opens and when its tab is returned to, and reloads itself once if a newer
+build is live. Someone on the build before this was added still needs one hard refresh.
 
 The landing page needs no key: without one its map shows illustrative points and
 says so. The map app shows the access screen until the key is entered, and keeps

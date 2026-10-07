@@ -43,6 +43,20 @@ def geocode_cache() -> Path:
     return Path(os.environ.get("GEOCODE_CACHE", REPO_ROOT / "data" / "geocode-cache.json"))
 
 
+def profile_search_cache() -> Path:
+    return Path(os.environ.get("PROFILE_SEARCH_CACHE", REPO_ROOT / "data" / "profile-search-cache.json"))
+
+
+def search_api_key() -> str:
+    key = os.environ.get("SERPAPI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError(
+            "SERPAPI_API_KEY is not set. Create a key at https://serpapi.com/manage-api-key "
+            "and add it to .env at the repo root."
+        )
+    return key
+
+
 # Extraction model on Groq, called through LangChain. Groq has a free tier.
 GROQ_MODEL = os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile"
 

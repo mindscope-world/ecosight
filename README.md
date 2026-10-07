@@ -108,8 +108,47 @@ the city, never at an address, and each carries the stated basis for its placeme
 
 `import-rounds` loads funding rounds a person has read out of a dataset's funding
 notes. Every round carries the words it was read from, and the load stops if a
-quote is not in the stored note. Re-running `import-orgs` removes the rounds of the
+quote is not in the stored note. The note is both funding cells of the row: the level or
+status, and the details. Where the amount is in one and the date in the other, the round
+gives the words for its date separately, as `date_quote`. Re-running `import-orgs` removes the rounds of the
 organisations it replaces, so run `import-rounds` again after it.
+
+```sh
+uv run atlas find-profiles                 # dry run: profile links among the sources already on record
+uv run atlas find-profiles --web           # also read each organisation's own website
+uv run atlas find-profiles --web --search   # also ask a web search service for those still not found
+uv run atlas find-profiles --web --search --apply   # save what was found
+```
+
+`find-profiles` looks for the LinkedIn profile of each person on record, so a founder's
+name in an organisation's details can link to it. It never requests linkedin.com, whose
+terms forbid automated collection. It reads profile links that are already published
+elsewhere: among the organisation's sources on record, and with `--web` on the
+organisation's own home, team and about pages, where robots.txt allows, at most four
+pages a site and one request a second. A link is kept only when its address carries the
+person's first and last name and it is the only match for both the person and the
+profile; anything else is listed as not chosen. With `--search`, those still not found
+are looked up through SerpAPI (`SERPAPI_API_KEY` in `.env`), one request a second, asking
+Google for the person's name and organisation among LinkedIn profiles, and DuckDuckGo
+for anyone Google did not find. DuckDuckGo is asked through SerpAPI as well: it has no
+search API of its own and its robots.txt forbids scripts from its results pages. The
+free plan allows 250 requests a month, so a run stops at `--limit` requests (240 unless
+told otherwise) and the next run carries on from there; `--engine google` halves the cost. Only the service's answer is read, and a result counts only if
+its title or summary also names the organisation, since many people share a name.
+Answers are kept in `data/profile-search-cache.json`, so a second run asks nothing twice. Only the address is stored, with the
+page it was found on. A person who has opted out is never looked up.
+
+```sh
+uv run atlas fetch-logos            # dry run: which organisations have a logo to fetch
+uv run atlas fetch-logos --apply    # fetch and store them; --refresh fetches again those already held
+```
+
+`fetch-logos` gets each published organisation's logo from its own website, for the image
+on its card: the icon the site declares for a phone's home screen, else its largest icon,
+else `/favicon.ico`. Only the organisation's site is asked, within its robots.txt. The
+image is stored in the database (up to 64 KB) and sent with the organisation's details, so
+the app never loads it from another site and no one else learns which records are opened.
+A card with no logo shows the organisation's initials.
 
 Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on
 [Groq](https://console.groq.com) through LangChain and needs `GROQ_API_KEY` in

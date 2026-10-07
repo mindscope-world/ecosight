@@ -29,7 +29,7 @@ import { NodePicker, type Picked } from './NodePicker';
 import { DEFAULT_KINDS, KIND_LABELS, KIND_LINES, nodeMark } from './style';
 
 /**
- * Share-link state in the address: #v=1&n=<start node>&k=<kinds>&s=<selected>&x=<expanded>...
+ * Share-link state in the address: #v=1&n=<start node>&k=<kinds>&s=<selected>&x=<expanded>...&o=<link switched off>...
  * No n means the whole network. Unknown parts are dropped, never guessed at.
  */
 interface GraphState {
@@ -37,18 +37,22 @@ interface GraphState {
   kinds: EdgeKind[];
   selected: string | null;
   expanded: string[];
+  /** Links the reader has switched off in this view. */
+  off: string[];
 }
+const MAX_OFF = 60;
 
 function decodeState(hash: string): GraphState {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const version = params.get('v');
-  if (version !== null && version !== '1') return { start: null, kinds: DEFAULT_KINDS, selected: null, expanded: [] };
+  if (version !== null && version !== '1') return { start: null, kinds: DEFAULT_KINDS, selected: null, expanded: [], off: [] };
   const kinds = (params.get('k') ?? '').split(',').filter((kind): kind is EdgeKind => (EDGE_KINDS as readonly string[]).includes(kind));
   return {
     start: params.get('n'),
     kinds: kinds.length ? EDGE_KINDS.filter((kind) => kinds.includes(kind)) : DEFAULT_KINDS,
     selected: params.get('s'),
     expanded: params.getAll('x').slice(0, 20),
+    off: params.getAll('o').slice(0, MAX_OFF),
   };
 }
 
@@ -58,6 +62,7 @@ function encodeState(state: GraphState): string {
   if (state.kinds.join() !== DEFAULT_KINDS.join()) parts.push(`k=${state.kinds.join(',')}`);
   if (state.selected) parts.push(`s=${encodeURIComponent(state.selected)}`);
   for (const id of state.expanded.slice(0, 20)) parts.push(`x=${encodeURIComponent(id)}`);
+  for (const id of state.off.slice(0, MAX_OFF)) parts.push(`o=${encodeURIComponent(id)}`);
   return parts.join('&');
 }
 
@@ -111,6 +116,8 @@ export function GraphPage() {
   const [positions, setPositions] = useState<Map<string, Point>>(new Map());
   const [selected, setSelected] = useState<string | null>(initial.selected);
   const [expanded, setExpanded] = useState<string[]>([]);
+  // Links switched off by the reader. It changes this view and its share link, never the record.
+  const [off, setOff] = useState<string[]>(initial.off);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'missing'>('loading');
   const [truncated, setTruncated] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -174,8 +181,8 @@ export function GraphPage() {
   }, []);
 
   useEffect(() => {
-    history.replaceState(null, '', '#' + encodeState({ start, kinds, selected, expanded }));
-  }, [start, kinds, selected, expanded]);
+    history.replaceState(null, '', '#' + encodeState({ start, kinds, selected, expanded, off }));
+  }, [start, kinds, selected, expanded, off]);
 
   // How many neighbours each node still has off screen: its degree less those drawn.
   const nodes = useMemo(() => {
@@ -192,6 +199,20 @@ export function GraphPage() {
   }, [graph]);
   const edges = useMemo(() => [...graph.edges.values()], [graph]);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const offSet = useMemo(() => new Set(off), [off]);
+  const offInView = useMemo(() => edges.filter((edge) => offSet.has(edge.id)), [edges, offSet]);
+  /** Switch links off or back on. Off is capped, so a share link stays a sensible length. */
+  const switchLinks = (ids: string[], on: boolean) =>
+    setOff((now) => (on ? now.filter((id) => !ids.includes(id)) : [...now, ...ids.filter((id) => !now.includes(id))].slice(-MAX_OFF)));
+  const linksOf = (id: string) => edges.filter((edge) => edge.source === id || edge.target === id);
+  // Every line in view by the two records it joins, hidden ones first so they are easy to find again.
+  const listedEdges = useMemo(
+    () =>
+      edges
+        .map((edge) => ({ edge, name: `${byId.get(edge.source)?.name ?? '?'} — ${byId.get(edge.target)?.name ?? '?'}` }))
+        .sort((a, b) => Number(offSet.has(b.edge.id)) - Number(offSet.has(a.edge.id)) || a.name.localeCompare(b.name)),
+    [edges, byId, offSet],
+  );
 
   const selectedNode = selected ? byId.get(selected) : undefined;
   const selectedEdge = selected ? graph.edges.get(selected) : undefined;
@@ -310,6 +331,40 @@ export function GraphPage() {
           People, places and sectors are off to begin with: almost everything is linked through a shared city or sector.
         </p>
       </Section>
+      <Section id="graph-links" title="Lines" aside={offInView.length ? `${offInView.length} off` : `${edges.length}`}>
+        <p className="m-0 mb-2 text-[11px] leading-snug text-mute">
+          Untick a line to hide it, tick it to show it again. Hidden lines stay as faint dots. Only this view and its
+          share link change, never the records.
+        </p>
+        {offInView.length > 0 && (
+          <button type="button" className="mb-2 h-7 w-full rounded border border-accent text-xs text-accent hover:bg-raised" onClick={() => setOff([])}>
+            Show all {offInView.length} hidden line{offInView.length === 1 ? '' : 's'}
+          </button>
+        )}
+        <ul>
+          {listedEdges.slice(0, 150).map(({ edge, name }) => (
+            <li key={edge.id} data-off={offSet.has(edge.id) || undefined} className="flex h-6 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!offSet.has(edge.id)}
+                onChange={() => switchLinks([edge.id], offSet.has(edge.id))}
+                aria-label={`Show the line ${name}`}
+                className="accent-[var(--color-accent)]"
+              />
+              <button
+                type="button"
+                className={`min-w-0 flex-1 truncate text-left hover:text-accent ${offSet.has(edge.id) ? 'text-mute line-through' : ''}`}
+                title={`${name}: ${KIND_LABELS[edge.kind].toLowerCase()}. Open its details.`}
+                onClick={() => pick(edge.id)}
+              >
+                {name}
+              </button>
+            </li>
+          ))}
+        </ul>
+        {listedEdges.length > 150 && <p className="m-0 mt-1 text-[11px] text-mute">And {listedEdges.length - 150} more: click a line on the graph to reach it.</p>}
+        {edges.length === 0 && <p className="m-0 text-mute">No lines in view.</p>}
+      </Section>
       <Section id="graph-path" title="Find a path">
         <div className="space-y-1.5">
           <NodePicker label="From" value={from} onPick={setPathFrom} />
@@ -354,8 +409,21 @@ export function GraphPage() {
   );
 
   const buttonClass = 'flex h-7 items-center rounded border border-line px-2 text-xs hover:border-accent hover:text-accent';
-  const nodeActions = (node: GraphNode) => (
+  const nodeActions = (node: GraphNode) => {
+    const its = linksOf(node.id);
+    const allOff = its.length > 0 && its.every((edge) => offSet.has(edge.id));
+    return (
     <>
+      {its.length > 0 && (
+        <button
+          type="button"
+          className={buttonClass}
+          title="Fade this record's lines in this view, or bring them back. The records are not changed."
+          onClick={() => switchLinks(its.map((edge) => edge.id), allOff)}
+        >
+          {allOff ? `Show its ${its.length === 1 ? 'line' : `${its.length} lines`}` : `Hide its ${its.length === 1 ? 'line' : `${its.length} lines`}`}
+        </button>
+      )}
       {node.hidden > 0 && (
         <button type="button" className={buttonClass} onClick={() => expand(node.id)}>
           Show {node.hidden} more connection{node.hidden === 1 ? '' : 's'}
@@ -368,7 +436,8 @@ export function GraphPage() {
       )}
       {node.kind === 'organisation' && node.ref && <ActionLink href={mapUrlFor(node.ref)}>Show on map</ActionLink>}
     </>
-  );
+    );
+  };
 
   const tieList = (title: string, rows: CoInvestment['co_investors'], through: string) =>
     rows.length > 0 && (
@@ -412,6 +481,17 @@ export function GraphPage() {
             {target && <NodeButton node={target} onClick={() => pick(target.id)} />}
           </div>
           {selectedEdge.label && <p className="m-0 mt-2">{selectedEdge.label}</p>}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              aria-pressed={!offSet.has(selectedEdge.id)}
+              className={buttonClass}
+              onClick={() => switchLinks([selectedEdge.id], offSet.has(selectedEdge.id))}
+            >
+              {offSet.has(selectedEdge.id) ? 'Show this line' : 'Hide this line'}
+            </button>
+            {offSet.has(selectedEdge.id) && <span className="text-[11px] text-mute">Hidden in this view only.</span>}
+          </div>
         </div>
         {selectedEdge.evidence.length > 0 && (
           <section className="border-t border-line px-3 py-2.5">
@@ -513,7 +593,7 @@ export function GraphPage() {
           <p className="m-0 leading-snug text-mute">
             Each mark is an organisation, drawn as on the map. A line is something on record between two of them. Click a
             mark for its details, double-click to bring in what it is connected to, and click a line to see what it stands
-            for.
+            for. To hide a line and show it again, use the ticks under Lines on the left, or click the line itself.
           </p>
         </Section>
         <Section id="graph-legend" title="Legend">
@@ -562,6 +642,7 @@ export function GraphPage() {
             positions={positions}
             selected={selected}
             highlight={highlight}
+            off={offSet}
             fitKey={fitKey}
             onSelect={pick}
             onExpand={expand}
@@ -624,6 +705,7 @@ export function GraphPage() {
         <span className="flex items-baseline gap-1.5 whitespace-nowrap">
           <MicroLabel>Relationships</MicroLabel>
           <span className="tabular-nums">{edges.length}</span>
+          {offInView.length > 0 && <span className="text-mute">({offInView.length} off)</span>}
         </span>
         <span className="flex items-baseline gap-1.5 whitespace-nowrap">
           <MicroLabel>View</MicroLabel>

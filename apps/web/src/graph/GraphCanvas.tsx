@@ -24,6 +24,7 @@ export function GraphCanvas({
   positions,
   selected,
   highlight,
+  off,
   fitKey,
   onSelect,
   onExpand,
@@ -36,6 +37,8 @@ export function GraphCanvas({
   selected: string | null;
   /** Nodes and edges on a found path. */
   highlight: ReadonlySet<string>;
+  /** Links the reader has switched off: drawn faint, and not followed when a node's neighbours are lit. */
+  off: ReadonlySet<string>;
   /** Changes when the view should be fitted to the whole graph again. */
   fitKey: number;
   onSelect: (id: string | null) => void;
@@ -90,11 +93,12 @@ export function GraphCanvas({
     if (!focus) return null;
     const set = new Set([focus]);
     for (const edge of edges) {
+      if (off.has(edge.id)) continue;
       if (edge.source === focus) set.add(edge.target);
       if (edge.target === focus) set.add(edge.source);
     }
     return set;
-  }, [hovered, selected, edges, positions]);
+  }, [hovered, selected, edges, positions, off]);
 
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const labelAll = nodes.length <= 80;
@@ -159,21 +163,23 @@ export function GraphCanvas({
             const x2 = to.x - (to.x - from.x) * stop;
             const y2 = to.y - (to.y - from.y) * stop;
             const on = highlight.has(edge.id) || selected === edge.id;
+            const muted = off.has(edge.id);
             const dim = near ? !(near.has(edge.source) && near.has(edge.target)) : highlight.size > 0 && !on;
             return (
-              <g key={edge.id} data-edge={edge.id} className="cursor-pointer" opacity={dim ? 0.15 : 1}>
-                <title>{`${byId.get(edge.source)?.name} — ${KIND_LABELS[edge.kind].toLowerCase()} — ${target.name}`}</title>
+              <g key={edge.id} data-edge={edge.id} data-off={muted || undefined} className="cursor-pointer" opacity={muted ? (on ? 0.6 : 0.22) : dim ? 0.15 : 1}>
+                <title>{`${byId.get(edge.source)?.name} — ${KIND_LABELS[edge.kind].toLowerCase()} — ${target.name}${muted ? ' (switched off)' : ''}`}</title>
                 <line x1={from.x} y1={from.y} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
                 <line
                   x1={from.x}
                   y1={from.y}
                   x2={x2}
                   y2={y2}
-                  stroke={on ? '#ffffff' : line.color}
+                  stroke={on ? '#ffffff' : muted ? '#8b9aa7' : line.color}
                   strokeWidth={on ? line.width + 1.2 : line.width}
-                  strokeDasharray={line.dash}
+                  // A switched-off link keeps its place as a faint dotted line, so it can be found and switched back on.
+                  strokeDasharray={muted ? '1 5' : line.dash}
                   strokeOpacity={on ? 1 : 0.7}
-                  markerEnd={edge.kind === 'invested_in' ? 'url(#arrow)' : undefined}
+                  markerEnd={edge.kind === 'invested_in' && !muted ? 'url(#arrow)' : undefined}
                 />
               </g>
             );

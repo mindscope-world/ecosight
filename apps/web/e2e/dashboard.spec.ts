@@ -73,3 +73,64 @@ test('the by-country tab puts every kind side by side for each country', async (
   await page.reload();
   await expect(page.getByRole('tab', { name: /By country/ })).toHaveAttribute('aria-selected', 'true');
 });
+
+test('investors with no office can be listed on their own', async ({ page }) => {
+  // The sample places every investor, so two are stripped of their office on the way to the page.
+  await page.route('**/orgs?*', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    let stripped = 0;
+    for (const row of body.organisations) {
+      if (stripped < 2 && row.types.includes('fund')) {
+        Object.assign(row, { city: null, country: null, precision: null });
+        stripped += 1;
+      }
+    }
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto('/dashboard/#v=1&t=investors');
+  const button = page.getByRole('button', { name: /Not on the map/ });
+  await expect(button).toContainText('2');
+  await expect(button).toHaveAttribute('aria-pressed', 'false');
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByText('1–2 of 2 (10 in all)')).toBeVisible();
+  await expect(page.getByText(/cannot draw them/)).toBeVisible();
+  await expect(page).toHaveURL(/#v=1&t=investors&u=1/);
+
+  // The address reopens the same list; another tab starts without it.
+  await page.reload();
+  await expect(page.locator('tbody tr')).toHaveCount(2);
+  await page.getByRole('tab', { name: /Startups/ }).click();
+  await expect(page.getByRole('button', { name: /Not on the map/ })).toHaveCount(0);
+  await expect(page.locator('tbody tr')).toHaveCount(25);
+});
+
+test('a list linked from the map holds only the rows its figure counts', async ({ page }) => {
+  // Three startups are given a round announced this week on the way to the page.
+  const today = new Date().toISOString().slice(0, 10);
+  await page.route('**/orgs?*', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    let changed = 0;
+    for (const row of body.organisations) {
+      row.last_round_on = row.types.includes('startup') && changed++ < 3 ? today : null;
+    }
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto('/dashboard/#v=1&t=startups&w=rounds');
+  await expect(page.getByRole('button', { name: /A round announced in the last 30 days/ })).toBeVisible();
+  await expect(page.locator('tbody tr')).toHaveCount(3);
+  await expect(page.getByText('1–3 of 3 (30 in all)')).toBeVisible();
+
+  // On a tab with nothing to list, the way out is offered where the rows would be.
+  await page.goto('/dashboard/#v=1&t=investors&w=rounds');
+  await page.reload();
+  await expect(page.getByText('Nothing on this tab fits.')).toBeVisible();
+  await page.getByRole('button', { name: 'Show every row', exact: true }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(10);
+});
+

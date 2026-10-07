@@ -48,6 +48,8 @@ export interface OrgDetail {
   is_active: boolean;
   raised_usd: number;
   funding_note: string | null;
+  /** The organisation's own logo as a data URL, or null when none is held. */
+  logo: string | null;
   offices: {
     id: string;
     is_hq: boolean;
@@ -74,7 +76,7 @@ export interface OrgDetail {
     events: { id: string; name: string }[];
     /** `outgoing` is true when this organisation is the one that is part of, hosted by, and so on. */
     affiliations: { kind: string; outgoing: boolean; label: string | null; organisation: OrgLink }[];
-    people: { name: string; role: string }[];
+    people: { name: string; role: string; linkedin_url: string | null }[];
   };
   sources: {
     field: string;
@@ -291,6 +293,9 @@ export interface OrgRow {
   investors: number;
   portfolio: number;
   last_invested_on: string | null;
+  added_on: string;
+  last_round_on: string | null;
+  last_program_on: string | null;
   participants: number;
   people: number;
   last_verified_at: string | null;

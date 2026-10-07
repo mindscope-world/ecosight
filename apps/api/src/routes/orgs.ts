@@ -32,6 +32,10 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
           g.id, g.name, g.types::text[] as types, g.sectors, g.stage, g.founded_year, g.is_active,
           g.website_domain, hq.city, hq.country::text as country, hq.precision::text as precision,
           f.raised_usd::float8 as raised_usd, f.portfolio, f.last_invested_on::text as last_invested_on,
+          g.created_at::date::text as added_on,
+          (select max(r.announced_on)::text from funding_round r
+            where r.organisation_id = g.id and r.status = 'published') as last_round_on,
+          (select max(p.created_at)::date::text from program p where p.organisation_id = g.id) as last_program_on,
           (select count(*)::int from funding_round r
             where r.organisation_id = g.id and r.status = 'published') as rounds,
           (select count(distinct ri.investor_id)::int from funding_round r
@@ -76,6 +80,8 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
         select
           g.id, g.name, g.slug, g.types::text[] as types, g.sectors, g.stage,
           g.website_domain, g.description, g.founded_year, g.is_active, g.funding_note,
+          (select 'data:' || l.content_type || ';base64,' || replace(encode(l.image, 'base64'), E'\n', '')
+            from organisation_logo l where l.organisation_id = g.id) as logo,
           coalesce((
             select sum(r.amount_usd) from funding_round r
             where r.organisation_id = g.id and r.status = 'published'
@@ -125,7 +131,7 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
               where l.status = 'published' and (l.source_id = g.id or l.target_id = g.id)
             ), '[]'::jsonb),
             'people', coalesce((
-              select jsonb_agg(jsonb_build_object('name', pr.name, 'role', pr.role) order by pr.name)
+              select jsonb_agg(jsonb_build_object('name', pr.name, 'role', pr.role, 'linkedin_url', pr.linkedin_url) order by pr.name)
               from person_role pr
               where pr.organisation_id = g.id and not pr.opted_out
             ), '[]'::jsonb)

@@ -61,6 +61,8 @@ export const OrgDetail = Type.Object({
   raised_usd: Type.Number(),
   // Funding as the research words it, for records with no round rows.
   funding_note: Nullable(Type.String()),
+  // The organisation's own logo as a data URL, so the app asks no other site for it. Null when none is held.
+  logo: Nullable(Type.String()),
   rounds: Type.Array(
     Type.Object({
       id: Type.String({ format: 'uuid' }),
@@ -83,7 +85,8 @@ export const OrgDetail = Type.Object({
     affiliations: Type.Array(
       Type.Object({ kind: Type.String(), outgoing: Type.Boolean(), label: Nullable(Type.String()), organisation: OrgLink }),
     ),
-    people: Type.Array(Type.Object({ name: Type.String(), role: Type.String() })),
+    // A profile link is given only where one has been found published, with the person's name in it.
+    people: Type.Array(Type.Object({ name: Type.String(), role: Type.String(), linkedin_url: Nullable(Type.String()) })),
   }),
   sources: Type.Array(FieldSource),
   last_verified_at: Nullable(Type.String({ format: 'date-time' })),
@@ -369,6 +372,10 @@ export const OrgRow = Type.Object({
   // Companies it has backed, and the latest round it took part in.
   portfolio: Type.Integer(),
   last_invested_on: Nullable(Type.String({ format: 'date' })),
+  // When it was put on record, when its latest round was announced, and when a programme of its was last added.
+  added_on: Type.String({ format: 'date' }),
+  last_round_on: Nullable(Type.String({ format: 'date' })),
+  last_program_on: Nullable(Type.String({ format: 'date' })),
   // Organisations that went through a programme it runs.
   participants: Type.Integer(),
   people: Type.Integer(),

@@ -17,6 +17,12 @@ export interface PickedRecord {
   properties: Record<string, unknown>;
 }
 
+/** What is shown beside a marker while the pointer rests on it. */
+export interface HoverCard {
+  title: string;
+  lines: string[];
+}
+
 export interface HeatLayerSpec {
   id: string;
   weight?: { property: string; max: number };
@@ -42,6 +48,13 @@ export interface MapAdapter {
    * told apart by zooming.
    */
   onPick(listener: (records: PickedRecord[]) => void): void;
+  /**
+   * Describe a record for the small card shown while the pointer rests on its
+   * marker. The card goes when the pointer leaves. Null shows nothing.
+   */
+  onHover(describe: (record: PickedRecord) => HoverCard | null): void;
+  /** Ring the given places, pulsing, to mark the selected record. An empty list clears it. */
+  setHighlight(places: [number, number][]): void;
   /** Draw lines between places, replacing any drawn before. An empty list clears them. */
   setLinks(lines: [number, number][][]): void;
   flyTo(camera: Camera): void;

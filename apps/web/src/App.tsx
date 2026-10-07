@@ -28,7 +28,7 @@ import {
 } from './api';
 import { AccessGate } from './components/AccessGate';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
-import { ActionLink, EntityDetails, type Detail } from './components/EntityDetails';
+import { ActionLink, EntityDetails, type Detail, type LineControl } from './components/EntityDetails';
 import { FilterPanel } from './components/FilterPanel';
 import { LayerControl, MapLegend } from './components/LayerControl';
 import { ActivityPanel, CityList, EcosystemOverview, TopSectors, type SectorShare } from './components/LeftPanel';
@@ -306,7 +306,7 @@ export function App() {
 
   // Lines from the selected organisation to those it is tied to by money: its
   // investors and the companies it has backed, and to its own branches.
-  const links = useMemo(() => {
+  const links = useMemo<{ to: string | null; line: [number, number][] }[]>(() => {
     if (!selected || detail.status !== 'org') return [];
     const { org } = detail;
     const home = org.offices[0];
@@ -315,7 +315,8 @@ export function App() {
     for (const feature of offices?.features ?? [])
       if (feature.properties.is_hq || !headquarters.has(feature.properties.org_id))
         headquarters.set(feature.properties.org_id, feature.geometry.coordinates as [number, number]);
-    const ends: [number, number][] = [
+    // Each line knows which record it leads to, so one can be hidden without the others. A branch has no such record.
+    const ends: { to: string | null; end: [number, number] }[] = [
       ...[
         ...org.connections.investors,
         ...org.connections.portfolio,
@@ -323,16 +324,45 @@ export function App() {
         ...org.connections.affiliations.map((item) => item.organisation),
       ].flatMap((other) => {
         const place = headquarters.get(other.id);
-        return place ? [place] : [];
+        return place ? [{ to: other.id, end: place }] : [];
       }),
-      ...org.offices.slice(1).map((office): [number, number] => [office.lon, office.lat]),
+      ...org.offices.slice(1).map((office) => ({ to: null, end: [office.lon, office.lat] as [number, number] })),
     ];
-    return ends.map((end) => greatCircle([home.lon, home.lat], end));
+    return ends.map(({ to, end }) => ({ to, line: greatCircle([home.lon, home.lat], end) }));
   }, [selected, detail, offices]);
 
+  // Lines the reader has hidden, each named by the two records it joins. Kept for the visit.
+  const [hiddenLines, setHiddenLines] = useState<ReadonlySet<string>>(new Set());
+  const pairKey = (other: string) => `${selected?.id}|${other}`;
+  const lineControl: LineControl = {
+    state: (other) => (!links.some((link) => link.to === other) ? 'none' : hiddenLines.has(pairKey(other)) ? 'off' : 'on'),
+    toggle: (other) =>
+      setHiddenLines((now) => {
+        const next = new Set(now);
+        if (!next.delete(pairKey(other))) next.add(pairKey(other));
+        return next;
+      }),
+  };
+  const drawnLinks = useMemo(
+    () => links.filter((link) => !link.to || !hiddenLines.has(`${selected?.id}|${link.to}`)).map((link) => link.line),
+    [links, hiddenLines, selected],
+  );
+
+  // Whether the lines from the selected record are drawn. The reader can switch them off.
+  const [linesOn, setLinesOn] = useStored('ecosight-lines', true);
   useEffect(() => {
-    if (mapReady) map.current?.setLinks(links);
-  }, [links, mapReady]);
+    if (mapReady) map.current?.setLinks(linesOn ? drawnLinks : []);
+  }, [drawnLinks, linesOn, mapReady]);
+
+  // Where the selected record is drawn, so the map can ring it: every office of an organisation in view.
+  const selectedPlaces = useMemo<[number, number][]>(() => {
+    if (!selected) return [];
+    const places =
+      selected.kind === 'event'
+        ? visibleEvents.features.filter((feature) => feature.properties.event_id === selected.id)
+        : visible.filter((feature) => feature.properties.org_id === selected.id);
+    return places.map((feature) => feature.geometry.coordinates as [number, number]);
+  }, [selected, visible, visibleEvents]);
 
   const flyTo = useCallback((lon: number, lat: number, zoom: number) => {
     const current = map.current?.getCamera().zoom ?? 0;
@@ -459,6 +489,7 @@ export function App() {
         events: counts.events ?? 0,
       }}
       filtered={filtered}
+      onEvents={() => changeView('events')}
     />
   );
   const leftContent = stats ? (
@@ -469,7 +500,7 @@ export function App() {
         </p>
       )}
       {overview}
-      <ActivityPanel stats={stats} />
+      <ActivityPanel stats={stats} onEvents={() => changeView('events')} />
       <TopSectors sectors={sectors} onPick={(sector) => setFilters({ ...filters, sectors: [sector] })} />
       <CityList
         id="markets"
@@ -510,7 +541,23 @@ export function App() {
         setStack(null);
       }}
       back={stack ? { label: `${stack.items.length} at this location`, onBack: () => setSelected(undefined) } : undefined}
-      actions={(org) => <ActionLink href={graphUrlFor(org.id)}>View connections</ActionLink>}
+      lines={linesOn ? lineControl : undefined}
+      actions={(org) => (
+        <>
+          <ActionLink href={graphUrlFor(org.id)}>View connections</ActionLink>
+          {links.length > 0 && (
+            <button
+              type="button"
+              aria-pressed={linesOn}
+              title="The lines from this record to those it is connected to"
+              className={`flex h-7 items-center rounded border px-2 text-xs hover:border-accent hover:text-accent ${linesOn ? 'border-accent text-accent' : 'border-line'}`}
+              onClick={() => setLinesOn(!linesOn)}
+            >
+              {linesOn ? `Hide all ${links.length} lines` : `Show all ${links.length} lines`}
+            </button>
+          )}
+        </>
+      )}
     />
   ) : (
     stack && <StackList stack={stack} onSelect={select} onClose={() => setStack(null)} />
@@ -564,6 +611,7 @@ export function App() {
             initialCamera={initial.camera ?? DEFAULT_CAMERA}
             data={layerData}
             enabled={enabled}
+            selectedPlaces={selectedPlaces}
             onPick={pickOnMap}
             onCamera={() => setCamera((tick) => tick + 1)}
             onReady={() => setMapReady(true)}

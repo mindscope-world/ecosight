@@ -28,6 +28,8 @@ test('search finds a record, opens it, and follows a connection', async ({ page 
   await first.click();
 
   await expect(details(page).getByRole('heading', { level: 2 })).toHaveText('Sample Startup 10');
+  // The sample holds no logos, so the card shows the record's initials in their place.
+  await expect(details(page).getByText('SS', { exact: true })).toBeVisible();
   await expect(details(page)).toContainText('Inactive');
   await expect(details(page)).toContainText('$1M');
   await expect(page).toHaveURL(/[#&]s=[0-9a-f-]{36}/);
@@ -103,4 +105,48 @@ test('on a phone the panels become sheets and search a button', async ({ page })
   await expect(page.getByText('Ecosystem signal')).toBeVisible();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Search' })).toBeVisible();
+});
+
+test('the overview and activity figures lead to the records they count', async ({ page }) => {
+  await page.goto('/map/');
+  const activity = page.locator('#section-activity');
+  await expect(activity.getByRole('link', { name: /Funding rounds/ })).toHaveAttribute('href', /\/dashboard\/#v=1&t=startups&w=rounds/);
+  await expect(activity.getByRole('link', { name: /Active investors/ })).toHaveAttribute('href', /\/dashboard\/#v=1&t=investors&w=active/);
+  await expect(activity.getByRole('link', { name: /Programs added/ })).toHaveAttribute('href', /\/dashboard\/#v=1&t=accelerators&w=programs/);
+  await expect(page.locator('#section-overview').getByRole('link', { name: /Investors/ })).toHaveAttribute('href', /\/dashboard\/#v=1&t=investors/);
+
+  // Upcoming events are on the map itself: the figure switches to the events lens.
+  await activity.getByRole('button', { name: /Upcoming events/ }).click();
+  await expect(page).toHaveURL(/p=events/);
+
+  await activity.getByRole('link', { name: /Startups added/ }).click();
+  await expect(page).toHaveURL(/\/dashboard\/#v=1&t=startups&w=added/);
+  await expect(page.getByRole('tab', { name: /Startups/ })).toHaveAttribute('aria-selected', 'true');
+  // The list can always be widened again, so the reader is never left on a dead end.
+  await page.getByRole('button', { name: /Added in the last 30 days/ }).click();
+  await expect(page).toHaveURL(/#v=1&t=startups$/);
+  await expect(page.locator('tbody tr')).toHaveCount(25);
+});
+
+test('the line to each connection of a selected record can be hidden and shown', async ({ page }) => {
+  await page.goto('/map/');
+  await search(page, 'Sample Fund 01');
+  await page.getByRole('dialog', { name: 'Search' }).getByRole('option').first().click();
+  await expect(details(page).getByRole('heading', { level: 2 })).toHaveText('Sample Fund 01');
+
+  // Beside each of the six companies it backs is the control for the line to it.
+  const hide = details(page).getByRole('button', { name: 'Hide line', exact: true });
+  await expect(hide).toHaveCount(6);
+  await hide.first().click();
+  await expect(hide).toHaveCount(5);
+  const show = details(page).getByRole('button', { name: 'Show line', exact: true });
+  await expect(show).toHaveCount(1);
+  await expect(show).toHaveAttribute('aria-pressed', 'false');
+  await show.click();
+  await expect(hide).toHaveCount(6);
+
+  // And one button for all of them at once.
+  await details(page).getByRole('button', { name: 'Hide all 6 lines' }).click();
+  await expect(details(page).getByRole('button', { name: 'Show all 6 lines' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(hide).toHaveCount(0);
 });

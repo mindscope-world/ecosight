@@ -28,8 +28,8 @@ export function MapCanvas({
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<PreviewMap | null>(null);
-  const latest = useRef({ points, hubs, lines, kinds });
-  latest.current = { points, hubs, lines, kinds };
+  const latest = useRef({ points, hubs, lines, kinds, view });
+  latest.current = { points, hubs, lines, kinds, view };
   const first = useRef(options);
 
   useEffect(() => {
@@ -46,6 +46,8 @@ export function MapCanvas({
             if (latest.current.hubs) created.setHubs(latest.current.hubs);
             if (latest.current.lines) created.setLines(latest.current.lines);
             created.setKinds(latest.current.kinds ?? null);
+            // The place to look at may have become known between the first render and now.
+            if (latest.current.view) created.jumpTo(latest.current.view.center, latest.current.view.zoom);
             map.current = created;
           });
         }
@@ -63,6 +65,9 @@ export function MapCanvas({
   }, []);
 
   useEffect(() => map.current?.setPoints(points), [points]);
+  useEffect(() => {
+    if (hubs) map.current?.setHubs(hubs);
+  }, [hubs]);
   useEffect(() => map.current?.setKinds(kinds ?? null), [kinds]);
   useEffect(() => {
     if (view) map.current?.flyTo(view.center, view.zoom);

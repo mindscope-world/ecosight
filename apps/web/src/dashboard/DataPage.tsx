@@ -9,6 +9,7 @@ import { POINT_LAYERS, TYPE_LABELS, type PointLayerDef } from '../entities';
 import { countryName, formatCount, formatPartialDate, formatUsd } from '../lib/format';
 import { graphUrlFor, mapUrlFor, pageUrl } from '../pages';
 import { summariseCountries } from './countries';
+import { SUBSETS } from './subsets';
 
 /** One tab per kind of organisation the map draws. Events have no table yet: there are none on record. */
 const TABS = POINT_LAYERS.filter((layer) => layer.id !== 'events');
@@ -222,10 +223,15 @@ function CountrySummary({ rows }: { rows: OrgRow[] }) {
   );
 }
 
-function decode(hash: string): { tab: string; selected: string | null } {
+function decode(hash: string): { tab: string; selected: string | null; subset: string | null } {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const tab = params.get('t');
-  return { tab: tab === COUNTRIES || TABS.some((layer) => layer.id === tab) ? tab! : TABS[0]!.id, selected: params.get('s') };
+  return {
+    tab: tab === COUNTRIES || TABS.some((layer) => layer.id === tab) ? tab! : TABS[0]!.id,
+    selected: params.get('s'),
+    // `u=1` is the first spelling of the list of what is not on the map; links to it are still about.
+    subset: params.get('u') === '1' ? 'unplaced' : Object.hasOwn(SUBSETS, params.get('w') ?? '') ? params.get('w') : null,
+  };
 }
 
 const initial = decode(location.hash);
@@ -238,6 +244,10 @@ export function DataPage() {
   const [tab, setTab] = useState(initial.tab);
   const [query, setQuery] = useState('');
   const [country, setCountry] = useState('');
+  // A narrower list of the tab's rows: those not on the map, or those one of the map's activity figures counts.
+  const [subset, setSubset] = useState<string | null>(initial.subset);
+  const unplaced = subset === 'unplaced';
+  const [today] = useState(() => new Date());
   const [sort, setSort] = useState<{ key: string; descending: boolean }>({ key: 'name', descending: false });
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string | null>(initial.selected);
@@ -256,8 +266,8 @@ export function DataPage() {
   }, []);
 
   useEffect(() => {
-    history.replaceState(null, '', `#v=1&t=${tab}${selected ? `&s=${selected}` : ''}`);
-  }, [tab, selected]);
+    history.replaceState(null, '', `#v=1&t=${tab}${unplaced ? '&u=1' : subset ? `&w=${subset}` : ''}${selected ? `&s=${selected}` : ''}`);
+  }, [tab, selected, subset, unplaced]);
 
   useEffect(() => {
     if (!selected) return;
@@ -282,6 +292,7 @@ export function DataPage() {
     const column = columns.find((item) => item.key === sort.key) ?? NAME;
     return all
       .filter((row) => !country || row.country === country)
+      .filter((row) => !subset || SUBSETS[subset]!.test(row, today))
       .filter(
         (row) =>
           !text ||
@@ -297,10 +308,10 @@ export function DataPage() {
         const order = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
         return (sort.descending ? -order : order) || a.name.localeCompare(b.name);
       });
-  }, [all, query, country, sort, columns]);
+  }, [all, query, country, subset, today, sort, columns]);
 
   // A change to what is listed starts again from its first page.
-  useEffect(() => setPage(0), [tab, query, country, sort]);
+  useEffect(() => setPage(0), [tab, query, country, subset, sort]);
 
   if (locked) return <AccessGate rejected={storedAccessKey() !== ''} />;
 
@@ -309,12 +320,14 @@ export function DataPage() {
   const visible = shown.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const located = all.filter((row) => row.precision === 'address' || row.precision === 'area').length;
   const raised = all.reduce((sum, row) => sum + row.raised_usd, 0);
+  const offMap = all.filter((row) => row.precision === null).length;
   const cities = new Set(all.filter((row) => row.city).map((row) => `${row.country}/${row.city}`)).size;
 
   const pickTab = (id: string) => {
     setTab(id);
     setQuery('');
     setCountry('');
+    setSubset(null);
     setSort({ key: 'name', descending: false });
   };
 
@@ -454,12 +467,63 @@ export function DataPage() {
                       ))}
                     </select>
                   </label>
+                  {(offMap > 0 || unplaced) && (
+                    <button
+                      type="button"
+                      aria-pressed={unplaced}
+                      title={`${layer.label} on record with no office, which the map cannot draw`}
+                      onClick={() => {
+                        setSubset(unplaced ? null : 'unplaced');
+                        // No office means no country, so a country filter would hide them all.
+                        setCountry('');
+                      }}
+                      className={`flex h-8 items-center gap-1.5 rounded border px-2.5 text-xs ${
+                        unplaced ? 'border-accent text-accent' : 'border-line hover:bg-raised'
+                      }`}
+                    >
+                      Not on the map
+                      <span className="tabular-nums text-mute">{offMap}</span>
+                    </button>
+                  )}
+                  {subset && !unplaced && (
+                    <button
+                      type="button"
+                      title="Show every row again"
+                      onClick={() => setSubset(null)}
+                      className="flex h-8 items-center gap-1.5 rounded border border-accent px-2.5 text-xs text-accent hover:bg-raised"
+                    >
+                      {SUBSETS[subset]!.label}
+                      <Icon name="close" size={12} />
+                      <span className="sr-only">Show every row again</span>
+                    </button>
+                  )}
                   <span className="ml-auto text-[11px] tabular-nums text-mute" aria-live="polite">
                     {shown.length === 0
                       ? 'No rows match'
                       : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + visible.length} of ${shown.length}${shown.length < all.length ? ` (${all.length} in all)` : ''}`}
                   </span>
                 </div>
+
+                {subset === 'active' && (
+                  <p className="m-0 mt-2 text-[11px] leading-snug text-mute">
+                    Named as an investor in a round announced in the last 12 months. The map's figure counts every kind of
+                    investor; development funders and corporates are under their own tabs.
+                  </p>
+                )}
+                {subset && !unplaced && shown.length === 0 && (
+                  <p className="m-0 mt-2 text-[11px] leading-snug text-mute">
+                    Nothing on this tab fits.{' '}
+                    <button type="button" className="text-accent2 underline" onClick={() => setSubset(null)}>
+                      Show every row
+                    </button>
+                  </p>
+                )}
+                {unplaced && (
+                  <p className="m-0 mt-2 text-[11px] leading-snug text-mute">
+                    These are on record with no office, most of them named only as an investor in a funding round. The
+                    map cannot draw them, or the lines from them to the companies they back, until each is given a city.
+                  </p>
+                )}
 
                 <div className="mt-2 overflow-x-auto rounded border border-line">
                   <table className="w-full border-collapse text-left">

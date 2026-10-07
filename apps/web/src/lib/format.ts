@@ -86,3 +86,10 @@ export function trend(current: number, previous: number): { text: string; tone: 
   if (Math.abs(change) < 0.05) return { text: '0.0%', tone: 'flat' };
   return { text: `${change > 0 ? '+' : ''}${change.toFixed(1)}%`, tone: change > 0 ? 'up' : 'down' };
 }
+
+/** The first letters of an organisation's name, for when there is no logo to show. */
+export function initials(name: string): string {
+  const words = name.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const letters = words.length > 1 ? words[0]![0]! + words[1]![0]! : (words[0] ?? '?').slice(0, 2);
+  return letters.toUpperCase();
+}

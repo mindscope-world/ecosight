@@ -4,6 +4,10 @@ A person reads each funding note and writes the rounds into a JSON file, with th
 words each one was read from. This module checks that file against the database
 and loads it. Nothing is inferred here: a round whose quote is not in the stored
 note, or whose organisation is not found, stops the load.
+
+The note is both funding cells of the row: the level or status, and the details.
+A dataset may give a round's amount in one and its date in the other, so a round
+can carry a second quote, `date_quote`, for the words its date was read from.
 """
 
 import json
@@ -36,6 +40,13 @@ class Round:
     investors: tuple[tuple[str, bool], ...]
     quote: str
     source: str | None
+    # The words the date was read from, when they are not in the quote.
+    date_quote: str | None = None
+
+    @property
+    def words(self) -> str:
+        """Everything the round was read from, as it is kept beside the round."""
+        return f"{self.quote} … {self.date_quote}" if self.date_quote else self.quote
 
     @property
     def announced_on(self) -> str | None:
@@ -67,6 +78,7 @@ def read_file(path: Path) -> tuple[dict, list[Round], list[str]]:
             investors=tuple((i["name"], bool(i.get("lead"))) for i in row.get("investors", [])),
             quote=row.get("quote", ""),
             source=row.get("source"),
+            date_quote=row.get("date_quote"),
         )
         rounds.append(item)
         if item.stage is not None and item.stage not in STAGES:
@@ -83,6 +95,8 @@ def read_file(path: Path) -> tuple[dict, list[Round], list[str]]:
             problems.append(f"{where}: needs an amount, or a date with a stage or investor")
         if not item.quote.strip():
             problems.append(f"{where}: no quote")
+        if item.date_quote is not None and (item.date is None or not item.date_quote.strip()):
+            problems.append(f"{where}: a date quote needs a date and words")
         for name, _ in item.investors:
             if name not in doc["investors"]:
                 problems.append(f"{where}: investor {name!r} has no type in the investors list")
@@ -98,7 +112,9 @@ def check_against_database(conn, dataset: str, rounds: list[Round]) -> tuple[dic
     with conn.cursor() as cur:
         cur.execute(
             """
-            select (payload->>'record')::int, record_id, payload->'fields'->>'funding_details',
+            select (payload->>'record')::int, record_id,
+                   -- Kept apart by a line break, so no quote can run from one cell into the other.
+                   concat_ws(E'\n|\n', payload->'fields'->>'funding_status', payload->'fields'->>'funding_details'),
                    payload->'fields'->>'source_funding', g.status::text
             from review_item r join organisation g on g.id = r.record_id
             where r.record_type = 'organisation' and payload->>'import' = %s
@@ -116,6 +132,8 @@ def check_against_database(conn, dataset: str, rounds: list[Round]) -> tuple[dic
             problems.append(f"{where}: record {item.record} was not loaded from {dataset}")
         elif _squash(item.quote) not in _squash(org["note"]):
             problems.append(f"{where}: quote is not in the organisation's funding note")
+        elif item.date_quote and _squash(item.date_quote) not in _squash(org["note"]):
+            problems.append(f"{where}: date quote is not in the organisation's funding note")
         elif org["status"] != "published":
             problems.append(f"{where}: the organisation is not published")
     return orgs, problems
@@ -220,10 +238,10 @@ def apply(conn, doc: dict, rounds: list[Round], orgs: dict[int, dict]) -> None:
                 insert into field_source (record_type, record_id, field, source_url, method, quote, verified_at)
                 values ('funding_round', %s, 'round', %s, 'manual', %s, %s)
                 """,
-                (round_id, item.source or first_url(org["source"]), item.quote, snapshot),
+                (round_id, item.source or first_url(org["source"]), item.words, snapshot),
             )
             cur.execute(
                 "insert into review_item (record_type, record_id, payload, method, status, reviewed_at) "
                 "values ('funding_round', %s, %s, 'manual', 'approved', %s)",
-                (round_id, json.dumps({"import": key, "record": item.record, "quote": item.quote}), snapshot),
+                (round_id, json.dumps({"import": key, "record": item.record, "quote": item.words}), snapshot),
             )
