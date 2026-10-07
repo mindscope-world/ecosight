@@ -14,6 +14,9 @@ own copy of the files; a fresh clone will not have them.
 | `east-africa-2026-10-07/` | `east_africa_100_organizations.csv`: 100 universities, public bodies, NGOs and innovation hubs in Kenya, Uganda, Tanzania, Rwanda, Ethiopia, Burundi, Somalia, South Sudan and Djibouti. The `.xlsx` is the same data; the `.md` describes the columns. Read through `curation/east_africa_100_organizations.mapping.json` | Loaded. 96 published, 4 kept as drafts; 5 were merged into organisations already on record |
 | `africa-health-sources-2026-10-07/` | `African_Healthtech_100.csv`: 100 health technology organisations in 17 African countries. `African_Healthtech_Sources.csv` is its source register, one link per row, which the organisations file cites by ID. The `.xlsx` is the same data. Read through `curation/African_Healthtech_100.mapping.json` | Loaded. 84 published, 16 kept as drafts. 59 funding rounds read from it |
 
+The health technology dataset's stated relationships are in `curation/African_Healthtech_100_relationships.csv`,
+loaded with `import-links` after its organisations.
+
 Work derived from a dataset by hand lives in `curation/`: the funding rounds read
 out of the startups and health technology datasets' funding notes, the mapping files
 for the other datasets, and the cities of investors abroad. It is kept out of git for the same
