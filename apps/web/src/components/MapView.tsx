@@ -3,7 +3,7 @@ import type { FeatureCollection, Point } from 'geojson';
 import { useEffect, useRef, type RefObject } from 'react';
 import type { Basemap } from '../config';
 import { HEAT_LAYERS, POINT_LAYERS } from '../entities';
-import type { MapAdapter } from '../map/adapter';
+import type { MapAdapter, PickedRecord } from '../map/adapter';
 import { MapLibreAdapter } from '../map/maplibreAdapter';
 
 /**
@@ -16,9 +16,9 @@ export function MapView({
   initialCamera,
   data,
   enabled,
-  onSelect,
-  onSelectMany,
+  onPick,
   onCamera,
+  onReady,
 }: {
   /** Filled once the map exists, for the camera moves the rest of the app makes. */
   adapter: RefObject<MapAdapter | null>;
@@ -27,15 +27,16 @@ export function MapView({
   /** Records per point layer, already filtered. */
   data: Record<string, FeatureCollection<Point>>;
   enabled: ReadonlySet<string>;
-  onSelect: (layerId: string, properties: Record<string, unknown>) => void;
-  /** Several records on one spot were clicked. */
-  onSelectMany: (layerId: string, records: Record<string, unknown>[]) => void;
+  /** Markers were clicked: every record at that spot, on any visible layer. */
+  onPick: (records: PickedRecord[]) => void;
   onCamera: () => void;
+  /** Called once, when the map can first be drawn on. */
+  onReady: () => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   // The map is created once; these keep its listeners pointed at the latest props.
-  const latest = useRef({ onSelect, onSelectMany, onCamera, data, enabled, basemap });
-  latest.current = { onSelect, onSelectMany, onCamera, data, enabled, basemap };
+  const latest = useRef({ onPick, onCamera, onReady, data, enabled, basemap });
+  latest.current = { onPick, onCamera, onReady, data, enabled, basemap };
   const applied = useRef(basemap);
 
   useEffect(() => {
@@ -47,15 +48,9 @@ export function MapView({
     void map.whenReady().then(() => {
       if (!alive) return;
       // Heatmaps first, so markers are drawn over them.
-      for (const layer of HEAT_LAYERS) map.addHeatLayer({ id: layer.id, weight: layer.weight });
-      for (const layer of POINT_LAYERS)
-        map.addPointLayer({
-          id: layer.id,
-          color: layer.color,
-          shape: layer.shape,
-          onSelect: (properties) => latest.current.onSelect(layer.id, properties),
-          onSelectMany: (records) => latest.current.onSelectMany(layer.id, records),
-        });
+      for (const layer of HEAT_LAYERS) map.addHeatLayer({ id: layer.id, weight: layer.weight, ramp: layer.ramp });
+      for (const layer of POINT_LAYERS) map.addPointLayer({ id: layer.id, color: layer.color, shape: layer.shape });
+      map.onPick((records) => latest.current.onPick(records));
       adapter.current = map;
       // The style may have been changed while the first one was still loading.
       if (latest.current.basemap !== applied.current) {
@@ -64,6 +59,7 @@ export function MapView({
       }
       push(map, latest.current.data, latest.current.enabled);
       map.onCameraChange(() => latest.current.onCamera());
+      latest.current.onReady();
     });
     return () => {
       alive = false;
@@ -99,7 +95,13 @@ function push(map: MapAdapter, data: Record<string, FeatureCollection<Point>>, e
     map.setVisible(layer.id, enabled.has(layer.id));
   }
   for (const layer of HEAT_LAYERS) {
-    map.setData(layer.id, data[layer.source] ?? EMPTY);
+    // A record with no public address is drawn at its city's centre. Dozens of
+    // them on one point would read as the densest place on the map, so the
+    // heatmaps count only records whose position means something.
+    const located = (data[layer.source] ?? EMPTY).features.filter(
+      (feature) => feature.properties?.precision !== 'city',
+    );
+    map.setData(layer.id, { type: 'FeatureCollection', features: located });
     map.setVisible(layer.id, enabled.has(layer.id));
   }
 }

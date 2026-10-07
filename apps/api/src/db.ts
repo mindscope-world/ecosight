@@ -2,9 +2,9 @@ import postgres from 'postgres';
 
 export type Sql = postgres.Sql;
 
-export function connect(url = process.env.DATABASE_URL): Sql {
+export function connect(url = process.env.DATABASE_URL, options: { max?: number } = {}): Sql {
   if (!url) throw new Error('DATABASE_URL is not set');
-  return postgres(url, { onnotice: () => {} });
+  return postgres(url, { onnotice: () => {}, ...options });
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

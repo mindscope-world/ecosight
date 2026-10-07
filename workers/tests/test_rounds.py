@@ -76,6 +76,7 @@ def conn():
     connection.rollback()
     with connection.cursor() as cur:
         cur.execute("delete from field_source where source_url like 'https://rounds.test/%'")
+        cur.execute("delete from city where name = 'Zurich'")
         cur.execute("delete from organisation where slug in ('sample-pay-rounds', 'example-ventures', 'example-ventures-africa')")
         cur.execute("delete from review_item where payload->>'import' like 'test_rounds_dataset%' or payload->>'import' = 'another_dataset'")
     connection.commit()
@@ -179,3 +180,43 @@ def test_an_organisation_already_on_record_is_merged_not_duplicated(conn, tmp_pa
         assert cur.fetchone()[0] == 1
         cur.execute("select count(*) from office o join organisation g on g.id = o.organisation_id where g.slug = 'example-ventures-africa'")
         assert cur.fetchone()[0] == 1
+
+
+def test_an_investor_with_no_office_is_placed_at_a_city(conn, tmp_path):
+    import httpx
+
+    from atlas_workers.geocode import Geocoder
+    from atlas_workers.locations import apply as place, read_file as read_places, resolve, summarise
+
+    doc, rounds, _ = read_file(write(tmp_path))
+    orgs, _ = check_against_database(conn, doc["dataset"], rounds)
+    apply(conn, doc, rounds, orgs)  # creates the investor "Example Ventures" with no office
+
+    path = tmp_path / "places.json"
+    path.write_text(json.dumps({"basis": "Test basis", "placements": [
+        {"name": "Example Ventures", "city": "Zurich", "country": "ch"},
+        {"name": "Nobody Capital", "city": "Zurich", "country": "CH"},
+        {"name": "Sample Pay Rounds", "city": "Nowhere", "country": "CH"},
+    ]}))
+    zurich = {"lon": "8.54", "lat": "47.37", "category": "place", "type": "city", "display_name": "Zurich, Switzerland"}
+    geo = Geocoder(tmp_path / "cache.json", httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=[zurich] if request.url.params["q"] == "Zurich" else []))), delay=0)
+
+    for _ in range(2):  # a second run must not add a second office
+        pdoc, placements = read_places(path)
+        resolve(conn, placements, geo, "test_rounds_dataset/locations")
+        place(conn, pdoc, placements, "test_rounds_dataset/locations")
+    assert [item.problem for item in placements] == [
+        None, "no organisation of this name is on record", "city not found: Nowhere, CH",
+    ]
+    assert "1 of 3 can be placed" in summarise(placements)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select o.city, o.country, o.precision::text, round(st_x(o.geom::geometry)::numeric, 2)::float8, s.quote, s.source_url
+            from office o join organisation g on g.id = o.organisation_id and g.slug = 'example-ventures'
+            join field_source s on s.record_id = g.id and s.field = 'office'
+            """
+        )
+        assert cur.fetchall() == [("Zurich", "CH", "city", 8.54, "Test basis", None)]

@@ -41,6 +41,8 @@ export const FieldSource = Type.Object({
   field: Type.String(),
   source_url: Nullable(Type.String()),
   method: Type.Union([Type.Literal('manual'), Type.Literal('partner'), Type.Literal('ai')]),
+  // The words a value rests on: a quotation from the source, or the stated basis when there is no link.
+  quote: Type.Optional(Nullable(Type.String())),
   verified_at: Nullable(Type.String({ format: 'date-time' })),
 });
 
@@ -76,6 +78,11 @@ export const OrgDetail = Type.Object({
     portfolio: Type.Array(OrgLink),
     programs: Type.Array(Type.Object({ name: Type.String(), organisation: OrgLink })),
     events: Type.Array(Type.Object({ id: Type.String({ format: 'uuid' }), name: Type.String() })),
+    // Other ties to organisations: part of, hosted by, member of, founded by, backed by, partner of.
+    // `outgoing` is true when this organisation is the one that is part of, hosted by, and so on.
+    affiliations: Type.Array(
+      Type.Object({ kind: Type.String(), outgoing: Type.Boolean(), label: Nullable(Type.String()), organisation: OrgLink }),
+    ),
     people: Type.Array(Type.Object({ name: Type.String(), role: Type.String() })),
   }),
   sources: Type.Array(FieldSource),
@@ -223,3 +230,238 @@ export const Stats = Type.Object({
 export type Stats = Static<typeof Stats>;
 
 export const ErrorBody = Type.Object({ error: Type.String() });
+
+const GraphNodeKind = Type.Union([
+  Type.Literal('organisation'),
+  Type.Literal('event'),
+  Type.Literal('person'),
+  Type.Literal('place'),
+  Type.Literal('sector'),
+]);
+
+const GraphNodeFacts = {
+  // Kind and key together: org:<id>, event:<id>, person:<id>, place:<country>/<city>, sector:<name>.
+  id: Type.String(),
+  kind: GraphNodeKind,
+  // The record's own id, for organisations and events, which have a details card.
+  ref: Nullable(Type.String({ format: 'uuid' })),
+  name: Type.String(),
+  types: Type.Array(OrgType),
+  sectors: Type.Array(Type.String()),
+  city: Nullable(Type.String()),
+  country: Nullable(Type.String()),
+  // One line more: a person's role, an event's date.
+  detail: Nullable(Type.String()),
+};
+
+export const GraphNode = Type.Object({
+  ...GraphNodeFacts,
+  // Distinct neighbours under the kinds of link and filters asked for.
+  degree: Type.Integer(),
+  // How many of those neighbours this answer does not show.
+  hidden: Type.Integer(),
+});
+export type GraphNode = Static<typeof GraphNode>;
+
+export const GraphEdge = Type.Object({
+  id: Type.String(),
+  kind: Type.Union([
+    Type.Literal('invested_in'),
+    Type.Literal('accelerated_at'),
+    Type.Literal('organised'),
+    Type.Literal('part_of'),
+    Type.Literal('hosted_by'),
+    Type.Literal('member_of'),
+    Type.Literal('founded_by'),
+    Type.Literal('funded_by'),
+    Type.Literal('partner_of'),
+    Type.Literal('has_role'),
+    Type.Literal('located_in'),
+    Type.Literal('in_sector'),
+  ]),
+  source: Type.String(),
+  target: Type.String(),
+  // A programme's name, or a person's role.
+  label: Nullable(Type.String()),
+  // The rounds an investment link stands for, newest first. Empty for other kinds.
+  rounds: Type.Array(
+    Type.Object({
+      id: Type.String({ format: 'uuid' }),
+      stage: Nullable(Type.String()),
+      amount_usd: Nullable(Type.Number()),
+      announced_on: Nullable(Type.String({ format: 'date' })),
+      announced_precision: DatePrecision,
+      is_lead: Type.Boolean(),
+      source_url: Nullable(Type.String()),
+    }),
+  ),
+  // What a tie between organisations, or a place on a programme, was read from. Empty for other kinds.
+  evidence: Type.Array(Type.Object({ source_url: Nullable(Type.String()), quote: Nullable(Type.String()) })),
+});
+export type GraphEdge = Static<typeof GraphEdge>;
+
+export const GraphNeighbourhood = Type.Object({
+  start: Type.String(),
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // True when there were more nodes within reach than the limit allows.
+  truncated: Type.Boolean(),
+});
+
+export const GraphExpansion = Type.Object({
+  id: Type.String(),
+  // The expanded node first, then the neighbours on this page.
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // Neighbours the caller did not already have, and how many are still to come.
+  total: Type.Integer(),
+  remaining: Type.Integer(),
+});
+
+export const GraphPath = Type.Object({
+  found: Type.Boolean(),
+  length: Nullable(Type.Integer()),
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // False when the search stopped at its length or size limit, so a longer chain may exist.
+  searched_all: Type.Boolean(),
+});
+
+const GraphTie = Type.Object({
+  organisation: Type.Object(GraphNodeFacts),
+  // The companies, or the investors, the two have in common.
+  shared: Type.Array(Type.Object({ id: Type.String(), name: Type.String() })),
+});
+
+export const GraphCoInvestment = Type.Object({
+  organisation: Type.Object(GraphNodeFacts),
+  co_investors: Type.Array(GraphTie),
+  shared_investors: Type.Array(GraphTie),
+});
+
+export const GraphTop = Type.Object({ organisations: Type.Array(GraphNode) });
+
+export const GraphOverview = Type.Object({
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // True when the network has more connected nodes than the limit; the best connected are kept.
+  truncated: Type.Boolean(),
+  total_nodes: Type.Integer(),
+});
+
+// One row of the data tables: what is on record about an organisation, without its sources.
+export const OrgRow = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  name: Type.String(),
+  types: Type.Array(OrgType),
+  sectors: Type.Array(Type.String()),
+  stage: Nullable(Type.String()),
+  city: Nullable(Type.String()),
+  country: Nullable(Type.String()),
+  precision: Nullable(Type.Union([Type.Literal('address'), Type.Literal('area'), Type.Literal('city')])),
+  founded_year: Nullable(Type.Integer()),
+  is_active: Type.Boolean(),
+  website_domain: Nullable(Type.String()),
+  raised_usd: Type.Number(),
+  // Published rounds it raised, and distinct investors named in them.
+  rounds: Type.Integer(),
+  investors: Type.Integer(),
+  // Companies it has backed, and the latest round it took part in.
+  portfolio: Type.Integer(),
+  last_invested_on: Nullable(Type.String({ format: 'date' })),
+  // Organisations that went through a programme it runs.
+  participants: Type.Integer(),
+  people: Type.Integer(),
+  last_verified_at: Nullable(Type.String({ format: 'date-time' })),
+});
+export type OrgRow = Static<typeof OrgRow>;
+
+export const OrgList = Type.Object({ total: Type.Integer(), organisations: Type.Array(OrgRow) });
+
+export const Me = Type.Object({
+  // The address that signed in. Null when the request carried the shared access key, or nothing.
+  email: Nullable(Type.String()),
+  // Null when nobody signed in, and when the address that did is not on the list of users.
+  role: Nullable(Type.Union([Type.Literal('viewer'), Type.Literal('reviewer'), Type.Literal('admin')])),
+});
+
+export const ReviewItem = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  kind: Type.Union([Type.Literal('organisation'), Type.Literal('relationship'), Type.Literal('other')]),
+  status: Type.Union([Type.Literal('pending'), Type.Literal('approved'), Type.Literal('rejected'), Type.Literal('archived')]),
+  // Why it was not published by the importer's own rules.
+  reason: Nullable(Type.String()),
+  // What the reviewer wrote when rejecting or archiving it.
+  note: Nullable(Type.String()),
+  // The import it came from.
+  source: Nullable(Type.String()),
+  created_at: Type.String({ format: 'date-time' }),
+  reviewed_at: Nullable(Type.String({ format: 'date-time' })),
+  reviewed_by: Nullable(Type.String()),
+  organisation: Nullable(
+    Type.Object({
+      id: Type.String({ format: 'uuid' }),
+      name: Type.String(),
+      types: Type.Array(OrgType),
+      sectors: Type.Array(Type.String()),
+      stage: Nullable(Type.String()),
+      description: Nullable(Type.String()),
+      website_domain: Nullable(Type.String()),
+      status: Type.String(),
+      city: Nullable(Type.String()),
+      country: Nullable(Type.String()),
+      sources: Type.Integer(),
+    }),
+  ),
+  proposal: Nullable(
+    Type.Object({
+      kind: Nullable(Type.String()),
+      from: Nullable(Type.String()),
+      to: Nullable(Type.String()),
+      label: Nullable(Type.String()),
+      source_url: Nullable(Type.String()),
+      quote: Nullable(Type.String()),
+      // The published record each name finds, when it finds one.
+      from_match: Nullable(OrgLink),
+      to_match: Nullable(OrgLink),
+    }),
+  ),
+});
+export type ReviewItem = Static<typeof ReviewItem>;
+
+export const ReviewList = Type.Object({
+  pending: Type.Integer(),
+  // Set aside as incomplete or unverified.
+  archived: Type.Integer(),
+  // Approved or rejected by a reviewer.
+  settled: Type.Integer(),
+  items: Type.Array(ReviewItem),
+});
+
+export const SavedView = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  name: Type.String(),
+  page: Type.Union([Type.Literal('map'), Type.Literal('graph'), Type.Literal('dashboard')]),
+  // The view's share-link state, without the leading #.
+  state: Type.String(),
+  created_at: Type.String({ format: 'date-time' }),
+});
+export type SavedView = Static<typeof SavedView>;
+
+export const Notifications = Type.Object({
+  // Everything published since the time asked about; `items` holds the newest twenty.
+  total: Type.Integer(),
+  items: Type.Array(
+    Type.Object({
+      kind: Type.Union([Type.Literal('organisation'), Type.Literal('round')]),
+      organisation_id: Type.String({ format: 'uuid' }),
+      label: Type.String(),
+      // For a round, its stage.
+      detail: Nullable(Type.String()),
+      at: Type.String({ format: 'date-time' }),
+    }),
+  ),
+  // Items waiting in the review queue. Null for anyone who is not a reviewer.
+  waiting_review: Nullable(Type.Integer()),
+});
+export type Notifications = Static<typeof Notifications>;

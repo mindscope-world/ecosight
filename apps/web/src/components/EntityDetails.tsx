@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { EventDetail, OrgDetail, OrgLink } from '../api';
 import { layerForTypes, POINT_LAYERS, TYPE_LABELS } from '../entities';
 import { formatDate, formatDateTime, formatMoney, formatPartialDate, formatUsd } from '../lib/format';
+import { AFFILIATION_LABELS } from '../graph/style';
 import { Icon, MicroLabel, ShapeIcon } from './ui';
 
 export type Detail =
@@ -72,12 +73,26 @@ function amountOf(round: OrgDetail['rounds'][number]): string {
   return formatMoney(round.amount_original, round.currency);
 }
 
-function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Selection) => void }) {
+function OrgBody({
+  org,
+  onSelect,
+  actions,
+}: {
+  org: OrgDetail;
+  onSelect: (selection: Selection) => void;
+  actions?: (org: OrgDetail) => ReactNode;
+}) {
   const layer = layerForTypes(org.types);
   const hq = org.offices[0];
   const latest = org.rounds[0];
-  const { investors, portfolio, programs, events, people } = org.connections;
-  const connected = investors.length + portfolio.length + programs.length + events.length + people.length;
+  const { investors, portfolio, programs, events, people, affiliations } = org.connections;
+  const connected = investors.length + portfolio.length + programs.length + events.length + people.length + affiliations.length;
+  // Ties grouped by how they read from this organisation's side: "Part of", "Hosts".
+  const ties = new Map<string, typeof affiliations>();
+  for (const item of affiliations) {
+    const label = AFFILIATION_LABELS[item.kind]?.[item.outgoing ? 0 : 1] ?? item.kind;
+    ties.set(label, [...(ties.get(label) ?? []), item]);
+  }
   // Investors and programs are described by what they back, not by what they raised.
   const company = org.types.includes('startup');
   return (
@@ -110,6 +125,7 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
             }
           />
         </div>
+        {actions && <div className="mt-3 flex flex-wrap gap-1.5">{actions(org)}</div>}
       </div>
 
       {org.description && (
@@ -186,6 +202,16 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
             </div>
           ))}
         </Group>
+        {[...ties].map(([label, items]) => (
+          <Group key={label} label={label} count={items.length}>
+            {items.map((item) => (
+              <div key={`${item.kind}-${item.organisation.id}`}>
+                <OrgButton org={item.organisation} onSelect={onSelect} />
+                {item.label && <div className="-mt-1 pl-[19px] text-[11px] text-mute">{item.label}</div>}
+              </div>
+            ))}
+          </Group>
+        ))}
         <Group label="Events" count={events.length}>
           {events.map((item) => {
             const pin = POINT_LAYERS.find((entry) => entry.id === 'events')!;
@@ -219,7 +245,8 @@ function OrgBody({ org, onSelect }: { org: OrgDetail; onSelect: (selection: Sele
               <span className="text-mute">
                 {source.field} ({source.method}):{' '}
               </span>
-              <SourceLink url={source.source_url} />
+              {/* With no link, the stated basis is what there is to show. */}
+              {!source.source_url && source.quote ? <span>{source.quote}</span> : <SourceLink url={source.source_url} />}
             </li>
           ))}
           {org.sources.length === 0 && <li className="text-mute">No sources recorded</li>}
@@ -273,6 +300,7 @@ export function EntityDetails({
   onSelect,
   onClose,
   back,
+  actions,
 }: {
   detail: Detail;
   /** Return to the list this record was picked from, when there is one. */
@@ -280,6 +308,8 @@ export function EntityDetails({
   /** Open a connected record; the map follows. */
   onSelect: (selection: Selection) => void;
   onClose: () => void;
+  /** Links shown under an organisation's headline figures, such as to another page. */
+  actions?: (org: OrgDetail) => ReactNode;
 }) {
   return (
     <div aria-live="polite">
@@ -298,8 +328,17 @@ export function EntityDetails({
       </div>
       {detail.status === 'loading' && <p className="px-3 text-mute">Loading…</p>}
       {detail.status === 'error' && <p className="px-3 text-mute">This record could not be loaded.</p>}
-      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} />}
+      {detail.status === 'org' && <OrgBody org={detail.org} onSelect={onSelect} actions={actions} />}
       {detail.status === 'event' && <EventBody event={detail.event} onSelect={onSelect} />}
     </div>
+  );
+}
+
+/** A link styled as a small button, for the actions under an organisation's figures. */
+export function ActionLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} className="flex h-7 items-center rounded border border-line px-2 text-xs hover:border-accent hover:text-accent">
+      {children}
+    </a>
   );
 }

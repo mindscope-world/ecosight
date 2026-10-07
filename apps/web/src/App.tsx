@@ -13,19 +13,22 @@ import {
 import type { FeatureCollection, Point } from 'geojson';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  AccessError,
   fetchEvent,
   fetchEvents,
   fetchFilteredStats,
   fetchOffices,
   fetchOrg,
   fetchStats,
+  storedAccessKey,
   type CityStat,
   type EventCollection,
   type OfficeCollection,
   type Stats,
 } from './api';
+import { AccessGate } from './components/AccessGate';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
-import { EntityDetails, type Detail } from './components/EntityDetails';
+import { ActionLink, EntityDetails, type Detail } from './components/EntityDetails';
 import { FilterPanel } from './components/FilterPanel';
 import { LayerControl, MapLegend } from './components/LayerControl';
 import { ActivityPanel, CityList, EcosystemOverview, TopSectors, type SectorShare } from './components/LeftPanel';
@@ -37,8 +40,10 @@ import { TopNavigation } from './components/TopNavigation';
 import { Icon, MicroLabel, useMediaQuery, useStored } from './components/ui';
 import { BASEMAPS, DEFAULT_CAMERA } from './config';
 import { HEAT_LAYERS, POINT_LAYERS, VIEW_LAYERS } from './entities';
+import { greatCircle } from './lib/geo';
 import { buildSignals } from './lib/signals';
-import type { MapAdapter } from './map/adapter';
+import { graphUrlFor } from './pages';
+import type { MapAdapter, PickedRecord } from './map/adapter';
 
 const initial = decodeUrlState(location.hash);
 const CITY_ZOOM = 11;
@@ -130,6 +135,8 @@ export function App() {
   const [filteredStats, setFilteredStats] = useState<Stats | null>(null);
   const [statsBehind, setStatsBehind] = useState(false);
   const [failed, setFailed] = useState(false);
+  // True when the API refused us for want of an access key.
+  const [locked, setLocked] = useState(false);
 
   const [view, setView] = useState<View>(initial.view ?? 'map');
   const [enabled, setEnabled] = useState<ReadonlySet<string>>(
@@ -140,6 +147,7 @@ export function App() {
   const [selected, setSelected] = useState<Selection | undefined>(initial.selected);
   const [detail, setDetail] = useState<Detail>({ status: 'loading' });
   const [camera, setCamera] = useState(0);
+  const [mapReady, setMapReady] = useState(false);
   // The list a marker opened when it stood for several records on one spot.
   const [stack, setStack] = useState<Stack | null>(null);
 
@@ -155,8 +163,10 @@ export function App() {
       fetchOffices(controller.signal).then(setOffices),
       fetchEvents(controller.signal).then(setEvents),
       fetchStats(controller.signal).then(setStats),
-    ]).catch(() => {
-      if (!controller.signal.aborted) setFailed(true);
+    ]).catch((error) => {
+      if (controller.signal.aborted) return;
+      if (error instanceof AccessError) setLocked(true);
+      else setFailed(true);
     });
     return () => controller.abort();
   }, []);
@@ -255,7 +265,10 @@ export function App() {
   const signals = useMemo(() => (stats ? buildSignals(stats, sectors) : []), [stats, sectors]);
   const emerging = useMemo(
     () =>
-      [...(stats?.cities ?? [])].sort(
+      // Only cities with something recent to show: a city that merely hosts an investor is not emerging.
+      (stats?.cities ?? [])
+        .filter((city) => city.rounds_12m + city.upcoming_events > 0)
+        .sort(
         (a, b) =>
           (b.rounds_12m + b.upcoming_events) / b.organisations -
           (a.rounds_12m + a.upcoming_events) / a.organisations,
@@ -291,6 +304,36 @@ export function App() {
     return () => controller.abort();
   }, [selected]);
 
+  // Lines from the selected organisation to those it is tied to by money: its
+  // investors and the companies it has backed, and to its own branches.
+  const links = useMemo(() => {
+    if (!selected || detail.status !== 'org') return [];
+    const { org } = detail;
+    const home = org.offices[0];
+    if (!home) return [];
+    const headquarters = new Map<string, [number, number]>();
+    for (const feature of offices?.features ?? [])
+      if (feature.properties.is_hq || !headquarters.has(feature.properties.org_id))
+        headquarters.set(feature.properties.org_id, feature.geometry.coordinates as [number, number]);
+    const ends: [number, number][] = [
+      ...[
+        ...org.connections.investors,
+        ...org.connections.portfolio,
+        ...org.connections.programs.map((item) => item.organisation),
+        ...org.connections.affiliations.map((item) => item.organisation),
+      ].flatMap((other) => {
+        const place = headquarters.get(other.id);
+        return place ? [place] : [];
+      }),
+      ...org.offices.slice(1).map((office): [number, number] => [office.lon, office.lat]),
+    ];
+    return ends.map((end) => greatCircle([home.lon, home.lat], end));
+  }, [selected, detail, offices]);
+
+  useEffect(() => {
+    if (mapReady) map.current?.setLinks(links);
+  }, [links, mapReady]);
+
   const flyTo = useCallback((lon: number, lat: number, zoom: number) => {
     const current = map.current?.getCamera().zoom ?? 0;
     map.current?.flyTo({ lon, lat, zoom: Math.max(current, zoom) });
@@ -324,21 +367,27 @@ export function App() {
     [select, flyTo],
   );
 
-  function openStack(layerId: string, records: Record<string, unknown>[]) {
-    const layer = POINT_LAYERS.find((entry) => entry.id === layerId);
-    if (!layer) return;
-    const kind = layerId === 'events' ? 'event' : 'org';
+  /** Markers were clicked. One record opens; several that share the spot are listed, whatever their kinds. */
+  function pickOnMap(records: PickedRecord[]) {
     const items = new Map<string, Stack['items'][number]>();
-    for (const record of records) {
+    for (const { layer: layerId, properties: record } of records) {
+      const layer = POINT_LAYERS.find((entry) => entry.id === layerId);
+      const kind = layerId === 'events' ? 'event' : 'org';
       const id = record[kind === 'event' ? 'event_id' : 'org_id'];
-      if (typeof id !== 'string' || items.has(id)) continue;
+      if (!layer || typeof id !== 'string' || items.has(id)) continue;
       const meta = kind === 'event' ? record.venue : [record.sector, record.stage].filter(Boolean).join(' · ');
-      items.set(id, { selection: { kind, id }, name: String(record.name ?? ''), meta: String(meta ?? '') });
+      items.set(id, { layer, selection: { kind, id }, name: String(record.name ?? ''), meta: String(meta ?? '') });
     }
+    if (items.size === 0) return;
+    if (items.size === 1) {
+      setStack(null);
+      select([...items.values()][0]!.selection);
+      return;
+    }
+    const order = (item: Stack['items'][number]) => POINT_LAYERS.indexOf(item.layer);
     setStack({
-      layer,
-      items: [...items.values()].sort((a, b) => a.name.localeCompare(b.name)),
-      cityLevel: records.every((record) => record.precision === 'city'),
+      items: [...items.values()].sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name)),
+      cityLevel: records.every((record) => record.properties.precision === 'city'),
     });
     setSelected(undefined);
     setRightOpen(true);
@@ -461,6 +510,7 @@ export function App() {
         setStack(null);
       }}
       back={stack ? { label: `${stack.items.length} at this location`, onBack: () => setSelected(undefined) } : undefined}
+      actions={(org) => <ActionLink href={graphUrlFor(org.id)}>View connections</ActionLink>}
     />
   ) : (
     stack && <StackList stack={stack} onSelect={select} onClose={() => setStack(null)} />
@@ -487,6 +537,8 @@ export function App() {
     />
   );
 
+  if (locked) return <AccessGate rejected={storedAccessKey() !== ''} />;
+
   return (
     <div className="flex h-full flex-col">
       <TopNavigation
@@ -512,17 +564,12 @@ export function App() {
             initialCamera={initial.camera ?? DEFAULT_CAMERA}
             data={layerData}
             enabled={enabled}
-            onSelect={(layerId, properties) => {
-              const id = layerId === 'events' ? properties.event_id : properties.org_id;
-              if (typeof id !== 'string') return;
-              setStack(null);
-              select({ kind: layerId === 'events' ? 'event' : 'org', id });
-            }}
-            onSelectMany={openStack}
+            onPick={pickOnMap}
             onCamera={() => setCamera((tick) => tick + 1)}
+            onReady={() => setMapReady(true)}
           />
           {desktop && layerControl(true)}
-          {desktop && <MapLegend heat={HEAT_LAYERS.some((layer) => enabled.has(layer.id))} />}
+          {desktop && <MapLegend heat={HEAT_LAYERS.filter((layer) => enabled.has(layer.id))} />}
           {!desktop && (
             <>
               <button

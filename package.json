@@ -10,11 +10,14 @@
     "db:migrate": "pnpm --filter @atlas/db migrate",
     "db:seed": "pnpm --filter @atlas/db seed",
     "db:test": "pnpm --filter @atlas/db test-db",
+    "users": "pnpm --filter @atlas/db users",
+    "db:migrate:hosted": "pnpm --filter @atlas/db migrate-hosted",
     "layers:build": "pnpm --filter @atlas/api build-layers",
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "check:bundle": "node scripts/check-bundle-size.mjs"
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "e2e": "pnpm --filter @atlas/web e2e"
   }
 }

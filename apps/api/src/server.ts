@@ -1,4 +1,5 @@
 import { buildApp } from './app.js';
+import { supabaseVerifier } from './auth.js';
 import { connect } from './db.js';
 
 const sql = connect();
@@ -8,6 +9,13 @@ const app = await buildApp({
   rateLimit: Number(process.env.RATE_LIMIT_PER_MINUTE ?? 120),
   corsOrigins: process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean),
   trustProxy: process.env.TRUST_PROXY === '1',
+  accessKey: process.env.ACCESS_KEY || undefined,
+  verify:
+    process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY
+      ? supabaseVerifier(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY)
+      : undefined,
+  // For local work and tests. A deployment has an access key, and then this is ignored.
+  devUser: process.env.ACCESS_KEY ? undefined : process.env.DEV_USER || undefined,
 });
 app.addHook('onClose', async () => {
   await sql.end();

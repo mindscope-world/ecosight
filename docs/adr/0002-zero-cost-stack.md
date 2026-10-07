@@ -2,6 +2,8 @@
 
 Oct 6, 2026 · Status: proposed, in use in the repo
 
+> **Note, Oct 7, 2026.** The owner has confirmed this rule: no paid hosting until there is revenue. The API runs as a Supabase Edge Function, in the project that already holds the database, and the Memgraph deployment proposed in ADR 0003 is deferred.
+
 ## Decision
 
 Every component of the MVP uses a free tier or a free self-run option, chosen so
@@ -18,8 +20,8 @@ that moving to a paid tier later is a configuration change and not a rewrite.
 | Extraction | Rule-based baseline, and a model on Groq called through LangChain | Free tier, rate limited | If the free tier's daily limits are too low for a backfill, or accuracy on the labelled set is too low | Groq's paid tier, or another LangChain chat model passed to the same extractor |
 | Geocoding | Public Nominatim, 1 request per second, results cached | Free | Bulk backfills beyond a few thousand addresses | Kenya-only self-hosted Nominatim |
 | Raw document store | Local directory, later Cloudflare R2 | Free up to 10 GB | Above 10 GB | Paid R2 storage |
-| Web hosting | Any static host; the build supports a sub-path, so GitHub Pages works without another account | Free | Not expected | — |
-| API hosting | A container (`infra/api/Dockerfile`); host not chosen yet | — | — | See open questions |
+| Web hosting | GitHub Pages, from the `gh-pages` branch. The build holds code only | Free | Not expected | — |
+| API hosting | A Supabase Edge Function running the Fastify app (`apps/api/src/edge.ts`). `render.yaml` is an untested alternative | Free, within the project's monthly function-call allowance | When the allowance or the function's limits hurt | A paid container host |
 | Scheduled jobs | GitHub Actions on a schedule | Free and unmetered while the repository is public | If the repository goes private: 2,000 minutes a month | — |
 | CI | GitHub Actions | Free for public repos, 2,000 minutes a month for private | — | — |
 

@@ -1,7 +1,7 @@
 import type { Camera } from '@atlas/schema';
 import type { FeatureCollection, Point } from 'geojson';
 import type { Basemap } from '../config';
-import type { Shape } from '../entities';
+import type { HeatRamp, Shape } from '../entities';
 
 export type { Camera };
 
@@ -9,18 +9,19 @@ export interface PointLayerSpec {
   id: string;
   color: string;
   shape: Shape;
-  /** Called with the properties of the clicked marker. */
-  onSelect: (properties: Record<string, unknown>) => void;
-  /**
-   * Called when a click lands on records that share one spot and cannot be told
-   * apart by zooming, with the properties of each.
-   */
-  onSelectMany: (records: Record<string, unknown>[]) => void;
+}
+
+/** A record a click landed on: the layer it is drawn on and its properties. */
+export interface PickedRecord {
+  layer: string;
+  properties: Record<string, unknown>;
 }
 
 export interface HeatLayerSpec {
   id: string;
   weight?: { property: string; max: number };
+  /** One hue from dark to light: sparse, typical, dense. */
+  ramp: HeatRamp;
 }
 
 /**
@@ -35,6 +36,14 @@ export interface MapAdapter {
   addHeatLayer(spec: HeatLayerSpec): void;
   setData(id: string, data: FeatureCollection<Point>): void;
   setVisible(id: string, visible: boolean): void;
+  /**
+   * Called when markers are clicked, with every record at that spot on any
+   * visible layer: one record, or several that share the place and cannot be
+   * told apart by zooming.
+   */
+  onPick(listener: (records: PickedRecord[]) => void): void;
+  /** Draw lines between places, replacing any drawn before. An empty list clears them. */
+  setLinks(lines: [number, number][][]): void;
   flyTo(camera: Camera): void;
   /** Fit the view to [west, south, east, north]. */
   fitBounds(bounds: [number, number, number, number]): void;

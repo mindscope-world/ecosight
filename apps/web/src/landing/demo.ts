@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
+import { greatCircle } from '../lib/geo';
 
 // Everything in this file is illustrative. It gives the landing page's maps a
 // believable shape of the world's ecosystems; none of it is a record of a real
@@ -131,38 +132,14 @@ const LINKS: [string, string][] = [
   ['São Paulo', 'New York'],
 ];
 
-const RAD = Math.PI / 180;
-
-/** The shortest path over the globe between two places, as a line of short steps. */
-function greatCircle(from: Hub, to: Hub, steps = 48): [number, number][] {
-  const vector = (hub: Hub) => {
-    const lat = hub.lat * RAD;
-    const lon = hub.lon * RAD;
-    return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)] as const;
-  };
-  const a = vector(from);
-  const b = vector(to);
-  const angle = Math.acos(Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
-  const line: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const wa = Math.sin((1 - t) * angle) / Math.sin(angle);
-    const wb = Math.sin(t * angle) / Math.sin(angle);
-    const x = wa * a[0] + wb * b[0];
-    const y = wa * a[1] + wb * b[1];
-    const z = wa * a[2] + wb * b[2];
-    line.push([Math.atan2(y, x) / RAD, Math.atan2(z, Math.hypot(x, y)) / RAD]);
-  }
-  return line;
-}
-
 export function connectionLines(): FeatureCollection<LineString> {
   const byName = new Map(HUBS.map((hub) => [hub.name, hub]));
+  const arc = (from: Hub, to: Hub) => greatCircle([from.lon, from.lat], [to.lon, to.lat]);
   return {
     type: 'FeatureCollection',
     features: LINKS.map(([from, to]) => ({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: greatCircle(byName.get(from)!, byName.get(to)!) },
+      geometry: { type: 'LineString', coordinates: arc(byName.get(from)!, byName.get(to)!) },
       properties: {},
     })),
   };

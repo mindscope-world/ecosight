@@ -18,9 +18,6 @@ jobs:
       - name: Web app
         if: env.WEB_URL != ''
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null "$WEB_URL"
-      - name: Map data
-        if: env.WEB_URL != ''
-        run: curl --fail --silent --show-error --max-time 20 --output /dev/null "$WEB_URL/data/manifest.json"
       - name: API
         if: env.API_URL != ''
         run: curl --fail --silent --show-error --max-time 20 "$API_URL/health"

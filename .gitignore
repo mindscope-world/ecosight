@@ -9,5 +9,12 @@ __pycache__/
 coverage/
 data/
 apps/web/public/data/
-# Dataset files stay out of git; only the index page is tracked. See datasets/README.md.
+# Dataset files, and everything derived from them by hand, stay out of git: the
+# repository is public and the data is not. Only the index page is tracked.
+# See datasets/README.md.
 datasets/*/
+curation/
+test-results/
+playwright-report/
+supabase/functions/api/bundle.js
+supabase/.temp/

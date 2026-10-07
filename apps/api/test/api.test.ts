@@ -75,6 +75,42 @@ describe('GET /orgs/:id', () => {
   });
 });
 
+describe('GET /orgs', () => {
+  it('lists published organisations by name, with what is on record about each', async () => {
+    const res = await app.inject('/orgs');
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const [counted] = await sql<{ published: number }[]>`select count(*)::int as published from organisation where status = 'published'`;
+    const published = counted!.published;
+    expect(body.total).toBe(published);
+    expect(body.organisations).toHaveLength(published);
+    const names = body.organisations.map((org: any) => org.name);
+    expect(names).toEqual([...names].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+
+    const fund = body.organisations.find((org: any) => org.name === 'Sample Fund 01');
+    expect(fund).toMatchObject({ types: ['fund'], portfolio: 6, city: 'Nairobi', country: 'KE', rounds: 0 });
+    const startup = body.organisations.find((org: any) => org.name === 'Sample Startup 05');
+    expect(startup).toMatchObject({ raised_usd: 500000, rounds: 1, investors: 1, portfolio: 0 });
+    const accelerator = body.organisations.find((org: any) => org.name === 'Sample Accelerator 01');
+    expect(accelerator.participants).toBe(2);
+    expect(body.organisations.find((org: any) => org.name === 'Sample Startup 01').people).toBe(1);
+  });
+
+  it('narrows by kind and by the map filters, and pages', async () => {
+    const funds = (await app.inject('/orgs?type=fund')).json();
+    expect(funds.total).toBe(8);
+    expect(funds.organisations.every((org: any) => org.types.includes('fund'))).toBe(true);
+
+    const page = (await app.inject('/orgs?type=fund&limit=3&offset=6')).json();
+    expect(page.total).toBe(8);
+    expect(page.organisations).toHaveLength(2);
+
+    const funded = (await app.inject('/orgs?fr=1')).json();
+    expect(funded.organisations.every((org: any) => org.raised_usd >= 1)).toBe(true);
+    expect((await app.inject('/orgs?type=bank')).statusCode).toBe(400);
+  });
+});
+
 describe('events', () => {
   it('lists upcoming published events and serves their detail', async () => {
     const layer = (await app.inject('/layers/events.geojson')).json();
@@ -346,6 +382,27 @@ describe('filters', () => {
   });
 });
 
+describe('access key', () => {
+  it('keeps every route but the health check closed without the key', async () => {
+    const closed = await buildApp({ sql, accessKey: 'correct horse battery' });
+    try {
+      for (const path of ['/layers/offices.geojson', '/stats', '/search?q=sample', '/openapi.json'])
+        expect((await closed.inject(path)).statusCode).toBe(401);
+      expect((await closed.inject({ url: '/stats', headers: { 'x-access-key': 'wrong' } })).statusCode).toBe(401);
+      const opened = await closed.inject({ url: '/stats', headers: { 'x-access-key': 'correct horse battery' } });
+      expect(opened.statusCode).toBe(200);
+      // Nothing may keep a copy that could be served to someone without the key.
+      expect(opened.headers['cache-control']).toBe('private, no-store');
+      expect((await app.inject('/stats')).headers['cache-control']).toBe('public, max-age=60');
+      expect((await closed.inject('/health')).statusCode).toBe(200);
+      // A refused request gives nothing away about the data.
+      expect((await closed.inject('/stats')).json()).toEqual({ error: 'An access key is required' });
+    } finally {
+      await closed.close();
+    }
+  });
+});
+
 describe('rate limits', () => {
   it('turn a client away past its allowance, search sooner, and never the health check', async () => {
     const limited = await buildApp({ sql, rateLimit: 8 });
@@ -384,9 +441,25 @@ describe('GET /openapi.json', () => {
     const doc = (await app.inject('/openapi.json')).json();
     expect(Object.keys(doc.paths).sort()).toEqual([
       '/events/{id}',
+      '/graph/co-investment',
+      '/graph/expand',
+      '/graph/neighbourhood',
+      '/graph/overview',
+      '/graph/path',
+      '/graph/top',
       '/layers/events.geojson',
       '/layers/offices.geojson',
+      '/me',
+      '/me/saved',
+      '/me/saved/{id}',
+      '/notifications',
+      '/orgs',
       '/orgs/{id}',
+      '/review/items',
+      '/review/items/{id}/approve',
+      '/review/items/{id}/archive',
+      '/review/items/{id}/reject',
+      '/review/items/{id}/reopen',
       '/rounds/{id}',
       '/search',
       '/stats',

@@ -35,6 +35,17 @@ export function formatMoney(amount: number, currency: string): string {
   }).format(amount);
 }
 
+const REGIONS = new Intl.DisplayNames(['en'], { type: 'region' });
+
+/** "KE" as "Kenya". A code the browser does not know is shown as it is. */
+export function countryName(code: string): string {
+  try {
+    return REGIONS.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
 export function formatCount(count: number): string {
   return new Intl.NumberFormat().format(count);
 }

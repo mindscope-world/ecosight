@@ -33,6 +33,7 @@ pnpm db:test      # build the separate test database with the synthetic sample
 pnpm test         # API tests run against that test database
 pnpm build
 pnpm check:bundle # fails if either page's first-load JavaScript exceeds 600 KB compressed
+pnpm e2e          # drives both pages in Chrome against the test database; starts its own servers
 ```
 
 ## Deploying
@@ -51,7 +52,7 @@ and the API runs as a container from `infra/api/Dockerfile`.
 - `workers` — Python pipeline: feed crawlers, raw document store, extraction, eval harness.
 - `eval` — labelled set for extraction accuracy. See `eval/README.md`.
 - `datasets` — researched datasets, one dated folder each. The files are not in git; see `datasets/README.md`.
-- `curation` — work derived from a dataset by hand, such as funding rounds read from its notes.
+- `curation` — work derived from a dataset by hand, such as funding rounds read from its notes. Not in git, like the datasets.
 - `infra` — Docker Compose for local development.
 - `docs` — fork audit, decision records, crawled sources.
 
@@ -81,12 +82,29 @@ JSON object from field names (`name`, `type`, `status`, `industry`, `founded_yea
 in `importer.py`) to that dataset's headings. Only `name` is required. A dataset
 with no verification column loads as drafts unless `--publish-all` is given. An
 organisation already on record from another source is reported and not loaded again.
+Where a dataset describes a row in a sentence rather than a value, the mapping file's
+`overrides` gives that row's values by hand, keyed by its name: `type`, `city`,
+`country`, `sectors`, `status`, or any other field.
+A dataset that cites its sources by ID, with the links in a file of their own, names
+that file in the mapping: `"source_register": {"file": "<sources>.csv", "id": "Source ID", "url": "URL"}`.
+The file sits beside the dataset, and the IDs in the source columns are read as its links.
 `pnpm db:seed` refuses to run on a database that holds real records.
 
 ```sh
 uv run atlas import-rounds ../curation/<file>.json          # dry run: checks the file and prints the rounds
 uv run atlas import-rounds ../curation/<file>.json --apply  # load; re-running replaces what it loaded before
 ```
+
+```sh
+uv run atlas import-locations ../curation/<file>.json          # dry run: shows who can be placed and where
+uv run atlas import-locations ../curation/<file>.json --apply  # load; re-running replaces what it placed before
+```
+
+`import-locations` gives a city to organisations that are on record with no office,
+such as investors named only in a funding round. They are placed at the centre of
+the city, never at an address, and each carries the stated basis for its placement.
+`import-orgs` also places records outside Nairobi at city level, from a dataset's
+`City` and `Country` columns, or exactly where it gives `Latitude` and `Longitude`.
 
 `import-rounds` loads funding rounds a person has read out of a dataset's funding
 notes. Every round carries the words it was read from, and the load stops if a

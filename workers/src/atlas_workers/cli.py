@@ -69,13 +69,25 @@ def cmd_import(args: argparse.Namespace) -> int:
     from .geocode import Geocoder
     import psycopg
 
-    from .importer import apply, build_report, locate, match_existing, read_dataset
+    from .importer import apply, build_report, locate, match_existing, read_dataset, read_register
 
     path = Path(args.dataset)
     mapping = json.loads(Path(args.mapping).read_text()) if args.mapping else {}
-    # A mapping file is either the columns alone, or columns with aliases beside them.
+    # A mapping file is either the columns alone, or columns with the curator's notes beside them:
+    # other names, a status for one row, and values for one row that the dataset does not state plainly.
     columns = mapping.get("columns", mapping) or None
-    records = read_dataset(path, columns, args.publish_all, mapping.get("aliases"), mapping.get("statuses"))
+    # A dataset that cites its sources by ID names the file listing them, which sits beside it.
+    listed = mapping.get("source_register")
+    register = read_register(path.parent / listed["file"], listed["id"], listed["url"]) if listed else None
+    records = read_dataset(
+        path,
+        columns,
+        args.publish_all,
+        mapping.get("aliases"),
+        mapping.get("statuses"),
+        mapping.get("overrides"),
+        register,
+    )
     # Checked on a dry run too, so the report shows what would be skipped.
     try:
         with psycopg.connect(config.database_url(), connect_timeout=5) as conn:
@@ -126,6 +138,60 @@ def cmd_rounds(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_locations(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .geocode import Geocoder
+    from .locations import apply, read_file, resolve, summarise
+
+    path = Path(args.file)
+    doc, placements = read_file(path)
+    key = f"{path.stem}/locations"
+    with psycopg.connect(config.database_url()) as conn:
+        resolve(conn, placements, Geocoder(config.geocode_cache()), key)
+        print(summarise(placements))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to load.")
+            return 0
+        apply(conn, doc, placements, key)
+    print("\nLoaded.")
+    return 0
+
+
+def cmd_links(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .links import apply, read_file, resolve, summarise
+
+    path = Path(args.file)
+    links = read_file(path)
+    with psycopg.connect(config.database_url()) as conn:
+        resolve(conn, links)
+        print(summarise(links))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to load.")
+            return 0
+        apply(conn, links, f"{path.stem}/links", args.snapshot)
+    print("\nLoaded.")
+    return 0
+
+
+def cmd_convert(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .fx import Rates, apply, plan, summarise
+
+    with psycopg.connect(config.database_url()) as conn:
+        conversions = plan(conn, Rates(config.REPO_ROOT / "data" / "fx-cache.json"))
+        print(summarise(conversions))
+        if not args.apply:
+            print("\nDry run: nothing was written to the database. Add --apply to save.")
+            return 0
+        apply(conn, conversions, date.today().isoformat())
+    print("\nSaved.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="atlas")
     commands = parser.add_subparsers(required=True)
@@ -161,6 +227,21 @@ def main() -> int:
     funding.add_argument("file")
     funding.add_argument("--apply", action="store_true", help="write to the database")
     funding.set_defaults(run=cmd_rounds)
+
+    places = commands.add_parser("import-locations", help="place organisations that have no office at a city (dry run unless --apply)")
+    places.add_argument("file")
+    places.add_argument("--apply", action="store_true", help="write to the database")
+    places.set_defaults(run=cmd_locations)
+
+    ties = commands.add_parser("import-links", help="load relationships between organisations from a CSV (dry run unless --apply)")
+    ties.add_argument("file")
+    ties.add_argument("--apply", action="store_true", help="write to the database")
+    ties.add_argument("--snapshot", default=date.today().isoformat(), help="date the research was done (YYYY-MM-DD)")
+    ties.set_defaults(run=cmd_links)
+
+    convert = commands.add_parser("convert-rounds", help="give rounds in other currencies a US dollar amount (dry run unless --apply)")
+    convert.add_argument("--apply", action="store_true", help="write to the database")
+    convert.set_defaults(run=cmd_convert)
 
     args = parser.parse_args()
     return args.run(args)

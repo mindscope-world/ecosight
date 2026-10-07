@@ -1,13 +1,16 @@
 import { VIEWS, type View } from '@atlas/schema';
 import { useState } from 'react';
 import { VIEW_LABELS } from '../entities';
+import { PAGES, pageUrl } from '../pages';
+import { AccountMenu, canReview, useMe } from './Account';
+import { NotificationsMenu, SavedMenu } from './HeaderMenus';
 import { Icon } from './ui';
 
 /**
  * The pin mark from the logo beside the wordmark. The wordmark is set in text:
  * the logo file's dark "eco" lettering is made for light backgrounds.
  */
-function Logo() {
+export function Logo() {
   const [hasImage, setHasImage] = useState(true);
   return (
     <a href={import.meta.env.BASE_URL} title="ecoSight home" className="flex items-center gap-2">
@@ -34,6 +37,7 @@ export function TopNavigation({
   onFilters: () => void;
   activeFilters: number;
 }) {
+  const me = useMe();
   return (
     <header className="flex h-11 shrink-0 items-center gap-4 border-b border-line bg-panel px-3">
       <Logo />
@@ -53,6 +57,24 @@ export function TopNavigation({
             {VIEW_LABELS[item]}
           </button>
         ))}
+        {/* The other pages. The lenses above stay on this one. */}
+        {PAGES.filter((page) => page.id !== 'map').map((page) => (
+          <a
+            key={page.id}
+            href={pageUrl(page.id)}
+            className="flex items-center border-b-2 border-transparent px-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-mute hover:text-ink"
+          >
+            {page.label}
+          </a>
+        ))}
+        {canReview(me) && (
+          <a
+            href={pageUrl('review')}
+            className="flex items-center border-b-2 border-transparent px-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-mute hover:text-ink"
+          >
+            Review
+          </a>
+        )}
       </nav>
       <div className="ml-auto flex items-center gap-1.5">
         <button
@@ -75,19 +97,9 @@ export function TopNavigation({
             <span className="rounded-sm bg-accent px-1 text-[10px] font-semibold text-bg">{activeFilters}</span>
           )}
         </button>
-        {/* Account features arrive with sign-in; shown so the header's shape is final. */}
-        {(['bell', 'bookmark', 'user'] as const).map((name) => (
-          <button
-            key={name}
-            type="button"
-            disabled
-            title={`${{ bell: 'Notifications', bookmark: 'Saved locations', user: 'Profile' }[name]}: available once sign-in is added`}
-            aria-label={{ bell: 'Notifications', bookmark: 'Saved locations', user: 'Profile' }[name]}
-            className="hidden h-7 w-7 place-items-center rounded text-mute/50 sm:grid"
-          >
-            <Icon name={name} size={15} />
-          </button>
-        ))}
+        <NotificationsMenu />
+        <SavedMenu page="map" me={me} />
+        <AccountMenu me={me} />
       </div>
     </header>
   );

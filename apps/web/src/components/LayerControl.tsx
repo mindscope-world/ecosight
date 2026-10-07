@@ -1,7 +1,9 @@
 import { MAP_STYLES, type MapStyle } from '@atlas/schema';
-import { HEAT_LAYERS, POINT_LAYERS } from '../entities';
+import { HEAT_LAYERS, POINT_LAYERS, type HeatLayerDef, type HeatRamp } from '../entities';
 import { formatCount } from '../lib/format';
 import { Chip, MicroLabel, ShapeIcon, useStored } from './ui';
+
+const rampGradient = (ramp: HeatRamp) => `linear-gradient(to right, ${ramp.join(', ')})`;
 
 const STYLE_LABELS: Record<MapStyle, string> = { dark: 'Dark', light: 'Light', terrain: 'Terrain' };
 
@@ -59,10 +61,13 @@ export function LayerControl({
       <div className="my-1.5 border-t border-line" />
       {HEAT_LAYERS.map((layer) => (
         <Row key={layer.id} checked={enabled.has(layer.id)} onChange={(on) => onToggle(layer.id, on)}>
-          <span className="h-2.5 w-3 shrink-0 rounded-sm bg-linear-to-r from-cyan-900 to-cyan-200" aria-hidden="true" />
+          <span className="h-2.5 w-3 shrink-0 rounded-sm" style={{ background: rampGradient(layer.ramp) }} aria-hidden="true" />
           {layer.label}
         </Row>
       ))}
+      <p className="m-0 mt-1 text-[10px] leading-snug text-mute">
+        Heatmaps leave out records placed at city level, which have no public address.
+      </p>
       <div className="mb-1.5 mt-2.5">
         <MicroLabel>Map style</MicroLabel>
       </div>
@@ -99,7 +104,7 @@ export function LayerControl({
 }
 
 /** What marker size, clusters and the heat ramp mean. Entity shapes are keyed in the layer list. */
-export function MapLegend({ heat }: { heat: boolean }) {
+export function MapLegend({ heat }: { heat: readonly HeatLayerDef[] }) {
   return (
     <div className="pointer-events-none absolute bottom-9 left-2 z-10 flex items-center gap-3 rounded border border-line bg-panel/95 px-2.5 py-1.5 text-[11px] text-mute">
       <span className="flex items-center gap-1.5">
@@ -114,13 +119,20 @@ export function MapLegend({ heat }: { heat: boolean }) {
         </span>
         Cluster
       </span>
-      {heat && (
-        <span className="flex items-center gap-1.5">
-          Less
-          <span className="h-2 w-12 rounded-sm bg-linear-to-r from-cyan-900 via-cyan-500 to-cyan-100" aria-hidden="true" />
-          More
+      <span className="flex items-center gap-1.5" title="Markers of different kinds on exactly the same spot. Click to list them all.">
+        <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-ink text-[9px] font-semibold text-bg" aria-hidden="true">
+          n
         </span>
-      )}
+        Shared spot
+      </span>
+      {/* One ramp per measure that is on, each named, since they can be shown together. */}
+      {heat.map((layer) => (
+        <span key={layer.id} className="flex items-center gap-1.5">
+          {layer.label}
+          <span className="h-2 w-10 rounded-sm" style={{ background: rampGradient(layer.ramp) }} aria-hidden="true" />
+        </span>
+      ))}
+      {heat.length > 0 && <span>sparse to dense</span>}
     </div>
   );
 }

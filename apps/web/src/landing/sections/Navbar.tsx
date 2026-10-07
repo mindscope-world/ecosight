@@ -7,6 +7,8 @@ const LINKS = [
   { label: 'Ecosystems', href: `${MAP_URL}#v=1&p=ecosystems` },
   { label: 'Startups', href: `${MAP_URL}#v=1&p=startups` },
   { label: 'Investors', href: `${MAP_URL}#v=1&p=investors` },
+  { label: 'Connections', href: `${import.meta.env.BASE_URL}graph/` },
+  { label: 'Dashboard', href: `${import.meta.env.BASE_URL}dashboard/` },
   { label: 'Insights', href: '#signals' },
 ];
 
@@ -48,10 +50,9 @@ export function Navbar() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-4">
-          {/* Accounts are not built yet; shown so the bar's shape is final. */}
-          <span className="hidden cursor-not-allowed text-sm text-slate/60 sm:inline" title="Sign-in is not available yet">
+          <a href={`${MAP_URL}?signin`} className="hidden text-sm text-slate transition-colors hover:text-ink sm:inline">
             Sign in
-          </span>
+          </a>
           <a
             href={MAP_URL}
             className="group hidden h-9 items-center gap-1.5 rounded-md bg-accent px-3.5 text-sm font-semibold text-bg transition-colors hover:bg-white sm:inline-flex"

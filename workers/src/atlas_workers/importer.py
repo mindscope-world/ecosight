@@ -15,6 +15,9 @@ the report, which is what gets reviewed first.
 
 Other datasets are read through a column mapping: a JSON object from the field
 names in `DEFAULT_COLUMNS` to that dataset's own column headings.
+
+A dataset may cite its sources by ID and list the links in a file of their own, a
+source register. The IDs in its source columns are then read as the links they stand for.
 """
 
 import csv
@@ -25,9 +28,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .geocode import Geocoder, Place, in_nairobi
+from .geocode import Box, Geocoder, Place, box_around, in_nairobi
 
-NAIROBI = ("Nairobi", "KE")
 # What an investor known only from a funding round is described as, until a dataset says more.
 INVESTOR_PLACEHOLDER = "Named as an investor in a funding round on record."
 
@@ -44,6 +46,7 @@ DEFAULT_COLUMNS = {
     "premise": "Exact public building / premise",
     "location_verification": "Location verification",
     "city": "City",
+    "country": "Country",
     "latitude": "Latitude",
     "longitude": "Longitude",
     "funding_status": "Funding level / status",
@@ -59,6 +62,8 @@ DEFAULT_COLUMNS = {
     "confidence": "Confidence",
 }
 CONFIDENCE = {"high": 0.9, "medium": 0.6, "low": 0.3}
+# The fields that say where one part of a row was found. Each holds a single link.
+SOURCE_FIELDS = ("source_name", "source_office", "source_funding", "source_people")
 # Only a name is indispensable. Everything else has a safe reading when absent.
 REQUIRED_FIELDS = ("name",)
 
@@ -164,6 +169,10 @@ class Record:
     types: list[str] = field(default_factory=lambda: ["startup"])
     founded_year: int | None = None
     city: str = "Nairobi"
+    # ISO 3166 two-letter code.
+    country: str = "KE"
+    # Where a record outside Nairobi is drawn when it has no coordinates of its own.
+    city_centre: Place | None = None
     # Coordinates given by the dataset itself, which take precedence over a lookup.
     given: tuple[float, float] | None = None
     # Set when the organisation is already on record from another source.
@@ -236,14 +245,19 @@ def read_people(text: str) -> list[tuple[str, str]]:
     return [(name, role[:80]) for name, role in people.items()]
 
 
-_SENTENCE_END = r";|(?<!\bNo)(?<=[a-z)])\.(?:\s|$)"
+_SENTENCE_END = r";|(?<!\bNo)(?<!\bAv)(?<=[a-z)])\.(?:\s|$)"
 _STREET = re.compile(rf"^(?:No\.?\s*)?\d+\s+(.+\b{_STREET_WORD})$", re.I)
-_IS_STREET = re.compile(rf"\b{_STREET_WORD}(?: (?:North|South|East|West))?$", re.I)
+# English puts the street word last, French first: "Kimera Road", "Avenue de France".
+_IS_STREET = re.compile(
+    rf"\b{_STREET_WORD}(?: (?:North|South|East|West))?$|^(?:Boulevard|Avenue|Av\.?|Rue|Route|Chaussée)\s", re.I
+)
 _LEAD_IN = re.compile(r"^(?:off|along|next to|opposite|near)[- ]", re.I)
 
 
 def clean_address(premise: str) -> str:
     """The address itself: the first one given, without the researcher's remarks."""
+    # "Building/premise not publicly disclosed; Kimera Road, ..." still gives a street.
+    premise = re.sub(r"^(?:building|premise)[^;,]*not publicly disclosed[;,]\s*", "", premise.strip(), flags=re.I)
     first = re.split(_SENTENCE_END, premise, maxsplit=1)[0]
     first = re.split(r"\s—\s", first, maxsplit=1)[0]  # "... Nairobi — third-party listing"
     first = re.sub(r"^[^,:]{0,40}:\s*", "", first)  # "Samplepay parent office: ..."
@@ -274,7 +288,14 @@ def _key_word(part: str) -> str:
     return _squash(first if len(first) >= 5 else part)
 
 
-def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
+def find_address(
+    premise: str,
+    geocoder: Geocoder,
+    city: str = "Nairobi",
+    within: Box | None = None,
+    country: str = "KE",
+    not_places: tuple[str, ...] = (),
+) -> tuple[Place, str] | None:
     """Find a premise on the map, refusing matches that only resemble it.
 
     A geocoder returns its best guess, which for "Nairobi Garage" can be a car
@@ -282,10 +303,25 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
     building's name and something else from the address. Otherwise the record
     falls back to its street, then its area, each checked by name the same way.
     Long arterial roads are skipped: a point on one says too little.
+
+    Outside Nairobi, `within` is the city's surroundings and results beyond it
+    are refused. `not_places` are the names of the city's region and country:
+    as part of an address they match everything in the city, so they are dropped.
     """
-    parts = address_parts(premise)
+    too_wide = [_squash(name) for name in not_places if name.strip()]
+    parts = [
+        part for part in address_parts(premise) if not any(_squash(part).endswith(name) for name in too_wide)
+    ]
+    # The city ends the address: what follows it is a region or a country.
+    at = next((i for i, part in enumerate(parts) if _squash(part) in (_squash(city), _squash(f"{city} City"))), None)
+    if at is not None:
+        parts = parts[:at]
     if not parts:
         return None
+
+    def lookup(query: str) -> Place | None:
+        return geocoder.lookup(f"{query}, {city}", within, country)
+
     building, rest = parts[0], parts[1:]
     numbered = _STREET.match(building)
     if numbered:
@@ -296,7 +332,7 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
     else:
         distinctive = len(building.split()) >= 3
         for query in dict.fromkeys((", ".join(parts), building)):
-            place = geocoder.lookup(f"{query}, Nairobi")
+            place = lookup(query)
             if not place or _squash(building) not in _squash(place.matched):
                 continue
             # A street or district result counts only if it is named exactly as the building.
@@ -308,11 +344,12 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
             if distinctive or any(_key_word(part) in _squash(place.matched) for part in rest):
                 return place, "address"
     for index, part in enumerate(rest):
-        if part.lower() in ARTERIALS:
+        # A word of two or three letters ("Av", "KM4") is found inside too many other names.
+        if part.lower() in ARTERIALS or len(_squash(part)) < 4:
             continue
         # With what follows it first, so "Ring Road, Westlands" is not another Ring Road.
         for query in dict.fromkeys((", ".join(rest[index:]), part)):
-            place = geocoder.lookup(f"{query}, Nairobi")
+            place = lookup(query)
             if place and _squash(part) in _squash(place.matched):
                 return place, "area"
     return None
@@ -354,6 +391,27 @@ def read_sources(text: str) -> list[str]:
     return list(dict.fromkeys(url.rstrip(".,") for url in re.findall(r"https?://[^\s|;,)]+", text)))
 
 
+def read_register(path: Path, id_column: str = "Source ID", url_column: str = "URL") -> dict[str, str]:
+    """A source register: the link each source ID stands for."""
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        missing = [column for column in (id_column, url_column) if column not in (reader.fieldnames or [])]
+        if missing:
+            raise ValueError(f"{path.name} is missing columns: {', '.join(missing)}")
+        return {
+            row[id_column].strip(): row[url_column].strip()
+            for row in reader
+            if (row[url_column] or "").strip().startswith("http")
+        }
+
+
+def from_register(cell: str, register: dict[str, str]) -> tuple[list[str], list[str]]:
+    """The links a cell of source IDs stands for, without repeats, and the IDs the register does not hold."""
+    ids = [part.strip() for part in re.split(r"[;,|]", cell) if part.strip()]
+    links = dict.fromkeys(register[source] for source in ids if source in register)
+    return list(links), [source for source in ids if source not in register]
+
+
 # Words too common in organisation names to identify one website among many.
 _GENERIC_NAME_WORDS = {
     "africa", "capital", "ventures", "venture", "fund", "kenya", "network", "accelerator", "partners",
@@ -384,8 +442,11 @@ def parse_row(
     columns: dict[str, str] = DEFAULT_COLUMNS,
     position: int = 0,
     publish_all: bool = False,
+    overrides: dict[str, str] | None = None,
+    register: dict[str, str] | None = None,
 ) -> Record:
-    fields = to_fields(row, columns)
+    # What the curator wrote for this row outranks what the dataset says.
+    fields = {**to_fields(row, columns), "sectors": "", **(overrides or {})}
     raw_name = fields["name"]
     name = display_name(raw_name)
     # A dataset with no verification column is unverified unless the person loading it vouches for it.
@@ -398,7 +459,16 @@ def parse_row(
     funding_status = fields["funding_status"].rstrip(".")
     people_text = fields["founders"]
     types, unknown_types = read_types(fields["type"])
-    references = read_sources(fields["sources"])
+    unlisted: list[str] = []
+    if register is None:
+        references = read_sources(fields["sources"])
+    else:
+        # The links are taken whole from the register, never picked out of text.
+        references, unlisted = from_register(fields["sources"], register)
+        for key in SOURCE_FIELDS:
+            links, unknown = from_register(fields[key], register)
+            fields[key] = links[0] if links else ""
+            unlisted += unknown
     if not website:
         website, domain = own_site(name, references)
     # With no stated level, an address in the row is taken as the address.
@@ -414,7 +484,8 @@ def parse_row(
         status=status,
         publish=status == "verified",
         description=fields["industry"],
-        sectors=read_sectors(fields["industry"]),
+        sectors=[tag.strip() for tag in fields["sectors"].split(",") if tag.strip()][:3]
+        or read_sectors(fields["industry"]),
         # A stage describes a company raising money, not an investor's fund.
         stage=read_stage(fields["funding_status"]) if not types or "startup" in types else None,
         funding_note=". ".join(part for part in (funding_status, funding) if part) or None,
@@ -422,6 +493,7 @@ def parse_row(
         domain=domain,
         types=types or ["startup"],
         city=fields["city"] or "Nairobi",
+        country=(fields["country"] or "KE").upper(),
         references=references,
         confidence=CONFIDENCE.get(fields["confidence"].lower()),
         people=read_people(people_text),
@@ -450,6 +522,8 @@ def parse_row(
         record.notes.append(f"unknown location verification {record.location_level!r}")
     if unknown_types:
         record.notes.append(f"type not recognised: {', '.join(unknown_types)}")
+    if unlisted:
+        record.notes.append(f"source not in the register: {', '.join(dict.fromkeys(unlisted))}")
     if fields["founded_year"]:
         year = fields["founded_year"]
         if year.isdigit() and 1800 <= int(year) <= 2100:
@@ -462,12 +536,14 @@ def parse_row(
         except ValueError:
             record.notes.append("coordinates not read")
         else:
-            if in_nairobi(lon, lat):
-                record.given = (lon, lat)
+            if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                record.notes.append("coordinates not read")
+            elif record.city.casefold() == "nairobi" and not in_nairobi(lon, lat):
+                record.notes.append("coordinates are outside Nairobi; not used")
             else:
-                record.notes.append("coordinates are outside the covered area")
-    if record.city.casefold() != "nairobi":
-        record.notes.append(f"city not covered yet: {record.city}")
+                record.given = (lon, lat)
+    if not re.fullmatch(r"[A-Z]{2}", record.country):
+        record.notes.append(f"country must be a two-letter code, not {fields['country']!r}")
     if not record.sectors:
         record.notes.append("no sector recognised")
     if website_noted:
@@ -483,6 +559,8 @@ def read_dataset(
     publish_all: bool = False,
     aliases: dict[str, list[str]] | None = None,
     statuses: dict[str, str] | None = None,
+    overrides: dict[str, dict[str, str]] | None = None,
+    register: dict[str, str] | None = None,
 ) -> list[Record]:
     columns = {**DEFAULT_COLUMNS, **(columns or {})}
     with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -490,7 +568,16 @@ def read_dataset(
         missing = [columns[name] for name in REQUIRED_FIELDS if columns[name] not in (reader.fieldnames or [])]
         if missing:
             raise ValueError(f"{path.name} is missing columns: {', '.join(missing)}")
-        records = [parse_row(row, columns, position, publish_all) for position, row in enumerate(reader, 1)]
+        rows = list(reader)
+    # Overrides are keyed by the name as the dataset writes it, which an override may itself replace.
+    keys = [(row.get(columns["name"]) or "").strip() for row in rows]
+    records = [
+        parse_row(row, columns, position, publish_all, (overrides or {}).get(key), register)
+        for position, (row, key) in enumerate(zip(rows, keys), 1)
+    ]
+    unused = set(overrides or {}) - set(keys)
+    if unused:
+        raise ValueError(f"The mapping names rows that are not in {path.name}: {', '.join(sorted(unused))}")
     for record in records:
         record.aliases = list((aliases or {}).get(record.name, []))
         # A status set by the curator for one row outranks the dataset-wide default.
@@ -541,10 +628,52 @@ def match_existing(conn, records: list[Record], import_key: str) -> None:
             record.notes.append(f"already on record as {found[1]}; merged into it")
 
 
+# Kinds of organisation that maps show under their own name: a campus, a ministry.
+_MAPPED_BY_NAME = {"university", "government_program"}
+
+
+def find_by_name(record: Record, geocoder: Geocoder, within: Box | None) -> Place | None:
+    """Where the map shows an institution under its own name, when its address was not found.
+
+    Only for universities and public bodies, and only when the map's entry is
+    named exactly as the record: a company's name is too often also a cafe's.
+    """
+    if not _MAPPED_BY_NAME & set(record.types):
+        return None
+    place = geocoder.lookup(f"{record.name}, {record.city}", within, record.country)
+    if place and _squash(place.matched.split(",")[0]) == _squash(record.name):
+        return place
+    return None
+
+
 def locate(record: Record, geocoder: Geocoder) -> None:
     """Place a record as precisely as the public evidence and the geocoder allow."""
-    if record.city.casefold() != "nairobi":
-        return  # Kept without an office until that city is covered.
+    elsewhere = record.city.casefold() != "nairobi"
+    if elsewhere and not re.fullmatch(r"[A-Z]{2}", record.country):
+        return
+    if elsewhere and not record.given:
+        record.city_centre = geocoder.city(record.city, record.country)
+        if not record.city_centre:
+            record.notes.append(f"city not found: {record.city}, {record.country}; kept without an office")
+            return
+        record.precision = "city"
+        # The address is looked for only within the city's surroundings; failing that, the city's centre.
+        if record.premise and record.location_level == "exact_public_address_verified":
+            box = box_around(record.city_centre)
+            # The city's own entry reads "Kampala, Central Region, Uganda": everything after the city is too wide.
+            wider = tuple(record.city_centre.matched.split(",")[1:])
+            found = find_address(record.premise, geocoder, record.city, box, record.country, wider)
+            if found:
+                record.place, record.precision = found
+                record.address = clean_address(record.premise)
+                if record.precision == "area":
+                    record.notes.append("building not confirmed on the map; placed on its street or area")
+            elif own := find_by_name(record, geocoder, box):
+                record.place, record.precision = own, own.level
+                record.notes.append("address not found on the map; placed where the map shows the institution itself")
+            else:
+                record.notes.append("address not found on the map; placed at city level")
+        return
     if record.given:
         lon, lat = record.given
         record.place = Place(lon, lat, "address", "coordinates given in the dataset")
@@ -559,6 +688,10 @@ def locate(record: Record, geocoder: Geocoder) -> None:
             record.address = clean_address(record.premise)
             if record.precision == "area":
                 record.notes.append("building not confirmed on the map; placed on its street or area")
+            return
+        if own := find_by_name(record, geocoder, None):
+            record.place, record.precision = own, own.level
+            record.notes.append("address not found on the map; placed where the map shows the institution itself")
             return
         record.notes.append("address not found on the map; placed at city level")
     if record.area and (place := geocoder.lookup(f"{record.area}, Nairobi")):
@@ -622,9 +755,28 @@ def build_report(records: list[Record], source: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def ensure_city(cur, name: str, country: str, centre: Place) -> None:
+    """Record a city's centre, which is where the database draws its city-level offices."""
+    cur.execute(
+        """
+        insert into city (name, country, centroid)
+        values (%s, %s, st_setsrid(st_makepoint(%s, %s), 4326)::geography)
+        on conflict (name, country) do nothing
+        """,
+        (name, country, centre.lon, centre.lat),
+    )
+
+
 def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_sample: bool) -> None:
     """Write the plan in one transaction. Re-running replaces what this import loaded before."""
     with conn.transaction(), conn.cursor() as cur:
+        # What a reviewer has decided about a row outlasts a reload of the file it came from.
+        cur.execute(
+            "select (payload->>'record')::int, status::text, reviewed_by, reviewed_at, payload->>'review_note' "
+            "from review_item where payload->>'import' = %s and reviewed_by is not null",
+            (import_key,),
+        )
+        decided = {number: rest for number, *rest in cur.fetchall()}
         cur.execute("select record_id, payload from review_item where payload->>'import' = %s", (import_key,))
         owned: list[str] = []
         for org_id, payload in cur.fetchall():
@@ -649,6 +801,8 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
         for record in records:
             if not record.name:
                 continue
+            decision, reviewer, reviewed_at, review_note = decided.get(record.number, (None, None, None, None))
+            publish = record.publish or decision == "approved"
             added: dict[str, list[str]] = {"offices": [], "people": [], "sources": []}
             if record.existing_id:
                 org_id = record.existing_id
@@ -688,13 +842,15 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                     """,
                     (
                         record.name, record.slug, record.aliases, record.types, record.sectors, record.stage,
-                        record.domain, record.description, "published" if record.publish else "draft",
+                        record.domain, record.description, "published" if publish else "draft",
                         record.funding_note, record.founded_year,
                     ),
                 )
                 org_id = cur.fetchone()[0]
                 has_office, known_people = False, set()
 
+            if record.city_centre:
+                ensure_city(cur, record.city, record.country, record.city_centre)
             if record.precision and not has_office:
                 lon, lat = (record.place.lon, record.place.lat) if record.place else (0.0, 0.0)
                 cur.execute(
@@ -704,7 +860,7 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                     returning id
                     """,
                     # A city-precision office is moved to the city centroid by the database.
-                    (org_id, record.address, *NAIROBI, lon, lat, record.precision),
+                    (org_id, record.address, record.city, record.country, lon, lat, record.precision),
                 )
                 added["offices"].append(str(cur.fetchone()[0]))
             for name, role in record.people:
@@ -717,6 +873,9 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                 added["people"].append(str(cur.fetchone()[0]))
             sources = dict(record.sources)
             for number, url in enumerate(record.references):
+                # A link that already stands behind a field is not listed a second time.
+                if url in sources.values():
+                    continue
                 # The first listed source stands behind the record itself.
                 sources.setdefault("name" if number == 0 and not record.existing_id else f"reference {number + 1}", url)
             for field_name, url in sources.items():
@@ -726,22 +885,25 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                     values ('organisation', %s, %s, %s, 'manual', %s, %s)
                     returning id
                     """,
-                    (org_id, field_name, url, record.confidence, snapshot if record.publish else None),
+                    (org_id, field_name, url, record.confidence, (reviewed_at or snapshot) if publish else None),
                 )
                 added["sources"].append(str(cur.fetchone()[0]))
             payload = {"import": import_key, "record": record.number, "row": record.raw, "fields": record.fields}
             if record.existing_id:
                 payload |= {"merged": True, "added": added}
+            if review_note:
+                payload["review_note"] = review_note
             cur.execute(
                 """
-                insert into review_item (record_type, record_id, payload, method, status, reason, reviewed_at)
-                values ('organisation', %s, %s, 'manual', %s, %s, %s)
+                insert into review_item (record_type, record_id, payload, method, status, reason, reviewed_at, reviewed_by)
+                values ('organisation', %s, %s, 'manual', %s, %s, %s, %s)
                 """,
                 (
                     org_id,
                     json.dumps(payload),
-                    "approved" if record.publish else "pending",
+                    decision or ("approved" if record.publish else "pending"),
                     None if record.publish else f"Dataset marks this row {record.status}",
-                    snapshot if record.publish else None,
+                    reviewed_at or (snapshot if record.publish else None),
+                    reviewer,
                 ),
             )
