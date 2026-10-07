@@ -36,13 +36,13 @@ Checks pass: 71 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, 
 - **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
-### Database (Postgres, PostGIS, pgvector, pg_trgm; seven migrations)
+### Database (Postgres, PostGIS, pgvector, pg_trgm; eight migrations)
 
 Organisations with eleven entity types, other names they go by, founded year, active status and funding note; offices at address, area or city precision in any country; funding rounds with date precision; round investors; programs; events; people in roles; per-field sources with their stated basis; review queue; audit log; submissions; claims; private fund tables under row-level security; a view of per-organisation funding facts; full-text search; a rule that keeps angels at city level.
 
 ### API (Fastify)
 
-Office and event layers; organisation detail with funding and connections; event and round detail; search grouped into organisations, people, events, cities and sectors, which reads type, sector and city words; stats with period comparison, city scores, funding by month and a recent feed. Layers and stats accept the same filters as share links. Rate limits, a setting for which sites may call it, a container definition, and a job that writes the map's data as static files.
+Office and event layers; organisation detail with funding and connections; event and round detail; search grouped into organisations, people, events, cities and sectors, which reads type, sector and city words; stats with period comparison, city scores, funding by month and a recent feed. Graph queries over the same records: neighbourhood, expand, shortest path, co-investment and most connected. Layers and stats accept the same filters as share links. Rate limits, a setting for which sites may call it, a container definition, and a job that writes the map's data as static files.
 
 ### Web (React, Tailwind, MapLibre)
 
@@ -120,8 +120,8 @@ Items 3.5 to 3.8 are next and need nothing from the owner.
 | 3.2 | Graph model | Backend | One `Entity` label plus a kind label; relationships `INVESTED_IN`, `ACCELERATED_AT`, `ORGANISED`, `HAS_ROLE`, `LOCATED_IN`, `IN_SECTOR`; a uniqueness constraint on id and a spatial point index, with the index statement checked against the Memgraph version used |
 | 3.3 | Memgraph in the local Docker setup | Backend | **Deferred** with 3.4 and 3.11. Beside Postgres, with a volume, and a start-up script for constraints and indexes |
 | 3.4 | Projection worker | Backend | **Deferred.** Asynchronous Python over Bolt. Copies published records and their relationships from Postgres in batches, idempotently; a full rebuild and an incremental sync. Drafts never leave Postgres. Relationship types come from a fixed list |
-| 3.5 | Graph API | Backend | **Next.** Answered by Postgres for now. On Fastify: an entity's neighbourhood to a chosen depth; expanding one node; the shortest path between two entities; co-investors and shared portfolios; the most connected entities; all filterable by relationship type, sector, country and date. Rate limited, with a time limit per query |
-| 3.6 | Graph explorer page | Frontend | A third page at `/graph/`. Specified in `frontend_plan.md` section 15 |
+| 3.5 | ~~Graph API~~ | Done, not yet deployed | Answered by Postgres through a `graph_edge` view (migration 0008). Five routes: `/graph/neighbourhood` (depth 1 to 3, capped), `/graph/expand` (paged), `/graph/path`, `/graph/co-investment`, `/graph/top`. All take the kinds of link and the map's filters; each query has a 3-second limit and the routes share search's smaller rate allowance. People, places and sectors are followed only when asked for. 25 tests on the sample data. The hosted database and function still need the migration, `harden.sql` and a redeploy |
+| 3.6 | Graph explorer page | Frontend | **Next.** A third page at `/graph/`. Specified in `frontend_plan.md` section 15 |
 | 3.7 | Links between the map and the graph | Frontend | "View connections" from the details panel opens the graph on that organisation; "Show on map" from the graph does the reverse; both are share links |
 | 3.8 | Tests | Both | API tests for each graph query on the sample data; browser tests for the explorer page. When Memgraph arrives: a check that it matches Postgres after a sync |
 | 3.9 | Ingestors, through the review queue | Backend | Relationship CSVs first (the importer already reads organisations). Then external APIs and other databases, once the owner names them. Each matches incoming names to existing records before proposing anything |
@@ -225,7 +225,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 7 | Advanced map | Selection, time, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility, missing pages | Backups, security, legal | Medium, then Critical |
 
-Step 2 is done apart from small follow-ups. The graph API and explorer page in step 3 are next and can be built now. Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
+Step 2 is done apart from small follow-ups. The graph API (3.5) is built; the explorer page (3.6) is next. Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
 
 ## 4. Waiting on the owner
 

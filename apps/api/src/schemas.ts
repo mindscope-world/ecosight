@@ -225,3 +225,105 @@ export const Stats = Type.Object({
 export type Stats = Static<typeof Stats>;
 
 export const ErrorBody = Type.Object({ error: Type.String() });
+
+const GraphNodeKind = Type.Union([
+  Type.Literal('organisation'),
+  Type.Literal('event'),
+  Type.Literal('person'),
+  Type.Literal('place'),
+  Type.Literal('sector'),
+]);
+
+const GraphNodeFacts = {
+  // Kind and key together: org:<id>, event:<id>, person:<id>, place:<country>/<city>, sector:<name>.
+  id: Type.String(),
+  kind: GraphNodeKind,
+  // The record's own id, for organisations and events, which have a details card.
+  ref: Nullable(Type.String({ format: 'uuid' })),
+  name: Type.String(),
+  types: Type.Array(OrgType),
+  sectors: Type.Array(Type.String()),
+  city: Nullable(Type.String()),
+  country: Nullable(Type.String()),
+  // One line more: a person's role, an event's date.
+  detail: Nullable(Type.String()),
+};
+
+export const GraphNode = Type.Object({
+  ...GraphNodeFacts,
+  // Distinct neighbours under the kinds of link and filters asked for.
+  degree: Type.Integer(),
+  // How many of those neighbours this answer does not show.
+  hidden: Type.Integer(),
+});
+export type GraphNode = Static<typeof GraphNode>;
+
+export const GraphEdge = Type.Object({
+  id: Type.String(),
+  kind: Type.Union([
+    Type.Literal('invested_in'),
+    Type.Literal('accelerated_at'),
+    Type.Literal('organised'),
+    Type.Literal('has_role'),
+    Type.Literal('located_in'),
+    Type.Literal('in_sector'),
+  ]),
+  source: Type.String(),
+  target: Type.String(),
+  // A programme's name, or a person's role.
+  label: Nullable(Type.String()),
+  // The rounds an investment link stands for, newest first. Empty for other kinds.
+  rounds: Type.Array(
+    Type.Object({
+      id: Type.String({ format: 'uuid' }),
+      stage: Nullable(Type.String()),
+      amount_usd: Nullable(Type.Number()),
+      announced_on: Nullable(Type.String({ format: 'date' })),
+      announced_precision: DatePrecision,
+      is_lead: Type.Boolean(),
+      source_url: Nullable(Type.String()),
+    }),
+  ),
+});
+export type GraphEdge = Static<typeof GraphEdge>;
+
+export const GraphNeighbourhood = Type.Object({
+  start: Type.String(),
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // True when there were more nodes within reach than the limit allows.
+  truncated: Type.Boolean(),
+});
+
+export const GraphExpansion = Type.Object({
+  id: Type.String(),
+  // The expanded node first, then the neighbours on this page.
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // Neighbours the caller did not already have, and how many are still to come.
+  total: Type.Integer(),
+  remaining: Type.Integer(),
+});
+
+export const GraphPath = Type.Object({
+  found: Type.Boolean(),
+  length: Nullable(Type.Integer()),
+  nodes: Type.Array(GraphNode),
+  edges: Type.Array(GraphEdge),
+  // False when the search stopped at its length or size limit, so a longer chain may exist.
+  searched_all: Type.Boolean(),
+});
+
+const GraphTie = Type.Object({
+  organisation: Type.Object(GraphNodeFacts),
+  // The companies, or the investors, the two have in common.
+  shared: Type.Array(Type.Object({ id: Type.String(), name: Type.String() })),
+});
+
+export const GraphCoInvestment = Type.Object({
+  organisation: Type.Object(GraphNodeFacts),
+  co_investors: Type.Array(GraphTie),
+  shared_investors: Type.Array(GraphTie),
+});
+
+export const GraphTop = Type.Object({ organisations: Type.Array(GraphNode) });

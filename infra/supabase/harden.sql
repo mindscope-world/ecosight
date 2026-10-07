@@ -42,6 +42,14 @@ end $$;
 
 -- A view reads with its owner's rights, which would step round the policies
 -- above. Reading as the caller keeps the views as closed as the tables.
-alter view public.public_office set (security_invoker = true);
-alter view public.public_event set (security_invoker = true);
-alter view public.organisation_funding set (security_invoker = true);
+do $$
+declare v record;
+begin
+  for v in
+    select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'v'
+      and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e')
+  loop
+    execute format('alter view public.%I set (security_invoker = true)', v.relname);
+  end loop;
+end $$;

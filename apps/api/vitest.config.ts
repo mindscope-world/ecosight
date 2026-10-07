@@ -9,4 +9,5 @@ try {
 // Tests assert on the synthetic sample, so they use their own database when one is set.
 if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
-export default defineConfig({ test: { include: ['test/**/*.test.ts'] } });
+// The files share one database and some tests change a record for a moment, so they run one after another.
+export default defineConfig({ test: { include: ['test/**/*.test.ts'], fileParallelism: false } });

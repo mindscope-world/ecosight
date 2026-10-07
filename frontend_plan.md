@@ -437,12 +437,14 @@ It is a third page, at `/graph/`, beside the landing page and the map app, and i
 
 | Need | Request |
 |------|---------|
-| An organisation's neighbours, to a depth, by kind of link | Neighbourhood |
-| More neighbours of one node already on screen | Expand |
-| The chain between two organisations | Shortest path |
-| Who invests alongside an investor; who shares an investor with a company | Co-investment |
-| Starting points and the insight list | Most connected |
+| An organisation's neighbours, to a depth, by kind of link | `GET /graph/neighbourhood?id=&depth=&limit=` |
+| More neighbours of one node already on screen | `POST /graph/expand` with the node and the ids already on screen; paged |
+| The chain between two organisations | `GET /graph/path?from=&to=&max=` |
+| Who invests alongside an investor; who shares an investor with a company | `GET /graph/co-investment?id=` |
+| Starting points and the insight list | `GET /graph/top?limit=&type=` |
 | Finding an organisation to start from | The existing search |
+
+The API is built (Oct 7, 2026). Every route also takes `kinds` (the kinds of link to follow; investments, programmes and events when not given) and the map's filter parameters. Each node comes with `degree` and `hidden`, the number of its neighbours the answer does not show, which is what `ExpandControl` displays. An investment link carries its rounds, each with stage, amount, date and source address.
 
 Every answer carries only published records, and each link can be traced to its source, as on the map.
 

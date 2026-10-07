@@ -6,6 +6,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify from 'fastify';
 import type { Sql } from './db.js';
 import { eventRoutes } from './routes/events.js';
+import { graphRoutes } from './routes/graph.js';
 import { layerRoutes } from './routes/layers.js';
 import { orgRoutes } from './routes/orgs.js';
 import { roundRoutes } from './routes/rounds.js';
@@ -28,7 +29,7 @@ export interface AppOptions {
   accessKey?: string;
 }
 
-/** Search costs more than a lookup, so each client gets a quarter of the general allowance. */
+/** Search and graph queries cost more than a lookup, so each client gets a quarter of the general allowance for each. */
 export const SEARCH_SHARE = 4;
 
 export async function buildApp({ sql, logger = false, rateLimit: limit = false, corsOrigins, trustProxy = false, accessKey }: AppOptions) {
@@ -74,6 +75,7 @@ export async function buildApp({ sql, logger = false, rateLimit: limit = false, 
   await app.register(roundRoutes, { sql });
   await app.register(searchRoutes, { sql });
   await app.register(statsRoutes, { sql });
+  await app.register(graphRoutes, { sql });
 
   return app;
 }
@@ -82,7 +84,7 @@ export type App = Awaited<ReturnType<typeof buildApp>>;
 
 declare module 'fastify' {
   interface FastifyInstance {
-    /** Per-minute allowance for search, present only when limiting is on. */
+    /** Per-minute allowance for search, and for graph queries, present only when limiting is on. */
     searchLimit?: number;
   }
 }

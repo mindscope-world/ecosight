@@ -405,6 +405,11 @@ describe('GET /openapi.json', () => {
     const doc = (await app.inject('/openapi.json')).json();
     expect(Object.keys(doc.paths).sort()).toEqual([
       '/events/{id}',
+      '/graph/co-investment',
+      '/graph/expand',
+      '/graph/neighbourhood',
+      '/graph/path',
+      '/graph/top',
       '/layers/events.geojson',
       '/layers/offices.geojson',
       '/orgs/{id}',
