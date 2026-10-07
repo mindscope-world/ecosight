@@ -12,12 +12,14 @@ export default defineConfig(({ mode }) => {
     worker: { format: 'es' },
     build: {
       rollupOptions: {
-        // Four pages: the landing page at the site root, then the map, the graph and the dashboard of tables.
+        // Five pages: the landing page at the site root, then the map, the graph, the dashboard of tables,
+        // and the review queue for reviewers.
         input: {
           landing: fileURLToPath(new URL('index.html', import.meta.url)),
           map: fileURLToPath(new URL('map/index.html', import.meta.url)),
           graph: fileURLToPath(new URL('graph/index.html', import.meta.url)),
           dashboard: fileURLToPath(new URL('dashboard/index.html', import.meta.url)),
+          review: fileURLToPath(new URL('review/index.html', import.meta.url)),
         },
       },
     },

@@ -35,7 +35,15 @@ export default defineConfig({
       command: 'pnpm --filter @atlas/api exec tsx src/server.ts',
       url: `http://localhost:${API_PORT}/health`,
       // No access key: the tests drive the open API, whatever a local .env sets for deployment.
-      env: { DATABASE_URL: database, PORT: API_PORT, RATE_LIMIT_PER_MINUTE: '100000', ACCESS_KEY: '' },
+      // DEV_USER: every request is the sample's reviewer, so the review queue can be driven without a real sign-in.
+      env: {
+        DATABASE_URL: database,
+        PORT: API_PORT,
+        RATE_LIMIT_PER_MINUTE: '100000',
+        ACCESS_KEY: '',
+        DEV_USER: 'reviewer@example.org',
+        SUPABASE_URL: '',
+      },
       reuseExistingServer: false,
       stdout: 'ignore',
     },

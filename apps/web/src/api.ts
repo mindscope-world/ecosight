@@ -1,5 +1,6 @@
 import { encodeFilters, type Filterable, type FilterableEvent, type Filters } from '@atlas/schema';
 import type { FeatureCollection, Point } from 'geojson';
+import { bearer } from './auth';
 import { API_URL, DATA_URL } from './config';
 
 export type OrgType =
@@ -174,8 +175,33 @@ export interface Stats {
 
 const ACCESS_KEY_STORE = 'ecosight-access-key';
 
-/** Raised when the API wants an access key and has not been given a valid one. */
-export class AccessError extends Error {}
+/**
+ * Raised when the API will not answer: it wants an access key or a sign-in and
+ * has neither, or the address that signed in has not been given access.
+ */
+export class AccessError extends Error {
+  constructor(
+    message: string,
+    /** True when a sign-in was good but its address is not on the list. */
+    readonly denied = false,
+  ) {
+    super(message);
+  }
+}
+
+/** Raised for any other refusal, with what the API said about it. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly detail: string | null,
+  ) {
+    super(message);
+  }
+}
+
+/** Whether the last refusal was of a signed-in address that is not on the list. */
+export let accessDenied = false;
 
 export function storedAccessKey(): string {
   try {
@@ -196,14 +222,25 @@ async function getJson<T>(path: string, signal?: AbortSignal, body?: unknown): P
   const key = storedAccessKey();
   const headers: Record<string, string> = {};
   if (key) headers['x-access-key'] = key;
+  const token = await bearer();
+  if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers['content-type'] = 'application/json';
   const res = await fetch(API_URL + path, {
     signal,
     headers,
     ...(body !== undefined ? { method: 'POST', body: JSON.stringify(body) } : {}),
   });
-  if (res.status === 401) throw new AccessError('An access key is required');
-  if (!res.ok) throw new Error(`${path} responded ${res.status}`);
+  if (res.status === 401 || res.status === 403) {
+    const detail = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? null;
+    // The review queue answers 401 and 403 too, for its own reasons; those are the page's to explain.
+    if (path.startsWith('/review/')) throw new ApiError(`${path} responded ${res.status}`, res.status, detail);
+    accessDenied = res.status === 403;
+    throw new AccessError(detail ?? 'An access key is required', accessDenied);
+  }
+  if (!res.ok) {
+    const detail = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? null;
+    throw new ApiError(`${path} responded ${res.status}`, res.status, detail);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -359,3 +396,64 @@ export const fetchCoInvestment = (orgId: string, signal?: AbortSignal) =>
 
 export const fetchMostConnected = (signal?: AbortSignal) =>
   getJson<{ organisations: GraphNode[] }>('/graph/top?limit=8', signal);
+
+export interface Me {
+  /** The address that signed in. Null when the reader came in with the shared access key. */
+  email: string | null;
+  /** Null when nobody signed in, and when the address that did is not on the list of users. */
+  role: 'viewer' | 'reviewer' | 'admin' | null;
+}
+
+let me: Promise<Me> | null = null;
+/** Who the API takes the reader to be. Asked once a page; several parts of the page share the answer. */
+export const fetchMe = () => (me ??= getJson<Me>('/me'));
+
+export interface ReviewItem {
+  id: string;
+  kind: 'organisation' | 'relationship' | 'other';
+  status: 'pending' | 'approved' | 'rejected';
+  reason: string | null;
+  note: string | null;
+  source: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  organisation: {
+    id: string;
+    name: string;
+    types: OrgType[];
+    sectors: string[];
+    stage: string | null;
+    description: string | null;
+    website_domain: string | null;
+    status: string;
+    city: string | null;
+    country: string | null;
+    sources: number;
+  } | null;
+  proposal: {
+    kind: string | null;
+    from: string | null;
+    to: string | null;
+    label: string | null;
+    source_url: string | null;
+    quote: string | null;
+    from_match: OrgLink | null;
+    to_match: OrgLink | null;
+  } | null;
+}
+
+export interface ReviewList {
+  pending: number;
+  settled: number;
+  items: ReviewItem[];
+}
+
+export const fetchReview = (status: 'pending' | 'settled', signal?: AbortSignal) =>
+  getJson<ReviewList>(`/review/items?status=${status}`, signal);
+
+export const settleReview = (
+  id: string,
+  action: 'approve' | 'reject' | 'reopen',
+  body: { from_id?: string; to_id?: string; source_url?: string; note?: string } = {},
+) => getJson<ReviewItem>(`/review/items/${id}/${action}`, undefined, body);

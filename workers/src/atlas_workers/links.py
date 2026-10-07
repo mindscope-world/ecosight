@@ -153,7 +153,18 @@ def summarise(links: list[Link]) -> str:
 def apply(conn, links: list[Link], key: str, snapshot: str) -> None:
     """Replace what this file loaded before with its current contents, in one transaction."""
     with conn.transaction(), conn.cursor() as cur:
-        cur.execute("select record_type, record_id, payload from review_item where payload->>'import' = %s", (key,))
+        # A row a reviewer has settled is theirs now: it is neither removed nor queued again.
+        cur.execute(
+            "select payload->>'kind', payload->>'from', payload->>'to' from review_item "
+            "where payload->>'import' = %s and reviewed_by is not null",
+            (key,),
+        )
+        settled = set(cur.fetchall())
+        cur.execute(
+            "select record_type, record_id, payload from review_item "
+            "where payload->>'import' = %s and reviewed_by is null",
+            (key,),
+        )
         for record_type, record_id, payload in cur.fetchall():
             if record_id is None:
                 continue
@@ -174,11 +185,16 @@ def apply(conn, links: list[Link], key: str, snapshot: str) -> None:
                         "(select 1 from program_participant pp where pp.program_id = p.id)",
                         (record_id,),
                     )
-        cur.execute("delete from review_item where payload->>'import' = %s", (key,))
+        cur.execute("delete from review_item where payload->>'import' = %s and reviewed_by is null", (key,))
 
         created: set[str] = set()
         for link in links:
-            payload = {"import": key, "record": link.number, "row": link.row, "kind": link.kind, "from": link.source, "to": link.target}
+            if (link.kind, link.source, link.target) in settled:
+                continue
+            payload = {
+                "import": key, "record": link.number, "row": link.row, "kind": link.kind, "from": link.source, "to": link.target,
+                "label": link.label, "source_url": link.url, "quote": link.quote,
+            }
             if link.problem is not None:
                 cur.execute(
                     "insert into review_item (record_type, record_id, payload, method, status, reason) "

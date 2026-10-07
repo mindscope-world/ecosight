@@ -377,3 +377,60 @@ export const OrgRow = Type.Object({
 export type OrgRow = Static<typeof OrgRow>;
 
 export const OrgList = Type.Object({ total: Type.Integer(), organisations: Type.Array(OrgRow) });
+
+export const Me = Type.Object({
+  // The address that signed in. Null when the request carried the shared access key, or nothing.
+  email: Nullable(Type.String()),
+  // Null when nobody signed in, and when the address that did is not on the list of users.
+  role: Nullable(Type.Union([Type.Literal('viewer'), Type.Literal('reviewer'), Type.Literal('admin')])),
+});
+
+export const ReviewItem = Type.Object({
+  id: Type.String({ format: 'uuid' }),
+  kind: Type.Union([Type.Literal('organisation'), Type.Literal('relationship'), Type.Literal('other')]),
+  status: Type.Union([Type.Literal('pending'), Type.Literal('approved'), Type.Literal('rejected')]),
+  // Why it was not published by the importer's own rules.
+  reason: Nullable(Type.String()),
+  // What the reviewer wrote when rejecting it.
+  note: Nullable(Type.String()),
+  // The import it came from.
+  source: Nullable(Type.String()),
+  created_at: Type.String({ format: 'date-time' }),
+  reviewed_at: Nullable(Type.String({ format: 'date-time' })),
+  reviewed_by: Nullable(Type.String()),
+  organisation: Nullable(
+    Type.Object({
+      id: Type.String({ format: 'uuid' }),
+      name: Type.String(),
+      types: Type.Array(OrgType),
+      sectors: Type.Array(Type.String()),
+      stage: Nullable(Type.String()),
+      description: Nullable(Type.String()),
+      website_domain: Nullable(Type.String()),
+      status: Type.String(),
+      city: Nullable(Type.String()),
+      country: Nullable(Type.String()),
+      sources: Type.Integer(),
+    }),
+  ),
+  proposal: Nullable(
+    Type.Object({
+      kind: Nullable(Type.String()),
+      from: Nullable(Type.String()),
+      to: Nullable(Type.String()),
+      label: Nullable(Type.String()),
+      source_url: Nullable(Type.String()),
+      quote: Nullable(Type.String()),
+      // The published record each name finds, when it finds one.
+      from_match: Nullable(OrgLink),
+      to_match: Nullable(OrgLink),
+    }),
+  ),
+});
+export type ReviewItem = Static<typeof ReviewItem>;
+
+export const ReviewList = Type.Object({
+  pending: Type.Integer(),
+  settled: Type.Integer(),
+  items: Type.Array(ReviewItem),
+});

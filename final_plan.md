@@ -41,7 +41,7 @@ Checks pass: 71 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, 
 - **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
-### Database (Postgres, PostGIS, pgvector, pg_trgm; nine migrations)
+### Database (Postgres, PostGIS, pgvector, pg_trgm; ten migrations)
 
 Organisations with eleven entity types, other names they go by, founded year, active status and funding note; offices at address, area or city precision in any country; funding rounds with date precision; round investors; programs; events; people in roles; per-field sources with their stated basis; review queue; audit log; submissions; claims; private fund tables under row-level security; a view of per-organisation funding facts; full-text search; a rule that keeps angels at city level.
 
@@ -51,7 +51,7 @@ Office and event layers; organisation detail with funding and connections; event
 
 ### Web (React, Tailwind, MapLibre)
 
-Four pages.
+Five pages.
 
 **Landing page** at `/`. Hero over a live world map with figures from the product's own records, audience bar, the problem as a table beside the same records on a map, layer cards, an explore preview from the world down to Nairobi, three use cases, the relationship chain, example signals marked as demo data, a globe with connections, closing call to action and footer.
 
@@ -60,6 +60,8 @@ Four pages.
 **Graph page** at `/graph/`. Opens on the whole network of investments, programmes and organised events; any organisation can be made the starting point. Nodes use the map's shapes and colours and links are styled by kind. Click for details, double-click or a button to bring in a node's other connections, click a link for the rounds behind it. Six kinds of link can be switched on and off, with people, places and sectors off to begin with. A path finder, co-investor and shared-investor lists, a list of everything in view, and share links that restore the graph. Reached from "View connections" in the map's details panel, and leads back with "Show on map".
 
 **Dashboard** at `/dashboard/`. One tab per kind of organisation: startups, investors, accelerators, NGOs, innovation hubs, universities, government and corporates. Each has headline figures, bar charts (by country and sector; by stage and most raised for startups; largest portfolios for investors) and a table that sorts, searches, narrows by country and pages. A row opens the record's details with links to the map and the graph.
+
+**Review queue** at `/review/`, for reviewers. What the importers held back, with the reason for each; approve, reject with a note, or reopen. The header of every page has an account menu: sign in by emailed link, see who is signed in, sign out.
 
 ### Pipeline (Python)
 
@@ -94,6 +96,8 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 | 1.5 | Review the 37 drafts | In particular the 6 startups marked inactive or unclear, and the 4 East African bodies held back: two replaced by successor agencies, one the research calls historical, one whose status is unclear |
 | 1.5b | Check the East Africa import | `curation/east_africa_100_organizations.mapping.json`: the type and sector tags given to each of the 100 rows are the curator's reading of the dataset's descriptions. Leadership was loaded only where a person is named as a founder (11 people at 6 organisations) |
 | 1.5c | Check the stated relationships | `curation/stated_relationships.csv`: 16 ties published from the datasets' own wording. Judgments to confirm: a campus inside an innovation district is recorded as "hosted by" it; a startup with an office in a hub's building as "hosted by" the hub; a portfolio listing with no round as "backed by". Three rows wait in the queue because the other organisation is not on record |
+| 1.5d | Settle the review queue | 37 draft organisations and 3 proposed relationships are waiting at `/review/`. Sign in with the owner's address, which is on the list as admin |
+| 1.5e | Set up a mail service for sign-in | Until then Supabase emails sign-in links only to the project's own members, a couple an hour. Needed before anyone else is given an account |
 | 1.6 | Merge the `beyond-kenya` branch | Needs a pull request into `main` |
 | 1.7 | Confirm the decisions listed in section 1 | They were taken on recommendation, not signed off |
 | 1.8 | Copy the reference screenshot into `docs/reference/` | The map app has never been compared with it |
@@ -165,12 +169,12 @@ The data the graph starts with is modest: about 120 organisations, 37 investor-t
 
 ### Step 5 — Review and accounts (Medium, High for 5.1 and 5.2)
 
-The 33 drafts, and later the output of the pipeline and the graph ingestors, need somewhere to be approved. Today that is a database edit. Depends on 2.2.
+The drafts, and the output of the pipeline and the importers, are approved on the review page.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 5.1 | Sign-in and roles | Backend | Magic link, Google, LinkedIn on Supabase |
-| 5.2 | Review queue screen | Both | Approve, reject, edit, merge duplicates; every change written to the audit log |
+| 5.1 | Sign-in and roles | Backend | **Magic link: done.** Sign-in by emailed link through Supabase, with no library: the session is kept in the browser and sent with each request, and the API checks it with the project. Signing in proves an address; the `app_user` table (migration 0010, kept with `pnpm users`) says whether it is let in and as viewer, reviewer or admin. The shared access key still opens the app for reading. Proved on the live API with a temporary account in each role. **Not done:** Google and LinkedIn, which need OAuth apps only the owner can create; and a mail service, without which Supabase emails only the project's own members |
+| 5.2 | Review queue screen | Both | **Approve, reject and reopen: done.** `/review/`, for reviewers only. Draft organisations and proposed relationships are listed with why each was held. Approving publishes; rejecting keeps it out, with a note; either can be reopened. For a relationship naming an organisation that is not on record, the reviewer chooses the record it means. Every decision is recorded with who made it and written to the audit log, and reloading a dataset keeps it. **Not done:** editing a record's fields, merging duplicates, and reopening an approved relationship |
 | 5.3 | Profile menu, saved locations, notifications | Both | The header icons are placeholders today |
 | 5.4 | Submit an organisation or event; claim a profile by work email | Both | Tables exist |
 | 5.5 | Takedown and opt-out handling | Both | People named as founders must be able to ask for removal |

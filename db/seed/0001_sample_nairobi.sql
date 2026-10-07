@@ -2,7 +2,7 @@
 -- Organisations here are invented; only the neighbourhood locations are real.
 -- Real Nairobi records come from the researchers and the review queue.
 
-truncate organisation, event, raw_document, field_source, review_item, audit_log, submission cascade;
+truncate organisation, event, raw_document, field_source, review_item, audit_log, submission, app_user cascade;
 
 do $$
 declare
@@ -132,3 +132,40 @@ begin
   insert into person_role (organisation_id, name, role)
   select id, 'Sample Founder', 'Co-founder' from organisation where slug = 'sample-startup-01';
 end $$;
+
+-- Accounts for tests: one who may settle the review queue, one who may only read.
+insert into app_user (email, role) values ('reviewer@example.org', 'reviewer'), ('viewer@example.org', 'viewer');
+
+-- Something waiting in the review queue: two drafts and a relationship that
+-- names an organisation nobody has on record.
+do $$
+declare
+  i int;
+  org uuid;
+begin
+  for i in 1..2 loop
+    insert into organisation (name, slug, types, sectors, description, status)
+    values (
+      format('Sample Draft %s', lpad(i::text, 2, '0')), format('sample-draft-%s', lpad(i::text, 2, '0')),
+      array['startup']::org_type[], array['fintech'], 'Synthetic record waiting for review.', 'draft'
+    )
+    returning id into org;
+    insert into field_source (record_type, record_id, field, source_url, method)
+    values ('organisation', org, 'name', 'https://example.org/seed', 'manual');
+    insert into review_item (record_type, record_id, payload, method, status, reason)
+    values (
+      'organisation', org, jsonb_build_object('import', 'sample', 'record', i), 'manual', 'pending',
+      'Dataset marks this row partially_verified'
+    );
+  end loop;
+  insert into review_item (record_type, record_id, payload, method, status, reason)
+  values (
+    'organisation_link', null,
+    jsonb_build_object(
+      'import', 'sample/links', 'record', 1, 'kind', 'part_of', 'from', 'Sample Startup 02', 'to', 'Sample Holdings',
+      'label', null, 'source_url', 'https://example.org/seed', 'quote', 'Sample Startup 02 is part of Sample Holdings.'
+    ),
+    'manual', 'pending', 'not on record: Sample Holdings'
+  );
+end $$;
+

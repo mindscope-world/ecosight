@@ -141,3 +141,31 @@ def test_loading_twice_leaves_one_copy_and_the_rest_in_the_queue(conn, tmp_path)
     with conn.cursor() as cur:
         cur.execute("select count(*) from program where name = 'Cohort 1'")
         assert cur.fetchone()[0] == 0
+
+
+def test_a_reviewers_decision_outlasts_a_reload(conn, tmp_path):
+    links = read_file(write(tmp_path, *ROWS))
+    resolve(conn, links)
+    apply(conn, links, KEY, "2026-10-07")
+    with conn.cursor() as cur:
+        cur.execute("insert into app_user (email, role) values ('links-reviewer@links.test', 'reviewer') returning id")
+        reviewer = cur.fetchone()[0]
+        # The reviewer rejects the row about the unknown funder.
+        cur.execute(
+            "update review_item set status = 'rejected', reviewed_by = %s, reviewed_at = now() "
+            "where payload->>'import' = %s and payload->>'to' = 'Unknown Capital'",
+            (reviewer, KEY),
+        )
+    conn.commit()
+    try:
+        again = read_file(write(tmp_path, *ROWS))
+        resolve(conn, again)
+        apply(conn, again, KEY, "2026-10-07")
+        _, queue = state(conn)
+        assert [status for status, _ in queue].count("rejected") == 1
+        assert len(queue) == len(ROWS)  # the settled row was not queued a second time
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("update review_item set reviewed_by = null where reviewed_by = %s", (reviewer,))
+            cur.execute("delete from app_user where id = %s", (reviewer,))
+        conn.commit()

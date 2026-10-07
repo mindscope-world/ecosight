@@ -6,9 +6,11 @@ export const PAGES = [
   { id: 'dashboard', label: 'Dashboard' },
 ] as const;
 export type PageId = (typeof PAGES)[number]['id'];
+/** Every page with an address, including the one only reviewers are shown a link to. */
+export type AnyPage = PageId | 'review';
 
 /** A page's address, wherever the site is served from, with share-link state when given. */
-export const pageUrl = (page: PageId, hash = '') => `${import.meta.env.BASE_URL}${page}/${hash ? `#${hash}` : ''}`;
+export const pageUrl = (page: AnyPage, hash = '') => `${import.meta.env.BASE_URL}${page}/${hash ? `#${hash}` : ''}`;
 
 /** The map opened on one organisation. */
 export const mapUrlFor = (orgId: string) => pageUrl('map', `v=1&s=${orgId}`);

@@ -11,6 +11,7 @@ const PAGES = {
   'Map app': 'map/index.html',
   'Graph page': 'graph/index.html',
   'Dashboard page': 'dashboard/index.html',
+  'Review page': 'review/index.html',
 };
 const dist = new URL('../apps/web/dist/', import.meta.url);
 

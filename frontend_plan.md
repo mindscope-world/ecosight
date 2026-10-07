@@ -501,3 +501,23 @@ The map shows where organisations are and the graph how they are connected. This
 
 Not built: export to a file, column choice, and an events table.
 
+## 17. Accounts and the review queue
+
+Added and built Oct 7, 2026.
+
+### Account menu
+
+In the header of every page. Signed out, it offers sign-in: an email address, then a link by email, with no password. Signed in, it shows the address and role, a way to the review queue for reviewers, and sign out. The access screen offers the same sign-in beside the access key, and says so plainly when a signed-in address has not been given access.
+
+### Review queue, at `/review/`
+
+For reviewers. Anyone else is told so, and offered sign-in.
+
+- **Two tabs:** what is waiting, and what reviewers have settled.
+- **An organisation** is shown with its kind, place, sectors, description, website and how many sources it has, and why it was held.
+- **A proposed relationship** is shown as "this, relation, that" with the words and the link it rests on. A name that is not on record is marked, with a search box to choose the record it means; it cannot be approved until both sides are known.
+- **Approve and publish**, or **Reject** with an optional note. A settled item can be **reopened**, except an approved relationship.
+- Each decision shows who made it and when.
+
+Not built: editing a record before approving it, merging duplicates, and filters over the queue.
+

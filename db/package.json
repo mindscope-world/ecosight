@@ -6,6 +6,7 @@
     "migrate": "tsx --env-file-if-exists=../.env migrate.ts",
     "seed": "tsx --env-file-if-exists=../.env seed.ts",
     "test-db": "tsx --env-file-if-exists=../.env test-db.ts",
+    "users": "tsx --env-file-if-exists=../.env users.ts",
     "migrate-hosted": "tsx --env-file-if-exists=../.env migrate-hosted.ts",
     "typecheck": "tsc -p ."
   },

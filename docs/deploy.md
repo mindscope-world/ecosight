@@ -97,7 +97,8 @@ is the check. The function's settings are set once and kept by Supabase:
 ```sh
 npx supabase secrets set --project-ref <ref> \
   DATABASE_URL="$SUPABASE_DB_URL" ACCESS_KEY="$ACCESS_KEY" \
-  CORS_ORIGINS=https://mindscope-world.github.io
+  CORS_ORIGINS=https://mindscope-world.github.io \
+  AUTH_URL="$SUPABASE_URL" AUTH_KEY="$SUPABASE_PUBLISHABLE_KEY"
 ```
 
 | Setting | Why |
@@ -105,6 +106,7 @@ npx supabase secrets set --project-ref <ref> \
 | `DATABASE_URL` | The `ecosight_app` connection string |
 | `ACCESS_KEY` | Required. Closes the API to anyone without it |
 | `CORS_ORIGINS` | Only the web app's address may call the API from a browser |
+| `AUTH_URL`, `AUTH_KEY` | The project's address and publishable key, with which the API checks sign-in tokens. The host does not allow a secret's name to begin with `SUPABASE_` |
 
 To change the access key, set a new `ACCESS_KEY` secret and redeploy. Everyone
 then has to be given the new one.
@@ -113,11 +115,13 @@ then has to be given the new one.
 
 ```sh
 VITE_API_URL=<SUPABASE_URL>/functions/v1/api \
+VITE_SUPABASE_URL=<SUPABASE_URL> \
+VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key> \
 VITE_DEMO_DATA=false \
 pnpm --filter @atlas/web build --base=/ecosight/        # output in apps/web/dist/
 ```
 
-The build holds code only: four pages (`/`, `map/`, `graph/`, `dashboard/`). Before publishing, check that `apps/web/dist/` has no
+The build holds code only: five pages (`/`, `map/`, `graph/`, `dashboard/`, `review/`). The publishable key is in it by design; no other key may be. Before publishing, check that `apps/web/dist/` has no
 `data/` folder, then put its contents, plus an empty `.nojekyll` file, on the
 `gh-pages` branch as a single commit and force-push it. Pages serves that branch
 from its root.
@@ -125,6 +129,35 @@ from its root.
 The landing page needs no key: without one its map shows illustrative points and
 says so. The map app shows the access screen until the key is entered, and keeps
 the key in that browser.
+
+## Sign-in and the list of users
+
+People can sign in by an emailed link instead of typing the access key. Signing
+in only proves an email address. Whether that address is let in, and as what, is
+the list in the `app_user` table, kept with:
+
+```sh
+DATABASE_URL="$SUPABASE_DB_URL" pnpm users list
+DATABASE_URL="$SUPABASE_DB_URL" pnpm users add someone@example.org reviewer    # viewer, reviewer or admin
+DATABASE_URL="$SUPABASE_DB_URL" pnpm users remove someone@example.org
+```
+
+A viewer can read. A reviewer can also settle the review queue at `/review/`.
+Removing an address shuts it out within a minute. The shared access key still
+opens the app for reading, as nobody in particular; it never opens the review queue.
+
+Set once in the Supabase project, under Authentication > URL Configuration (done
+on Oct 7, 2026, through the management API):
+
+- Site URL: `https://mindscope-world.github.io/ecosight/`
+- Redirect URLs: `https://mindscope-world.github.io/ecosight/**` and `http://localhost:5180/**`
+
+**Limits of the built-in email.** Supabase's own mail service sends only to
+addresses that belong to the project's organisation, and only a couple of emails
+an hour. That is enough for the owner. Before anyone else is asked to sign in,
+set up a mail service under Authentication > SMTP Settings. Google and LinkedIn
+sign-in are not set up: each needs an OAuth app created in that provider's
+console, and its client id and secret entered under Authentication > Providers.
 
 ## 4. Checks after deploying
 

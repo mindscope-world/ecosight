@@ -731,6 +731,13 @@ def ensure_city(cur, name: str, country: str, centre: Place) -> None:
 def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_sample: bool) -> None:
     """Write the plan in one transaction. Re-running replaces what this import loaded before."""
     with conn.transaction(), conn.cursor() as cur:
+        # What a reviewer has decided about a row outlasts a reload of the file it came from.
+        cur.execute(
+            "select (payload->>'record')::int, status::text, reviewed_by, reviewed_at, payload->>'review_note' "
+            "from review_item where payload->>'import' = %s and reviewed_by is not null",
+            (import_key,),
+        )
+        decided = {number: rest for number, *rest in cur.fetchall()}
         cur.execute("select record_id, payload from review_item where payload->>'import' = %s", (import_key,))
         owned: list[str] = []
         for org_id, payload in cur.fetchall():
@@ -755,6 +762,8 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
         for record in records:
             if not record.name:
                 continue
+            decision, reviewer, reviewed_at, review_note = decided.get(record.number, (None, None, None, None))
+            publish = record.publish or decision == "approved"
             added: dict[str, list[str]] = {"offices": [], "people": [], "sources": []}
             if record.existing_id:
                 org_id = record.existing_id
@@ -794,7 +803,7 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                     """,
                     (
                         record.name, record.slug, record.aliases, record.types, record.sectors, record.stage,
-                        record.domain, record.description, "published" if record.publish else "draft",
+                        record.domain, record.description, "published" if publish else "draft",
                         record.funding_note, record.founded_year,
                     ),
                 )
@@ -834,22 +843,25 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                     values ('organisation', %s, %s, %s, 'manual', %s, %s)
                     returning id
                     """,
-                    (org_id, field_name, url, record.confidence, snapshot if record.publish else None),
+                    (org_id, field_name, url, record.confidence, (reviewed_at or snapshot) if publish else None),
                 )
                 added["sources"].append(str(cur.fetchone()[0]))
             payload = {"import": import_key, "record": record.number, "row": record.raw, "fields": record.fields}
             if record.existing_id:
                 payload |= {"merged": True, "added": added}
+            if review_note:
+                payload["review_note"] = review_note
             cur.execute(
                 """
-                insert into review_item (record_type, record_id, payload, method, status, reason, reviewed_at)
-                values ('organisation', %s, %s, 'manual', %s, %s, %s)
+                insert into review_item (record_type, record_id, payload, method, status, reason, reviewed_at, reviewed_by)
+                values ('organisation', %s, %s, 'manual', %s, %s, %s, %s)
                 """,
                 (
                     org_id,
                     json.dumps(payload),
-                    "approved" if record.publish else "pending",
+                    decision or ("approved" if record.publish else "pending"),
                     None if record.publish else f"Dataset marks this row {record.status}",
-                    snapshot if record.publish else None,
+                    reviewed_at or (snapshot if record.publish else None),
+                    reviewer,
                 ),
             )
