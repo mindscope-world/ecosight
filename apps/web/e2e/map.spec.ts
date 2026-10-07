@@ -28,6 +28,8 @@ test('search finds a record, opens it, and follows a connection', async ({ page 
   await first.click();
 
   await expect(details(page).getByRole('heading', { level: 2 })).toHaveText('Sample Startup 10');
+  // The sample holds no logos, so the card shows the record's initials in their place.
+  await expect(details(page).getByText('SS', { exact: true })).toBeVisible();
   await expect(details(page)).toContainText('Inactive');
   await expect(details(page)).toContainText('$1M');
   await expect(page).toHaveURL(/[#&]s=[0-9a-f-]{36}/);

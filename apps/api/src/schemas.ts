@@ -61,6 +61,8 @@ export const OrgDetail = Type.Object({
   raised_usd: Type.Number(),
   // Funding as the research words it, for records with no round rows.
   funding_note: Nullable(Type.String()),
+  // The organisation's own logo as a data URL, so the app asks no other site for it. Null when none is held.
+  logo: Nullable(Type.String()),
   rounds: Type.Array(
     Type.Object({
       id: Type.String({ format: 'uuid' }),

@@ -170,6 +170,19 @@ describe('GET /rounds/:id', () => {
 
     const first = (await app.inject(`/orgs/${await id('sample-startup-01')}`)).json();
     expect(first.connections.people).toEqual([{ name: 'Sample Founder', role: 'Co-founder', linkedin_url: null }]);
+
+    // A logo is given as a data URL, so the app asks no other site for it; none held is null.
+    expect(first.logo).toBeNull();
+    const firstId = await id('sample-startup-01');
+    try {
+      await sql`
+        insert into organisation_logo (organisation_id, content_type, image, source_url)
+        values (${firstId}, 'image/png', ${Buffer.from('not really a picture')}, 'https://sample.test/icon.png')`;
+      const withLogo = (await app.inject(`/orgs/${firstId}`)).json();
+      expect(withLogo.logo).toBe(`data:image/png;base64,${Buffer.from('not really a picture').toString('base64')}`);
+    } finally {
+      await sql`delete from organisation_logo where organisation_id = ${firstId}`;
+    }
     expect(first.connections.programs[0].organisation.name).toBe('Sample Accelerator 01');
     expect(first.founded_year).toBeGreaterThan(2009);
   });

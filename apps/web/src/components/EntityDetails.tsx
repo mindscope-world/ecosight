@@ -2,7 +2,7 @@ import type { Selection } from '@atlas/schema';
 import type { ReactNode } from 'react';
 import type { EventDetail, OrgDetail, OrgLink } from '../api';
 import { layerForTypes, POINT_LAYERS, TYPE_LABELS } from '../entities';
-import { formatDate, formatDateTime, formatMoney, formatPartialDate, formatUsd } from '../lib/format';
+import { formatDate, formatDateTime, formatMoney, formatPartialDate, formatUsd, initials } from '../lib/format';
 import { AFFILIATION_LABELS } from '../graph/style';
 import { Icon, MicroLabel, ShapeIcon } from './ui';
 
@@ -37,6 +37,34 @@ function SourceLink({ url }: { url: string | null }) {
     <a href={url} target="_blank" rel="noopener noreferrer" className="text-accent2 underline">
       {new URL(url).hostname}
     </a>
+  );
+}
+
+/**
+ * The image on an organisation's card: its own logo where one is held, and
+ * otherwise its initials on its layer's colour, so every card has one.
+ */
+function OrgImage({ org, color }: { org: OrgDetail; color: string }) {
+  // Only an image the API itself supplied is drawn; nothing is fetched from another site.
+  if (org.logo && /^data:image\/[a-z0-9.+-]+;base64,/.test(org.logo))
+    return (
+      <img
+        src={org.logo}
+        alt={`${org.name} logo`}
+        width={44}
+        height={44}
+        // Logos are drawn for light pages as often as dark ones; a light tile suits both.
+        className="h-11 w-11 shrink-0 rounded-md border border-line bg-white object-contain p-1"
+      />
+    );
+  return (
+    <div
+      aria-hidden="true"
+      className="grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm font-semibold text-bg"
+      style={{ background: color }}
+    >
+      {initials(org.name)}
+    </div>
   );
 }
 
@@ -102,13 +130,18 @@ function OrgBody({
           {layer && <ShapeIcon shape={layer.shape} color={layer.color} />}
           {org.types.map((type) => TYPE_LABELS[type] ?? type).join(' · ')}
         </div>
-        <h2 className="mb-0.5 mt-1 text-lg font-semibold leading-tight">{org.name}</h2>
-        {org.sectors.length > 0 && <div className="text-accent">{org.sectors.join(' / ')}</div>}
-        {hq && (
-          <div className="text-mute">
-            {hq.city}, {hq.country}
+        <div className="mt-1.5 flex items-start gap-2.5">
+          <OrgImage org={org} color={layer?.color ?? '#8b9aa7'} />
+          <div className="min-w-0">
+            <h2 className="m-0 text-lg font-semibold leading-tight">{org.name}</h2>
+            {org.sectors.length > 0 && <div className="text-accent">{org.sectors.join(' / ')}</div>}
+            {hq && (
+              <div className="text-mute">
+                {hq.city}, {hq.country}
+              </div>
+            )}
           </div>
-        )}
+        </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
           <Fact label="Founded" value={org.founded_year ?? '—'} />
           {company ? (

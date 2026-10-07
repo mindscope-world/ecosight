@@ -80,6 +80,8 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
         select
           g.id, g.name, g.slug, g.types::text[] as types, g.sectors, g.stage,
           g.website_domain, g.description, g.founded_year, g.is_active, g.funding_note,
+          (select 'data:' || l.content_type || ';base64,' || replace(encode(l.image, 'base64'), E'\n', '')
+            from organisation_logo l where l.organisation_id = g.id) as logo,
           coalesce((
             select sum(r.amount_usd) from funding_round r
             where r.organisation_id = g.id and r.status = 'published'

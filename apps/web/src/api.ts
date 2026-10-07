@@ -48,6 +48,8 @@ export interface OrgDetail {
   is_active: boolean;
   raised_usd: number;
   funding_note: string | null;
+  /** The organisation's own logo as a data URL, or null when none is held. */
+  logo: string | null;
   offices: {
     id: string;
     is_hq: boolean;

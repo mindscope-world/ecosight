@@ -138,6 +138,18 @@ its title or summary also names the organisation, since many people share a name
 Answers are kept in `data/profile-search-cache.json`, so a second run asks nothing twice. Only the address is stored, with the
 page it was found on. A person who has opted out is never looked up.
 
+```sh
+uv run atlas fetch-logos            # dry run: which organisations have a logo to fetch
+uv run atlas fetch-logos --apply    # fetch and store them; --refresh fetches again those already held
+```
+
+`fetch-logos` gets each published organisation's logo from its own website, for the image
+on its card: the icon the site declares for a phone's home screen, else its largest icon,
+else `/favicon.ico`. Only the organisation's site is asked, within its robots.txt. The
+image is stored in the database (up to 64 KB) and sent with the organisation's details, so
+the app never loads it from another site and no one else learns which records are opened.
+A card with no logo shows the organisation's initials.
+
 Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on
 [Groq](https://console.groq.com) through LangChain and needs `GROQ_API_KEY` in
 `.env`. `GROQ_MODEL` changes the model (default `llama-3.3-70b-versatile`).
