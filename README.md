@@ -82,6 +82,9 @@ JSON object from field names (`name`, `type`, `status`, `industry`, `founded_yea
 in `importer.py`) to that dataset's headings. Only `name` is required. A dataset
 with no verification column loads as drafts unless `--publish-all` is given. An
 organisation already on record from another source is reported and not loaded again.
+Where a dataset describes a row in a sentence rather than a value, the mapping file's
+`overrides` gives that row's values by hand, keyed by its name: `type`, `city`,
+`country`, `sectors`, `status`, or any other field.
 `pnpm db:seed` refuses to run on a database that holds real records.
 
 ```sh

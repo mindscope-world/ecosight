@@ -384,3 +384,105 @@ def test_statuses_and_aliases_come_from_the_mapping(tmp_path):
     )
     assert (sure.publish, sure.aliases) == (True, ["Sample"])
     assert (unsure.publish, unsure.status) == (False, "partially_verified")
+
+
+KAMPALA = {"lon": "32.58", "lat": "0.32", "category": "place", "type": "city", "display_name": "Kampala, Central Region, Uganda"}
+
+
+def kampala(name: str, category: str = "building", lon: str = "32.60") -> dict:
+    return {"lon": lon, "lat": "0.33", "category": category, "type": "x", "display_name": name}
+
+
+def test_addresses_are_looked_up_in_other_cities(tmp_path):
+    geo = geocoder(
+        tmp_path,
+        {
+            "Kampala": [KAMPALA],
+            "Sample House, Kampala": [kampala("Sample House, Sample Street, Kololo, Kampala, Central Region, Uganda")],
+        },
+    )
+    row = {**ROW, "Exact public building / premise": "4th Floor, Sample House, Plot 90, Sample Street, Kampala, Uganda"}
+    record = parse_row({**row, "City": "Kampala", "Country": "UG"})
+    locate(record, geo)
+    assert (record.precision, record.place.lon, record.city_centre.lon) == ("address", 32.60, 32.58)
+    assert record.address == "4th Floor, Sample House, Plot 90, Sample Street, Kampala, Uganda"
+
+    # A result outside the city's surroundings is refused, and the record stays at the city's centre.
+    far = geocoder(
+        tmp_path / "far",
+        {"Kampala": [KAMPALA], "Sample House, Kampala": [kampala("Sample House, Sample Street, Gulu", lon="34.00")]},
+    )
+    record = parse_row({**row, "City": "Kampala", "Country": "UG"})
+    locate(record, far)
+    assert (record.precision, record.place) == ("city", None)
+    assert record.notes[-1] == "address not found on the map; placed at city level"
+
+
+def test_a_region_or_country_in_an_address_is_not_a_place_to_match(tmp_path):
+    # "Uganda" is in every result in Kampala; without the guard the first of them would be taken.
+    anything = kampala("Some Cafe, Kampala, Central Region, Uganda", "amenity")
+    geo = geocoder(tmp_path, {"Uganda, Kampala": [anything], "Republic of Uganda, Kampala": [anything]})
+    box = (32.28, 0.02, 32.88, 0.62)
+    wider = (" Central Region", " Uganda")
+    assert find_address("Sample Close, Republic of Uganda", geo, "Kampala", box, "UG", wider) is None
+    # The city ends the address, so the country after it is never looked up.
+    assert find_address("Sample Close, Kampala, Uganda", geo, "Kampala", box, "UG") is None
+
+
+def test_short_words_and_french_street_names(tmp_path):
+    avenue = kampala("Avenue du Large, Kabondo, Bujumbura", "highway")
+    geo = geocoder(tmp_path, {"Av, Bujumbura": [avenue], "Avenue de France, Bujumbura": [kampala("Avenue de France, Bujumbura", "highway")]})
+    # "Av" would be found inside "Avenue du Large": too short to identify anything.
+    assert find_address("Quartier Sample, Av", geo, "Bujumbura", (29, -4, 30, 3), "BI") is None
+    # A street named the French way is a street, so the record is on it, not at an address.
+    found = find_address("Avenue de France n°14, Bujumbura, Burundi", geo, "Bujumbura", (29, -4, 33, 3), "BI")
+    assert found is None  # "Avenue de France n°14" is not the street's name as mapped
+    found = find_address("Avenue de France, Bujumbura, Burundi", geo, "Bujumbura", (29, -4, 33, 3), "BI")
+    assert found[1] == "area"
+    assert clean_address("Quartier Sample, Av. du Cinquantenaire, No 6, Bujumbura") == "Quartier Sample, Av. du Cinquantenaire, No 6, Bujumbura"
+    assert clean_address("Building/premise not publicly disclosed; Plot 6, Sample Road, Kampala") == "Plot 6, Sample Road, Kampala"
+
+
+def test_an_institution_is_placed_where_the_map_names_it(tmp_path):
+    campus = kampala("Sample University, Campus Road, Kampala, Central Region, Uganda", "amenity")
+    answers = {"Kampala": [KAMPALA], "Sample University, Kampala": [campus], "Sample Pay, Kampala": [kampala("Sample Pay, Kampala", "shop")]}
+    row = {**ROW, "Exact public building / premise": "Main Campus, Unmapped Hill, Kampala, Uganda", "City": "Kampala", "Country": "UG"}
+
+    university = parse_row({**row, "Startup / organisation": "Sample University", "Type": "university"})
+    locate(university, geocoder(tmp_path / "a", answers))
+    assert (university.precision, university.place.lon) == ("address", 32.60)
+    assert "placed where the map shows the institution itself" in university.notes[-1]
+
+    # A company is not looked up by name: its name is too often also a shop's.
+    company = parse_row(row)
+    locate(company, geocoder(tmp_path / "b", answers))
+    assert (company.precision, company.place) == ("city", None)
+
+    # Nor is a result that only resembles the name.
+    answers["Sample University, Kampala"] = [kampala("Sample University Hostel, Kampala", "amenity")]
+    lookalike = parse_row({**row, "Startup / organisation": "Sample University", "Type": "university"})
+    locate(lookalike, geocoder(tmp_path / "c", answers))
+    assert lookalike.precision == "city"
+
+
+def test_the_curator_can_set_values_for_one_row(tmp_path):
+    from atlas_workers.importer import read_dataset
+
+    path = tmp_path / "bodies.csv"
+    path.write_text(
+        "name,kind,industry,where\n"
+        "Sample Agency (SA),State corporation under the Ministry,ICT policy and financing,Kampala\n"
+        "Other Body,Statutory board,Research,Kampala\n"
+    )
+    columns = {"name": "name", "industry": "industry"}
+    overrides = {
+        "Sample Agency (SA)": {"type": "government", "city": "Kampala", "country": "UG", "sectors": "ict, policy", "status": "partially_verified"},
+        "Other Body": {"name": "Other Body of Uganda", "type": "ngo"},
+    }
+    agency, other = read_dataset(path, columns, publish_all=True, overrides=overrides)
+    assert (agency.types, agency.city, agency.country, agency.sectors) == (["government_program"], "Kampala", "UG", ["ict", "policy"])
+    assert (agency.publish, other.publish) == (False, True)
+    assert (other.name, other.types, other.city) == ("Other Body of Uganda", ["ngo"], "Nairobi")
+
+    with pytest.raises(ValueError, match="names rows that are not in bodies.csv: Missing Body"):
+        read_dataset(path, columns, overrides={"Missing Body": {"type": "ngo"}})

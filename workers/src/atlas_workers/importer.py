@@ -25,7 +25,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .geocode import Geocoder, Place, in_nairobi
+from .geocode import Box, Geocoder, Place, box_around, in_nairobi
 
 # What an investor known only from a funding round is described as, until a dataset says more.
 INVESTOR_PLACEHOLDER = "Named as an investor in a funding round on record."
@@ -240,14 +240,19 @@ def read_people(text: str) -> list[tuple[str, str]]:
     return [(name, role[:80]) for name, role in people.items()]
 
 
-_SENTENCE_END = r";|(?<!\bNo)(?<=[a-z)])\.(?:\s|$)"
+_SENTENCE_END = r";|(?<!\bNo)(?<!\bAv)(?<=[a-z)])\.(?:\s|$)"
 _STREET = re.compile(rf"^(?:No\.?\s*)?\d+\s+(.+\b{_STREET_WORD})$", re.I)
-_IS_STREET = re.compile(rf"\b{_STREET_WORD}(?: (?:North|South|East|West))?$", re.I)
+# English puts the street word last, French first: "Kimera Road", "Avenue de France".
+_IS_STREET = re.compile(
+    rf"\b{_STREET_WORD}(?: (?:North|South|East|West))?$|^(?:Boulevard|Avenue|Av\.?|Rue|Route|Chaussée)\s", re.I
+)
 _LEAD_IN = re.compile(r"^(?:off|along|next to|opposite|near)[- ]", re.I)
 
 
 def clean_address(premise: str) -> str:
     """The address itself: the first one given, without the researcher's remarks."""
+    # "Building/premise not publicly disclosed; Kimera Road, ..." still gives a street.
+    premise = re.sub(r"^(?:building|premise)[^;,]*not publicly disclosed[;,]\s*", "", premise.strip(), flags=re.I)
     first = re.split(_SENTENCE_END, premise, maxsplit=1)[0]
     first = re.split(r"\s—\s", first, maxsplit=1)[0]  # "... Nairobi — third-party listing"
     first = re.sub(r"^[^,:]{0,40}:\s*", "", first)  # "Samplepay parent office: ..."
@@ -278,7 +283,14 @@ def _key_word(part: str) -> str:
     return _squash(first if len(first) >= 5 else part)
 
 
-def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
+def find_address(
+    premise: str,
+    geocoder: Geocoder,
+    city: str = "Nairobi",
+    within: Box | None = None,
+    country: str = "KE",
+    not_places: tuple[str, ...] = (),
+) -> tuple[Place, str] | None:
     """Find a premise on the map, refusing matches that only resemble it.
 
     A geocoder returns its best guess, which for "Nairobi Garage" can be a car
@@ -286,10 +298,25 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
     building's name and something else from the address. Otherwise the record
     falls back to its street, then its area, each checked by name the same way.
     Long arterial roads are skipped: a point on one says too little.
+
+    Outside Nairobi, `within` is the city's surroundings and results beyond it
+    are refused. `not_places` are the names of the city's region and country:
+    as part of an address they match everything in the city, so they are dropped.
     """
-    parts = address_parts(premise)
+    too_wide = [_squash(name) for name in not_places if name.strip()]
+    parts = [
+        part for part in address_parts(premise) if not any(_squash(part).endswith(name) for name in too_wide)
+    ]
+    # The city ends the address: what follows it is a region or a country.
+    at = next((i for i, part in enumerate(parts) if _squash(part) in (_squash(city), _squash(f"{city} City"))), None)
+    if at is not None:
+        parts = parts[:at]
     if not parts:
         return None
+
+    def lookup(query: str) -> Place | None:
+        return geocoder.lookup(f"{query}, {city}", within, country)
+
     building, rest = parts[0], parts[1:]
     numbered = _STREET.match(building)
     if numbered:
@@ -300,7 +327,7 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
     else:
         distinctive = len(building.split()) >= 3
         for query in dict.fromkeys((", ".join(parts), building)):
-            place = geocoder.lookup(f"{query}, Nairobi")
+            place = lookup(query)
             if not place or _squash(building) not in _squash(place.matched):
                 continue
             # A street or district result counts only if it is named exactly as the building.
@@ -312,11 +339,12 @@ def find_address(premise: str, geocoder: Geocoder) -> tuple[Place, str] | None:
             if distinctive or any(_key_word(part) in _squash(place.matched) for part in rest):
                 return place, "address"
     for index, part in enumerate(rest):
-        if part.lower() in ARTERIALS:
+        # A word of two or three letters ("Av", "KM4") is found inside too many other names.
+        if part.lower() in ARTERIALS or len(_squash(part)) < 4:
             continue
         # With what follows it first, so "Ring Road, Westlands" is not another Ring Road.
         for query in dict.fromkeys((", ".join(rest[index:]), part)):
-            place = geocoder.lookup(f"{query}, Nairobi")
+            place = lookup(query)
             if place and _squash(part) in _squash(place.matched):
                 return place, "area"
     return None
@@ -388,8 +416,10 @@ def parse_row(
     columns: dict[str, str] = DEFAULT_COLUMNS,
     position: int = 0,
     publish_all: bool = False,
+    overrides: dict[str, str] | None = None,
 ) -> Record:
-    fields = to_fields(row, columns)
+    # What the curator wrote for this row outranks what the dataset says.
+    fields = {**to_fields(row, columns), "sectors": "", **(overrides or {})}
     raw_name = fields["name"]
     name = display_name(raw_name)
     # A dataset with no verification column is unverified unless the person loading it vouches for it.
@@ -418,7 +448,8 @@ def parse_row(
         status=status,
         publish=status == "verified",
         description=fields["industry"],
-        sectors=read_sectors(fields["industry"]),
+        sectors=[tag.strip() for tag in fields["sectors"].split(",") if tag.strip()][:3]
+        or read_sectors(fields["industry"]),
         # A stage describes a company raising money, not an investor's fund.
         stage=read_stage(fields["funding_status"]) if not types or "startup" in types else None,
         funding_note=". ".join(part for part in (funding_status, funding) if part) or None,
@@ -490,6 +521,7 @@ def read_dataset(
     publish_all: bool = False,
     aliases: dict[str, list[str]] | None = None,
     statuses: dict[str, str] | None = None,
+    overrides: dict[str, dict[str, str]] | None = None,
 ) -> list[Record]:
     columns = {**DEFAULT_COLUMNS, **(columns or {})}
     with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -497,7 +529,16 @@ def read_dataset(
         missing = [columns[name] for name in REQUIRED_FIELDS if columns[name] not in (reader.fieldnames or [])]
         if missing:
             raise ValueError(f"{path.name} is missing columns: {', '.join(missing)}")
-        records = [parse_row(row, columns, position, publish_all) for position, row in enumerate(reader, 1)]
+        rows = list(reader)
+    # Overrides are keyed by the name as the dataset writes it, which an override may itself replace.
+    keys = [(row.get(columns["name"]) or "").strip() for row in rows]
+    records = [
+        parse_row(row, columns, position, publish_all, (overrides or {}).get(key))
+        for position, (row, key) in enumerate(zip(rows, keys), 1)
+    ]
+    unused = set(overrides or {}) - set(keys)
+    if unused:
+        raise ValueError(f"The mapping names rows that are not in {path.name}: {', '.join(sorted(unused))}")
     for record in records:
         record.aliases = list((aliases or {}).get(record.name, []))
         # A status set by the curator for one row outranks the dataset-wide default.
@@ -548,18 +589,51 @@ def match_existing(conn, records: list[Record], import_key: str) -> None:
             record.notes.append(f"already on record as {found[1]}; merged into it")
 
 
+# Kinds of organisation that maps show under their own name: a campus, a ministry.
+_MAPPED_BY_NAME = {"university", "government_program"}
+
+
+def find_by_name(record: Record, geocoder: Geocoder, within: Box | None) -> Place | None:
+    """Where the map shows an institution under its own name, when its address was not found.
+
+    Only for universities and public bodies, and only when the map's entry is
+    named exactly as the record: a company's name is too often also a cafe's.
+    """
+    if not _MAPPED_BY_NAME & set(record.types):
+        return None
+    place = geocoder.lookup(f"{record.name}, {record.city}", within, record.country)
+    if place and _squash(place.matched.split(",")[0]) == _squash(record.name):
+        return place
+    return None
+
+
 def locate(record: Record, geocoder: Geocoder) -> None:
     """Place a record as precisely as the public evidence and the geocoder allow."""
     elsewhere = record.city.casefold() != "nairobi"
     if elsewhere and not re.fullmatch(r"[A-Z]{2}", record.country):
         return
     if elsewhere and not record.given:
-        # Street addresses are only looked up in Nairobi; elsewhere a record sits at its city's centre.
         record.city_centre = geocoder.city(record.city, record.country)
-        if record.city_centre:
-            record.precision = "city"
-        else:
+        if not record.city_centre:
             record.notes.append(f"city not found: {record.city}, {record.country}; kept without an office")
+            return
+        record.precision = "city"
+        # The address is looked for only within the city's surroundings; failing that, the city's centre.
+        if record.premise and record.location_level == "exact_public_address_verified":
+            box = box_around(record.city_centre)
+            # The city's own entry reads "Kampala, Central Region, Uganda": everything after the city is too wide.
+            wider = tuple(record.city_centre.matched.split(",")[1:])
+            found = find_address(record.premise, geocoder, record.city, box, record.country, wider)
+            if found:
+                record.place, record.precision = found
+                record.address = clean_address(record.premise)
+                if record.precision == "area":
+                    record.notes.append("building not confirmed on the map; placed on its street or area")
+            elif own := find_by_name(record, geocoder, box):
+                record.place, record.precision = own, own.level
+                record.notes.append("address not found on the map; placed where the map shows the institution itself")
+            else:
+                record.notes.append("address not found on the map; placed at city level")
         return
     if record.given:
         lon, lat = record.given
@@ -575,6 +649,10 @@ def locate(record: Record, geocoder: Geocoder) -> None:
             record.address = clean_address(record.premise)
             if record.precision == "area":
                 record.notes.append("building not confirmed on the map; placed on its street or area")
+            return
+        if own := find_by_name(record, geocoder, None):
+            record.place, record.precision = own, own.level
+            record.notes.append("address not found on the map; placed where the map shows the institution itself")
             return
         record.notes.append("address not found on the map; placed at city level")
     if record.area and (place := geocoder.lookup(f"{record.area}, Nairobi")):

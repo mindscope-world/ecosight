@@ -76,8 +76,9 @@ export const LAYERS: LayerDef[] = [
   { kind: 'points', id: 'events', label: 'Events', noun: 'Event', types: [], color: MAGENTA, shape: 'pin', defaultOn: true },
   { kind: 'points', id: 'ngos', label: 'NGOs', noun: 'NGO', types: ['ngo', 'development_funder'], color: YELLOW, shape: 'cross', defaultOn: true },
   { kind: 'points', id: 'hubs', label: 'Innovation hubs', noun: 'Innovation hub', types: ['innovation_hub'], color: VIOLET, shape: 'hub', defaultOn: true },
-  { kind: 'points', id: 'universities', label: 'Universities', noun: 'University', types: ['university'], color: VIOLET, shape: 'building', defaultOn: false },
-  { kind: 'points', id: 'government', label: 'Government', noun: 'Government program', types: ['government_program'], color: VIOLET, shape: 'triangle', defaultOn: false },
+  { kind: 'points', id: 'universities', label: 'Universities', noun: 'University', types: ['university'], color: VIOLET, shape: 'building', defaultOn: true },
+  { kind: 'points', id: 'government', label: 'Government', noun: 'Government program', types: ['government_program'], color: VIOLET, shape: 'triangle', defaultOn: true },
+  { kind: 'points', id: 'corporates', label: 'Corporates', noun: 'Corporate', types: ['corporate'], color: BLUE, shape: 'square', defaultOn: true },
   { kind: 'heat', id: 'funding-heat', label: 'Funding heatmap', source: 'startups', weight: { property: 'raised_usd', max: 5_000_000 }, ramp: CYAN_RAMP, defaultOn: false },
   // Three separate measures of where things are: each counts one kind of organisation and nothing else.
   { kind: 'heat', id: 'density', label: 'Startup density', source: 'startups', ramp: BLUE_RAMP, defaultOn: false },

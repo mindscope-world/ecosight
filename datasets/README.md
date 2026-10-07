@@ -11,6 +11,7 @@ own copy of the files; a fresh clone will not have them.
 |--------|----------|--------|
 | `nairobi-startups-2026-10-06/` | `nairobi_startups_organisations_100.csv`: 100 researched Nairobi startups and newer organisations. The `.xlsx` is the same data with a summary sheet and a one-link-per-row source register. `dataset-guide.pdf` explains the fields and verification labels | Loaded. 69 verified rows published, 31 kept as drafts |
 | `nairobi-investors-2026-10-07/` | `nairobi_vc_accelerator_dataset_2026-10-07.csv`: 25 venture capital firms, impact investors and accelerators with a Nairobi presence. Read through `curation/nairobi_vc_accelerator_dataset_2026-10-07.mapping.json` | Loaded. 23 published, 2 kept as drafts; 5 were merged into investors already on record |
+| `east-africa-2026-10-07/` | `east_africa_100_organizations.csv`: 100 universities, public bodies, NGOs and innovation hubs in Kenya, Uganda, Tanzania, Rwanda, Ethiopia, Burundi, Somalia, South Sudan and Djibouti. The `.xlsx` is the same data; the `.md` describes the columns. Read through `curation/east_africa_100_organizations.mapping.json` | Loaded. 96 published, 4 kept as drafts; 5 were merged into organisations already on record |
 
 Work derived from a dataset by hand lives in `curation/`: the funding rounds read
 out of the startups dataset's funding notes, the mapping file for the investors
@@ -27,6 +28,8 @@ uv run atlas import-orgs ../datasets/nairobi-startups-2026-10-06/nairobi_startup
 uv run atlas import-rounds ../curation/nairobi_startups_funding_rounds.json --apply
 uv run atlas import-orgs ../datasets/nairobi-investors-2026-10-07/nairobi_vc_accelerator_dataset_2026-10-07.csv \\
   --mapping ../curation/nairobi_vc_accelerator_dataset_2026-10-07.mapping.json --publish-all --snapshot 2026-10-07 --apply
+uv run atlas import-orgs ../datasets/east-africa-2026-10-07/east_africa_100_organizations.csv \\
+  --mapping ../curation/east_africa_100_organizations.mapping.json --publish-all --snapshot 2026-10-07 --apply
 ```
 
 Load them in that order on an empty database. Each command can be run again safely.

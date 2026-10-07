@@ -1,4 +1,4 @@
-"""Geocoding through the public Nominatim service: addresses in the Nairobi area, and city centres anywhere.
+"""Geocoding through the public Nominatim service: addresses within a city's surroundings, and city centres anywhere.
 
 The usage policy allows one request a second and asks for cached results, so every
 answer, including "nothing found", is written to a cache file and reused.
@@ -31,9 +31,21 @@ class Place:
     matched: str
 
 
-def in_nairobi(lon: float, lat: float) -> bool:
-    west, south, east, north = NAIROBI_BOX
+Box = tuple[float, float, float, float]
+
+
+def in_box(lon: float, lat: float, box: Box) -> bool:
+    west, south, east, north = box
     return west <= lon <= east and south <= lat <= north
+
+
+def in_nairobi(lon: float, lat: float) -> bool:
+    return in_box(lon, lat, NAIROBI_BOX)
+
+
+def box_around(centre: "Place", reach: float = 0.3) -> Box:
+    """A city's surroundings: about 30 km either side of its centre."""
+    return (centre.lon - reach, centre.lat - reach, centre.lon + reach, centre.lat + reach)
 
 
 def _squash(text: str) -> str:
@@ -59,11 +71,13 @@ class Geocoder:
             json.loads(cache_path.read_text()) if cache_path.is_file() else {}
         )
 
-    def lookup(self, query: str) -> Place | None:
-        """A place within the Nairobi area. Addresses elsewhere are not looked up yet."""
-        if query not in self._cache:
-            self._store(query, self._fetch(query))
-        hit = self._cache[query]
+    def lookup(self, query: str, within: Box | None = None, country: str = "KE") -> Place | None:
+        """A place inside a box: the Nairobi area unless another city's surroundings are given."""
+        # Nairobi lookups keep the bare query as their key, as in caches written before other cities.
+        key = query if within is None else f"{country.upper()}:{query}"
+        if key not in self._cache:
+            self._store(key, self._fetch(query, within or NAIROBI_BOX, country))
+        hit = self._cache[key]
         return Place(**hit) if hit else None
 
     def city(self, name: str, country: str) -> Place | None:
@@ -106,15 +120,15 @@ class Geocoder:
         results = response.json()
         return results[0] if results else None
 
-    def _fetch(self, query: str) -> dict | None:
-        west, south, east, north = NAIROBI_BOX
+    def _fetch(self, query: str, box: Box, country: str) -> dict | None:
+        west, south, east, north = box
         top = self._request(
-            {"q": query, "countrycodes": "ke", "viewbox": f"{west},{north},{east},{south}", "bounded": 1}
+            {"q": query, "countrycodes": country.lower(), "viewbox": f"{west},{north},{east},{south}", "bounded": 1}
         )
         if not top:
             return None
         lon, lat = float(top["lon"]), float(top["lat"])
-        if not in_nairobi(lon, lat):
+        if not in_box(lon, lat, box):
             return None
         return {
             "lon": lon,
