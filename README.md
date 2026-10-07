@@ -85,6 +85,9 @@ organisation already on record from another source is reported and not loaded ag
 Where a dataset describes a row in a sentence rather than a value, the mapping file's
 `overrides` gives that row's values by hand, keyed by its name: `type`, `city`,
 `country`, `sectors`, `status`, or any other field.
+A dataset that cites its sources by ID, with the links in a file of their own, names
+that file in the mapping: `"source_register": {"file": "<sources>.csv", "id": "Source ID", "url": "URL"}`.
+The file sits beside the dataset, and the IDs in the source columns are read as its links.
 `pnpm db:seed` refuses to run on a database that holds real records.
 
 ```sh

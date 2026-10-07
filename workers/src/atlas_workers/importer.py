@@ -15,6 +15,9 @@ the report, which is what gets reviewed first.
 
 Other datasets are read through a column mapping: a JSON object from the field
 names in `DEFAULT_COLUMNS` to that dataset's own column headings.
+
+A dataset may cite its sources by ID and list the links in a file of their own, a
+source register. The IDs in its source columns are then read as the links they stand for.
 """
 
 import csv
@@ -59,6 +62,8 @@ DEFAULT_COLUMNS = {
     "confidence": "Confidence",
 }
 CONFIDENCE = {"high": 0.9, "medium": 0.6, "low": 0.3}
+# The fields that say where one part of a row was found. Each holds a single link.
+SOURCE_FIELDS = ("source_name", "source_office", "source_funding", "source_people")
 # Only a name is indispensable. Everything else has a safe reading when absent.
 REQUIRED_FIELDS = ("name",)
 
@@ -386,6 +391,27 @@ def read_sources(text: str) -> list[str]:
     return list(dict.fromkeys(url.rstrip(".,") for url in re.findall(r"https?://[^\s|;,)]+", text)))
 
 
+def read_register(path: Path, id_column: str = "Source ID", url_column: str = "URL") -> dict[str, str]:
+    """A source register: the link each source ID stands for."""
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        missing = [column for column in (id_column, url_column) if column not in (reader.fieldnames or [])]
+        if missing:
+            raise ValueError(f"{path.name} is missing columns: {', '.join(missing)}")
+        return {
+            row[id_column].strip(): row[url_column].strip()
+            for row in reader
+            if (row[url_column] or "").strip().startswith("http")
+        }
+
+
+def from_register(cell: str, register: dict[str, str]) -> tuple[list[str], list[str]]:
+    """The links a cell of source IDs stands for, without repeats, and the IDs the register does not hold."""
+    ids = [part.strip() for part in re.split(r"[;,|]", cell) if part.strip()]
+    links = dict.fromkeys(register[source] for source in ids if source in register)
+    return list(links), [source for source in ids if source not in register]
+
+
 # Words too common in organisation names to identify one website among many.
 _GENERIC_NAME_WORDS = {
     "africa", "capital", "ventures", "venture", "fund", "kenya", "network", "accelerator", "partners",
@@ -417,6 +443,7 @@ def parse_row(
     position: int = 0,
     publish_all: bool = False,
     overrides: dict[str, str] | None = None,
+    register: dict[str, str] | None = None,
 ) -> Record:
     # What the curator wrote for this row outranks what the dataset says.
     fields = {**to_fields(row, columns), "sectors": "", **(overrides or {})}
@@ -432,7 +459,16 @@ def parse_row(
     funding_status = fields["funding_status"].rstrip(".")
     people_text = fields["founders"]
     types, unknown_types = read_types(fields["type"])
-    references = read_sources(fields["sources"])
+    unlisted: list[str] = []
+    if register is None:
+        references = read_sources(fields["sources"])
+    else:
+        # The links are taken whole from the register, never picked out of text.
+        references, unlisted = from_register(fields["sources"], register)
+        for key in SOURCE_FIELDS:
+            links, unknown = from_register(fields[key], register)
+            fields[key] = links[0] if links else ""
+            unlisted += unknown
     if not website:
         website, domain = own_site(name, references)
     # With no stated level, an address in the row is taken as the address.
@@ -486,6 +522,8 @@ def parse_row(
         record.notes.append(f"unknown location verification {record.location_level!r}")
     if unknown_types:
         record.notes.append(f"type not recognised: {', '.join(unknown_types)}")
+    if unlisted:
+        record.notes.append(f"source not in the register: {', '.join(dict.fromkeys(unlisted))}")
     if fields["founded_year"]:
         year = fields["founded_year"]
         if year.isdigit() and 1800 <= int(year) <= 2100:
@@ -522,6 +560,7 @@ def read_dataset(
     aliases: dict[str, list[str]] | None = None,
     statuses: dict[str, str] | None = None,
     overrides: dict[str, dict[str, str]] | None = None,
+    register: dict[str, str] | None = None,
 ) -> list[Record]:
     columns = {**DEFAULT_COLUMNS, **(columns or {})}
     with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -533,7 +572,7 @@ def read_dataset(
     # Overrides are keyed by the name as the dataset writes it, which an override may itself replace.
     keys = [(row.get(columns["name"]) or "").strip() for row in rows]
     records = [
-        parse_row(row, columns, position, publish_all, (overrides or {}).get(key))
+        parse_row(row, columns, position, publish_all, (overrides or {}).get(key), register)
         for position, (row, key) in enumerate(zip(rows, keys), 1)
     ]
     unused = set(overrides or {}) - set(keys)
@@ -834,6 +873,9 @@ def apply(conn, records: list[Record], import_key: str, snapshot: str, replace_s
                 added["people"].append(str(cur.fetchone()[0]))
             sources = dict(record.sources)
             for number, url in enumerate(record.references):
+                # A link that already stands behind a field is not listed a second time.
+                if url in sources.values():
+                    continue
                 # The first listed source stands behind the record itself.
                 sources.setdefault("name" if number == 0 and not record.existing_id else f"reference {number + 1}", url)
             for field_name, url in sources.items():

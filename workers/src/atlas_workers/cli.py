@@ -69,15 +69,24 @@ def cmd_import(args: argparse.Namespace) -> int:
     from .geocode import Geocoder
     import psycopg
 
-    from .importer import apply, build_report, locate, match_existing, read_dataset
+    from .importer import apply, build_report, locate, match_existing, read_dataset, read_register
 
     path = Path(args.dataset)
     mapping = json.loads(Path(args.mapping).read_text()) if args.mapping else {}
     # A mapping file is either the columns alone, or columns with the curator's notes beside them:
     # other names, a status for one row, and values for one row that the dataset does not state plainly.
     columns = mapping.get("columns", mapping) or None
+    # A dataset that cites its sources by ID names the file listing them, which sits beside it.
+    listed = mapping.get("source_register")
+    register = read_register(path.parent / listed["file"], listed["id"], listed["url"]) if listed else None
     records = read_dataset(
-        path, columns, args.publish_all, mapping.get("aliases"), mapping.get("statuses"), mapping.get("overrides")
+        path,
+        columns,
+        args.publish_all,
+        mapping.get("aliases"),
+        mapping.get("statuses"),
+        mapping.get("overrides"),
+        register,
     )
     # Checked on a dry run too, so the report shows what would be skipped.
     try:

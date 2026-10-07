@@ -486,3 +486,38 @@ def test_the_curator_can_set_values_for_one_row(tmp_path):
 
     with pytest.raises(ValueError, match="names rows that are not in bodies.csv: Missing Body"):
         read_dataset(path, columns, overrides={"Missing Body": {"type": "ngo"}})
+
+
+def test_sources_cited_by_id_are_read_from_a_register(tmp_path):
+    from atlas_workers.importer import read_dataset, read_register
+
+    listing = tmp_path / "sources.csv"
+    listing.write_text(
+        "Source ID,Organisation,URL\n"
+        "001-S01,Sample Clinic,https://sampleclinic.example/\n"
+        '001-S02,Sample Clinic,"https://news.example/a,b;c"\n'
+        "001-S03,Sample Clinic,https://sampleclinic.example/contact\n"
+        "001-S04,Sample Clinic,not found\n"
+    )
+    register = read_register(listing)
+    assert "001-S04" not in register
+
+    path = tmp_path / "clinics.csv"
+    path.write_text(
+        "name,all,where,money\n"
+        "Sample Clinic,001-S01; 001-S02; 001-S03; 001-S09,001-S03; 001-S01,001-S02\n"
+    )
+    columns = {"name": "name", "sources": "all", "source_office": "where", "source_funding": "money"}
+    (clinic,) = read_dataset(path, columns, publish_all=True, register=register)
+    # A link is taken whole, punctuation and all.
+    assert clinic.references == [
+        "https://sampleclinic.example/",
+        "https://news.example/a,b;c",
+        "https://sampleclinic.example/contact",
+    ]
+    assert clinic.sources == {"office": "https://sampleclinic.example/contact", "funding": "https://news.example/a,b;c"}
+    assert clinic.domain == "sampleclinic.example"
+    assert "source not in the register: 001-S09" in clinic.notes
+
+    with pytest.raises(ValueError, match="sources.csv is missing columns: Link"):
+        read_register(listing, url_column="Link")
