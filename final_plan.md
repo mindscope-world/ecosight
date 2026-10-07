@@ -78,8 +78,8 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 |---|------|-------|
 | 1.1 | Confirm the data's sources allow publishing it | Risk R6 in `plan.md` |
 | 1.2 | Check the investors placed abroad | `curation/investor_headquarters.json`: 17 placements from general knowledge, and 13 not placed that the owner may know |
-| 1.3 | Check the 36 curated rounds | Investor types are the curator's classification; a bare "$" is read as US dollars; one company is dated by announcement; Another company's equity and debt are one round |
-| 1.4 | Check the investors import | "Example Capital Africa" is treated as the "Example Capital" in another company's round; two rows are held as drafts |
+| 1.3 | Check the 36 curated rounds | Investor types are the curator's classification; a bare "$" is read as US dollars; one round is dated by its announcement, not its close; one round counts equity and debt together |
+| 1.4 | Check the investors import | One investor in the dataset is treated as the same organisation as a differently named investor in a funding round; two rows are held as drafts. Both judgments are in the mapping file under `curation/` |
 | 1.5 | Review the 33 drafts | In particular the 6 startups marked inactive or unclear |
 | 1.6 | Merge the `beyond-kenya` branch | Needs a pull request into `main` |
 | 1.7 | Confirm the decisions listed in section 1 | They were taken on recommendation, not signed off |

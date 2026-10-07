@@ -52,7 +52,7 @@ and the API runs as a container from `infra/api/Dockerfile`.
 - `workers` — Python pipeline: feed crawlers, raw document store, extraction, eval harness.
 - `eval` — labelled set for extraction accuracy. See `eval/README.md`.
 - `datasets` — researched datasets, one dated folder each. The files are not in git; see `datasets/README.md`.
-- `curation` — work derived from a dataset by hand, such as funding rounds read from its notes.
+- `curation` — work derived from a dataset by hand, such as funding rounds read from its notes. Not in git, like the datasets.
 - `infra` — Docker Compose for local development.
 - `docs` — fork audit, decision records, crawled sources.
 
