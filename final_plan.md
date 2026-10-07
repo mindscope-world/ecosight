@@ -13,7 +13,7 @@ Urgency:
 
 ## 1. What is built
 
-The code is public at <https://github.com/mindscope-world/ecosight>; the data is not in it. The repository's history was rewritten on Oct 7, 2026 to remove the curated data, so earlier commit ids no longer exist. `main` holds everything up to the investors dataset. Later work is on the `beyond-kenya` and `map-polish-and-e2e` branches, both pushed; `map-polish-and-e2e` holds the newest, including the health technology import.
+The code is public at <https://github.com/mindscope-world/ecosight>; the data is not in it. The repository's history was rewritten on Oct 7, 2026 to remove the curated data, so earlier commit ids no longer exist. `main` holds everything: the `beyond-kenya` and `map-polish-and-e2e` branches were merged into it on Oct 8, 2026.
 
 Checks pass: 134 TypeScript tests, 103 Python tests, 33 end-to-end browser tests, typecheck, build, and first-load JavaScript of 124 KB for the landing page and 369 KB for the map app, each against a 600 KB budget. CI runs them on every pull request.
 
@@ -22,7 +22,7 @@ Checks pass: 134 TypeScript tests, 103 Python tests, 33 end-to-end browser tests
 | | Count |
 |---|---|
 | Organisations published | 316 |
-| Organisations on the map | 284, in 28 countries |
+| Organisations on the map | 307, in 31 countries |
 | Startups | 151, in 18 countries |
 | Investors, accelerators, hubs and funders | 87 published |
 | Universities | 35 |
@@ -32,7 +32,7 @@ Checks pass: 134 TypeScript tests, 103 Python tests, 33 end-to-end browser tests
 | Investor-to-company links | 64 |
 | People named as founders | 251, of whom 60 have a LinkedIn profile link (4.13) |
 | Organisations with a logo | 190 of the 261 published with a website (4.9) |
-| Published organisations with no office | 32, nearly all investors named only in a round (4.3) |
+| Published organisations with no office | 9, all investors whose head office could not be settled (4.3). The hosted database has 5 more: startups a reviewer approved that have no public address |
 | Drafts held back for review | 53 |
 | Events | 0 |
 
@@ -43,7 +43,7 @@ Checks pass: 134 TypeScript tests, 103 Python tests, 33 end-to-end browser tests
 - **Health technology dataset** (`datasets/africa-health-sources-2026-10-07/`): 100 health technology organisations in 17 African countries, loaded on Oct 7, 2026, locally and on the hosted database. 84 published, 16 drafts: fourteen whose status the research calls unclear, one that ceased operating and one that is winding down. None was already on record. The dataset cites its sources by ID and lists the links in a file of their own, which the importer now reads. Each row's type, place, sector tags, confidence and address level were set by hand in `curation/African_Healthtech_100.mapping.json`. Of the published, 4 are placed at an address, 44 on a street or area and 36 at their city's centre.
 - **Its funding rounds** (`curation/African_Healthtech_100_funding_rounds.json`): 59 rounds for 42 organisations, read by hand from the dataset's two funding columns, plus 22 items deliberately not recorded. 34 are dated. They name 22 investors, 19 of them new to the record and none yet placed.
 - **Stated relationships** (`curation/stated_relationships.csv`): 19 ties read by hand from the two datasets' own text, each with the words it rests on. 16 are published; 3 name an organisation that is not on record and wait in the review queue.
-- **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed, and the 19 investors new with the health technology rounds are not in the file yet.
+- **Investors abroad** (`curation/investor_headquarters.json`): 40 placed at their headquarters city. 17 are on the curator's general knowledge and marked as unsourced on each card. 23 were looked up by web search on Oct 8, 2026, and each carries the page its city was taken from; most of those pages are directories. 9 are listed as not placed, each with the reason.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
 ### Database (Postgres, PostGIS, pgvector, pg_trgm; fourteen migrations)
@@ -106,7 +106,7 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 | 1.5c | Check the stated relationships | `curation/stated_relationships.csv`: 16 ties published from the datasets' own wording. Judgments to confirm: a campus inside an innovation district is recorded as "hosted by" it; a startup with an office in a hub's building as "hosted by" the hub; a portfolio listing with no round as "backed by". Three rows wait in the queue because the other organisation is not on record |
 | 1.5d | Settle the review queue | 53 draft organisations and 3 proposed relationships are waiting at `/review/`. Sign in with the owner's address, which is on the list as admin |
 | 1.5e | Set up a mail service for sign-in | Until then Supabase emails sign-in links only to the project's own members, a couple an hour. Needed before anyone else is given an account |
-| 1.6 | Merge the `beyond-kenya` branch | Needs a pull request into `main` |
+| 1.6 | ~~Merge the open branches~~ | Done Oct 8, 2026: `beyond-kenya` and `map-polish-and-e2e` are in `main` |
 | 1.7 | Confirm the decisions listed in section 1 | They were taken on recommendation, not signed off |
 | 1.8 | Copy the reference screenshot into `docs/reference/` | The map app has never been compared with it |
 | 1.9 | Finish the purge on GitHub | The branches are clean, but GitHub still serves the old data file to anyone with an old commit link, because the three closed pull requests keep those commits. Only GitHub Support, or deleting and recreating the repository, removes them |
@@ -122,10 +122,10 @@ The data is private, so the deployed app opens only with an access key. Hosting 
 | 2.3 | ~~Host for the API~~ | Done | A Supabase Edge Function running the same Fastify app, so no further account was needed. Answers in about a second. `render.yaml` is kept as an untested alternative |
 | 2.3b | ~~Host for the web app~~ | Done | GitHub Pages, from the `gh-pages` branch. Checked in a browser: access screen without the key; counts, search and details with it |
 | 2.4 | ~~Scheduled rebuild of the map data~~ | Dropped | Static map files would put the data on a public host. The app reads through the keyed API |
-| 2.5 | Turn on the uptime check | Backend | Set the site and API addresses as repository variables, after this branch is merged: the workflow on `main` still checks for static map data and would fail |
+| 2.5 | Turn on the uptime check | Owner | The branches are merged, so the workflow on `main` no longer looks for static map data. What is left is to set the site and API addresses as repository variables (`WEB_URL`, `API_URL`) |
 | 2.6 | Error reporting | Owner + backend | Needs an account with a reporting service |
 | 2.7 | Contact address for the crawler and geocoder | Owner | Required by the services' usage policies before regular use |
-| 2.8 | Replace the Supabase access token | Owner | The one in use was pasted into a chat. Revoke it in the Supabase dashboard and put a new one in `.env`; it is needed only for migrations and deploys |
+| 2.8 | ~~Replace the Supabase access token~~ | Done | The owner replaced it on Oct 8, 2026; the new one in `.env` was checked against the hosted database's migration record. It is needed only for migrations and deploys |
 | 2.9 | Keep the free database awake | Backend | Supabase pauses a free project after a week idle. The uptime check does not reach the database yet |
 | 2.10 | Deploy from CI | Backend | By hand today. Needs the access token and access key as repository secrets |
 | 2.11 | ~~Pages that update themselves after a deploy~~ | Done | Each build names itself in `version.json`; an open or cached page reloads once when a newer build is live |
@@ -167,7 +167,7 @@ The data the graph starts with is modest: about 120 organisations, 37 investor-t
 |---|------|-------|-------|
 | 4.1 | Events | Data + backend | There are none, so the Events layer and its panels are empty. Needs a dataset or a crawler |
 | 4.2 | ~~Startups outside Kenya~~ | Done for health | The health technology dataset put 84 published organisations in 17 countries on the map. Other sectors outside Kenya still have no dataset |
-| 4.3 | Place the investors with no office, and source the ones placed | Data | **Next.** 32 published organisations have no office, so the map draws neither them nor their lines to the companies they back: 26 on the dashboard's Investors tab, 5 development funders on its NGOs tab and 1 corporate. 19 came with the health technology rounds; 13 were already listed as not placed. The dashboard's "Not on the map" button lists them. Each needs a city in `curation/investor_headquarters.json`, loaded with `atlas import-locations`. Then replace general-knowledge cities with sourced addresses |
+| 4.3 | Place the investors with no office, and source the ones placed | Data | **Mostly done, Oct 8, 2026.** 23 of the 32 organisations with no office were given a city, looked up by web search, each with the page it was taken from and a statement of basis (`curation/investor_headquarters.json`, loaded with `atlas import-locations`, which now stores that page as the placement's source). A fund with no office of its own is placed at its manager's or parent's head office and says so. **Not placed, 9:** the sources disagree or give no city for 3IF Ventures, Afrishela, DFS Lab, the Egyptian-American Enterprise Fund, FP Capital, Madiro and Waarde Capital; Bolt by QED Investors and the Google Africa Investment Fund are programmes with no head office. The owner may know these. **Still to do:** the pages behind the 23 are mostly directories, and the first 17 placements are from memory: replace both with addresses from the organisations' own sites. On the hosted database 5 startups a reviewer approved (AutoVest AI, MPost Pay, Peton Labs, Workpay Wallet, Ziada Credit Solutions) have no office because the research found no public address; they need one before the map can draw them |
 | 4.4 | ~~Keep city-level records out of the density layers~~ | Done | The four heatmaps count only records whose position means something; the layer list says so |
 | 4.5 | ~~Street-level address lookup outside Nairobi~~ | Done | An address is looked up within about 30 km of its city's centre, with the same refusal of lookalike matches. A university or public body whose address is not found is placed where the map names it. Otherwise the city's centre |
 | 4.6 | ~~Per-country summary~~ | Done | A "By country" tab on the dashboard: one row per country with organisations, cities, each kind, rounds and money raised, counted where each organisation is based, with bars for organisations and money by country. A country's name opens the map filtered to it. Worked out in the browser from the rows the dashboard already loads |
@@ -256,14 +256,14 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 7 | Advanced map | Selection, time, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility, missing pages | Backups, security, legal | Medium, then Critical |
 
-Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); the relationship importer is built and the first ties are loaded (3.9). What comes next needs nothing from the owner: placing the 32 organisations with no office (4.3) and reading relationships out of the health technology dataset (4.12). The graph still needs more relationship data from the owner (3.8c). Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
+Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); the relationship importer is built and the first ties are loaded (3.9). What comes next needs nothing from the owner: reading relationships out of the health technology dataset (4.12), and replacing the directory pages behind the investors' cities with their own addresses (4.3). The graph still needs more relationship data from the owner (3.8c). Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
 
 ## 4. Waiting on the owner
 
 These block other items and cannot be done from the code:
 
-1. Revoke the Supabase access token that was pasted into the chat and put a new one in `.env` (2.8).
-2. Decide who gets the access key, and merge the open branches so the uptime check can be turned on (1.6, 2.5).
+1. ~~Revoke the Supabase access token and put a new one in `.env` (2.8).~~ Done.
+2. Decide who gets the access key. The branches are merged (1.6), so the uptime check can now be turned on: set the site and API addresses as repository variables (2.5).
 3. What to do about the old commits GitHub still holds (1.9): ask GitHub Support to remove them, or delete and recreate the repository.
 4. Checks of the investors placed abroad, the rounds, the investors import and the drafts (1.2 to 1.5).
 5. For the graph: whether pitch decks may be used and sent to a hosted model, whether founders' universities are recorded, and which external APIs and databases to connect (3.9, 3.10, 3.12).
@@ -282,7 +282,7 @@ The importer reads a CSV; a mapping file handles different column headings. Most
 |------|-----|
 | Events: name, venue, city, start and end, link | The Events layer is empty |
 | Startups in other cities, with `City` and `Country` | Outside Nairobi only health technology startups are on record |
-| Cities and sourced addresses for investors | 32 have no office and are not on the map; 17 are placed from general knowledge |
+| Cities and sourced addresses for investors | 9 have no office and are not on the map; 17 are placed from general knowledge and 23 from directory pages |
 | Relationships: who invested in whom, who went through which programme, with dates | These are the links the graph is made of; only 64 investment links exist today |
 | Founded year | The filter and the card are ready for it |
 | Latitude and longitude, where known | Places a record exactly, in any country |
