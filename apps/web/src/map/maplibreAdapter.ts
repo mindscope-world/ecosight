@@ -14,7 +14,8 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ELEVATION_TILES, LABEL_FONT, type Basemap } from '../config';
 import { SHAPE_PATHS } from '../entities';
-import type { Camera, HeatLayerSpec, MapAdapter, PointLayerSpec } from './adapter';
+import type { Camera, HeatLayerSpec, MapAdapter, PickedRecord, PointLayerSpec } from './adapter';
+import { distinctRecords, indexSpots, markerId, sharedSpots, spotKey, type Placed, type SpotIndex } from './spots';
 import { tintStyle } from './tint';
 
 setWorkerUrl(workerUrl);
@@ -23,6 +24,9 @@ const EMPTY: FeatureCollection<Point> = { type: 'FeatureCollection', features: [
 const POINT_SUFFIXES = ['clusters', 'cluster-count', 'points'];
 const ICON_PIXELS = 48;
 const LINKS = 'links';
+const SHARED = 'shared-spots';
+// How far from the pointer, in pixels, a marker still counts as clicked.
+const CLICK_REACH = 5;
 // Past this zoom a cluster is records on the same spot: zooming will not part them.
 const STACK_ZOOM = 17;
 const STACK_LIMIT = 500;
@@ -60,6 +64,8 @@ export class MapLibreAdapter implements MapAdapter {
   /** What each layer shows, kept so it can be redrawn on a new basemap. */
   private readonly layers = new Map<string, LayerState>();
   private links: [number, number][][] = [];
+  private spots: SpotIndex = { bySpot: new Map(), byMarker: new Map() };
+  private pickListener: (records: PickedRecord[]) => void = () => {};
   private styleReady = false;
   private basemap: Basemap;
 
@@ -80,7 +86,11 @@ export class MapLibreAdapter implements MapAdapter {
       if (this.basemap.hillshade) this.drawHillshade();
       for (const id of this.layers.keys()) this.draw(id);
       this.drawLinks();
+      this.drawShared();
     });
+    // One listener for every layer. A listener per layer would each answer for
+    // its own marker, and the last to answer would hide the others.
+    this.map.on('click', (event) => void this.pick(event.point.x, event.point.y));
     this.setBasemap(options.basemap);
   }
 
@@ -129,33 +139,119 @@ export class MapLibreAdapter implements MapAdapter {
 
   addPointLayer(spec: PointLayerSpec): void {
     const map = this.map;
-    const { id, onSelect } = spec;
+    const { id } = spec;
     this.layers.set(id, { kind: 'points', spec, data: EMPTY, visible: true });
     this.draw(id);
 
     // Listeners are tied to layer ids, so they outlive a basemap change.
-    map.on('click', `${id}-points`, (event) => {
-      const feature = event.features?.[0];
-      if (feature) onSelect(feature.properties ?? {});
-    });
-    map.on('click', `${id}-clusters`, async (event) => {
-      const feature = event.features?.[0];
-      const clusterId = feature?.properties?.cluster_id;
-      if (!feature || clusterId == null || feature.geometry.type !== 'Point') return;
-      const source = map.getSource<GeoJSONSource>(id);
-      const zoom = await source?.getClusterExpansionZoom(clusterId);
-      if (!source || zoom == null) return;
-      if (zoom > STACK_ZOOM) {
-        const leaves = await source.getClusterLeaves(clusterId, STACK_LIMIT, 0);
-        spec.onSelectMany(leaves.map((leaf) => leaf.properties ?? {}));
-        return;
-      }
-      map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom });
-    });
     for (const layer of [`${id}-points`, `${id}-clusters`]) {
       map.on('mouseenter', layer, () => (map.getCanvas().style.cursor = 'pointer'));
       map.on('mouseleave', layer, () => (map.getCanvas().style.cursor = ''));
     }
+  }
+
+  onPick(listener: (records: PickedRecord[]) => void): void {
+    this.pickListener = listener;
+  }
+
+  /**
+   * What a click at this point of the screen means. A cluster that zooming can
+   * still part is zoomed into. Otherwise every record at the clicked spot is
+   * gathered, from every visible layer: a startup and an investor in the same
+   * building are drawn on top of one another, and both are there.
+   */
+  private async pick(x: number, y: number): Promise<void> {
+    const map = this.map;
+    const layers = [...this.layers]
+      .filter(([, state]) => state.kind === 'points' && state.visible)
+      .flatMap(([id]) => [`${id}-points`, `${id}-clusters`])
+      .filter((layer) => map.getLayer(layer));
+    if (!layers.length) return;
+    const hits = map.queryRenderedFeatures(
+      [
+        [x - CLICK_REACH, y - CLICK_REACH],
+        [x + CLICK_REACH, y + CLICK_REACH],
+      ],
+      { layers },
+    );
+    const found: Placed[] = [];
+    for (const hit of hits) {
+      const id = hit.source;
+      const clusterId = hit.properties?.cluster_id;
+      if (clusterId == null) {
+        // The drawn copy of a marker is rounded to its tile; the record itself has the true place.
+        const placed = this.spots.byMarker.get(`${id}|${markerId(hit.properties ?? {})}`);
+        if (placed) found.push(placed);
+        continue;
+      }
+      const source = map.getSource<GeoJSONSource>(id);
+      const zoom = await source?.getClusterExpansionZoom(clusterId);
+      if (!source || zoom == null || hit.geometry.type !== 'Point') continue;
+      if (zoom <= STACK_ZOOM) {
+        map.easeTo({ center: hit.geometry.coordinates as [number, number], zoom });
+        return;
+      }
+      for (const leaf of await source.getClusterLeaves(clusterId, STACK_LIMIT, 0)) {
+        if (leaf.geometry.type !== 'Point') continue;
+        const [lon, lat] = leaf.geometry.coordinates as [number, number];
+        found.push({ layer: id, lon, lat, properties: leaf.properties ?? {} });
+      }
+    }
+    // Whatever else sits exactly where the clicked markers are, on any visible layer.
+    const here = new Set(found.map((placed) => spotKey(placed.lon, placed.lat)));
+    for (const key of here) found.push(...(this.spots.bySpot.get(key) ?? []));
+    const records = distinctRecords(found);
+    if (records.length) this.pickListener(records.map(({ layer, properties }) => ({ layer, properties })));
+  }
+
+  /** Recounts which spots hold markers of several layers, after data or visibility changes. */
+  private refreshShared(): void {
+    this.spots = indexSpots(
+      [...this.layers]
+        .filter(([, state]) => state.kind === 'points' && state.visible)
+        .map(([id, state]) => [id, state.data] as [string, FeatureCollection<Point>]),
+    );
+    const source = this.map.getSource<GeoJSONSource>(SHARED);
+    if (source) source.setData(sharedSpots(this.spots));
+    else this.drawShared();
+  }
+
+  /**
+   * A small counted badge at the corner of markers that share their spot with
+   * another layer's, so a startup under an investor is not mistaken for nothing.
+   */
+  private drawShared(): void {
+    const map = this.map;
+    if (!this.styleReady || map.getSource(SHARED)) return;
+    map.addSource(SHARED, { type: 'geojson', data: sharedSpots(this.spots) });
+    map.addLayer({
+      id: SHARED,
+      type: 'circle',
+      source: SHARED,
+      minzoom: 8,
+      paint: {
+        'circle-radius': 8,
+        'circle-color': '#e6edf3',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#071018',
+        'circle-translate': [12, -12],
+      },
+    });
+    map.addLayer({
+      id: `${SHARED}-count`,
+      type: 'symbol',
+      source: SHARED,
+      minzoom: 8,
+      layout: {
+        'text-field': ['to-string', ['get', 'count']],
+        'text-font': [LABEL_FONT],
+        'text-size': 10,
+        'text-offset': [1.2, -1.2],
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: { 'text-color': '#071018' },
+    });
   }
 
   addHeatLayer(spec: HeatLayerSpec): void {
@@ -306,6 +402,7 @@ export class MapLibreAdapter implements MapAdapter {
     const state = this.layers.get(id);
     if (state) state.data = data;
     this.map.getSource<GeoJSONSource>(id)?.setData(data);
+    if (state?.kind === 'points') this.refreshShared();
   }
 
   setVisible(id: string, visible: boolean): void {
@@ -317,6 +414,7 @@ export class MapLibreAdapter implements MapAdapter {
     // Mid basemap change the layers are gone; they are redrawn with this visibility.
     for (const layer of ids)
       if (this.map.getLayer(layer)) this.map.setLayoutProperty(layer, 'visibility', visibility);
+    if (state.kind === 'points') this.refreshShared();
   }
 
   flyTo(camera: Camera): void {

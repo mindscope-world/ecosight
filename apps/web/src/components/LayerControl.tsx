@@ -119,6 +119,12 @@ export function MapLegend({ heat }: { heat: readonly HeatLayerDef[] }) {
         </span>
         Cluster
       </span>
+      <span className="flex items-center gap-1.5" title="Markers of different kinds on exactly the same spot. Click to list them all.">
+        <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-ink text-[9px] font-semibold text-bg" aria-hidden="true">
+          n
+        </span>
+        Shared spot
+      </span>
       {/* One ramp per measure that is on, each named, since they can be shown together. */}
       {heat.map((layer) => (
         <span key={layer.id} className="flex items-center gap-1.5">
