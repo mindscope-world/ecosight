@@ -13,9 +13,9 @@ Urgency:
 
 ## 1. What is built
 
-The code is public at <https://github.com/mindscope-world/ecosight>. Pull requests 1 and 2 are merged, so `main` holds everything up to the investors dataset. Two further commits, organisations outside Kenya and the density layers, are pushed on the `beyond-kenya` branch and not yet merged. Later work (the density fix, connection lines and end-to-end tests) is on the `map-polish-and-e2e` branch.
+The code is public at <https://github.com/mindscope-world/ecosight>; the data is not in it. The repository's history was rewritten on Oct 7, 2026 to remove the curated data, so earlier commit ids no longer exist. `main` holds everything up to the investors dataset. Later work is on the `beyond-kenya` and `map-polish-and-e2e` branches, both pushed.
 
-Checks pass: 70 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against a 600 KB budget. CI runs them on every pull request.
+Checks pass: 71 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against a 600 KB budget. CI runs them on every pull request.
 
 ### Data
 
@@ -34,7 +34,7 @@ Checks pass: 70 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, 
 - **Funding rounds** (`curation/nairobi_startups_funding_rounds.json`): read by hand from the startups dataset's funding notes, each with the words it was read from, plus 16 items deliberately not recorded as rounds.
 - **Investors dataset** (`datasets/nairobi-investors-2026-10-07/`): 25 rows; 23 published, 2 drafts. Five were merged into investors already known from funding rounds.
 - **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed.
-- Dataset files are kept out of git; `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
+- **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
 ### Database (Postgres, PostGIS, pgvector, pg_trgm; seven migrations)
 
@@ -60,13 +60,13 @@ Two pages.
 - `atlas crawl`: raw document store and two RSS crawlers (TechCabal, Disrupt Africa).
 - `atlas extract` and `atlas eval`: extraction with a rule-based baseline and a Groq model through LangChain, and an accuracy harness.
 
-### Deployment preparation
+### Deployment
 
-Static map data, a sub-path-aware web build, the API container, an uptime workflow and `docs/deploy.md`. Nothing is deployed.
+Online since Oct 7, 2026, on free tiers, and private: the landing page at <https://mindscope-world.github.io/ecosight/> and the map app under `/map/`, which opens only with the access key in `.env`. The database is on Supabase with all the data loaded and its public REST interface closed. The API runs as a Supabase Edge Function. The web app is on GitHub Pages and holds code only. `docs/deploy.md` has the commands. Deploying is done by hand.
 
 ### Decisions taken
 
-Build clean, no fork. React and Tailwind for the interface, vanilla TypeScript for the map engine. Fastify kept, not FastAPI. UI named ecoSight; internal package names unchanged. Dark theme only, with light as a map style. Free components throughout (`docs/adr/0002-zero-cost-stack.md`). Only verified rows are published. Funding is recorded by a person reading the notes, not by rules. Only people named as founders are loaded. Emails and phone numbers are not loaded.
+Build clean, no fork. React and Tailwind for the interface, vanilla TypeScript for the map engine. Fastify kept, not FastAPI. UI named ecoSight; internal package names unchanged. Dark theme only, with light as a map style. Free components throughout, with no paid hosting until there is revenue (`docs/adr/0002-zero-cost-stack.md`). Postgres is the system of record; Memgraph is deferred (`docs/adr/0003-graph-engine.md`). The data may not be published: a deployed copy opens only with an access key. Only verified rows are published. Funding is recorded by a person reading the notes, not by rules. Only people named as founders are loaded. Emails and phone numbers are not loaded.
 
 ## 2. What is left, in order
 
@@ -76,7 +76,7 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 
 | # | Item | Notes |
 |---|------|-------|
-| 1.1 | Confirm the data's sources allow publishing it | Risk R6 in `plan.md` |
+| 1.1 | ~~Confirm whether the data may be published~~ | **Decided: it may not.** The datasets and everything curated from them are out of git and purged from the repository's history. A deployed API requires an access key, and the map data is never put on a public host as files. See 1.9 for what is left of the purge |
 | 1.2 | Check the investors placed abroad | `curation/investor_headquarters.json`: 17 placements from general knowledge, and 13 not placed that the owner may know |
 | 1.3 | Check the 36 curated rounds | Investor types are the curator's classification; a bare "$" is read as US dollars; one round is dated by its announcement, not its close; one round counts equity and debt together |
 | 1.4 | Check the investors import | One investor in the dataset is treated as the same organisation as a differently named investor in a funding round; two rows are held as drafts. Both judgments are in the mapping file under `curation/` |
@@ -84,44 +84,49 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 | 1.6 | Merge the `beyond-kenya` branch | Needs a pull request into `main` |
 | 1.7 | Confirm the decisions listed in section 1 | They were taken on recommendation, not signed off |
 | 1.8 | Copy the reference screenshot into `docs/reference/` | The map app has never been compared with it |
+| 1.9 | Finish the purge on GitHub | The branches are clean, but GitHub still serves the old data file to anyone with an old commit link, because the three closed pull requests keep those commits. Only GitHub Support, or deleting and recreating the repository, removes them |
 
-### Step 2 — Put it online (High) — next
+### Step 2 — Put it online, privately (High) — mostly done
 
-Everything needed is built; what is missing is accounts and the go-ahead from 1.1.
+The data is private, so the deployed app opens only with an access key. Hosting is free-tier only until there is revenue.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 2.1 | Static preview on GitHub Pages | Backend | The landing page and the map load from static files alone, so this needs no other account. Details, search and filtered panels will not work until the API is up |
-| 2.2 | Database on Supabase | Owner + backend | Create the project; run the migrations and the four import commands |
-| 2.3 | Host for the API | Owner + backend | A host that runs a container. The graph proposal names Railway, which could run the API, the worker, Memgraph and Postgres together (see 3.11); it is not free |
-| 2.4 | Scheduled rebuild of the map data | Backend | A workflow on a timer; needs the database address as a repository secret |
-| 2.5 | Turn on the uptime check | Owner | Set the site and API addresses as repository variables |
+| 2.1 | ~~Close the app to the public~~ | Done | The API takes an `ACCESS_KEY`; without it every route but the health check answers 401, nothing is cacheable, and the app shows an access screen. A shared key is a stopgap until sign-in (5.1) |
+| 2.2 | ~~Database on Supabase~~ | Done | Migrations applied through Supabase's management API with an access token, since there is no database password in use. All four imports run; counts match the local database. The public REST interface is closed by `infra/supabase/harden.sql`, and the API connects as `ecosight_app`, an ordinary login |
+| 2.3 | ~~Host for the API~~ | Done | A Supabase Edge Function running the same Fastify app, so no further account was needed. Answers in about a second. `render.yaml` is kept as an untested alternative |
+| 2.3b | ~~Host for the web app~~ | Done | GitHub Pages, from the `gh-pages` branch. Checked in a browser: access screen without the key; counts, search and details with it |
+| 2.4 | ~~Scheduled rebuild of the map data~~ | Dropped | Static map files would put the data on a public host. The app reads through the keyed API |
+| 2.5 | Turn on the uptime check | Backend | Set the site and API addresses as repository variables, after this branch is merged: the workflow on `main` still checks for static map data and would fail |
 | 2.6 | Error reporting | Owner + backend | Needs an account with a reporting service |
 | 2.7 | Contact address for the crawler and geocoder | Owner | Required by the services' usage policies before regular use |
+| 2.8 | Replace the Supabase access token | Owner | The one in use was pasted into a chat. Revoke it in the Supabase dashboard and put a new one in `.env`; it is needed only for migrations and deploys |
+| 2.9 | Keep the free database awake | Backend | Supabase pauses a free project after a week idle. The uptime check does not reach the database yet |
+| 2.10 | Deploy from CI | Backend | By hand today. Needs the access token and access key as repository secrets |
 
-**First external demo after this step:** the landing page, then the map, with a click from a startup to its investors and on to their portfolio.
+**First external demo after this step:** the landing page, which shows illustrative points without a key, then the map for those given the key.
 
 ### Step 3 — Graph intelligence (High)
 
 Connections between organisations become something to explore in their own right: a graph engine, an interface over it, and a page built for following links. The architecture and the reasons are in `docs/adr/0003-graph-engine.md`; the page is specified in `frontend_plan.md` section 15.
 
-The engine is Memgraph, fed by an asynchronous background worker and queried only through the Fastify API. Postgres stays the system of record and Memgraph is rebuilt from it, so the review queue, sources, draft status and location rules all still apply to everything in the graph.
+The owner has accepted Postgres as the system of record and ruled out paid hosting before revenue. No free host can run Memgraph, so the order is: build the graph API and the explorer page now, answered by Postgres, and add Memgraph behind the same API later. The web app cannot tell which store answered.
 
-Items 3.1 to 3.8 need no account and can be built and tested locally. They do not depend on step 2.
+Items 3.5 to 3.8 are next and need nothing from the owner.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 3.1 | Confirm the architecture and its cost | Owner | Memgraph on Railway departs from the free stack of ADR 0002. ADR 0003 also keeps Postgres as the system of record, which changes the proposal's direct writes into the graph |
+| 3.1 | ~~Confirm the architecture and its cost~~ | Decided | Postgres is the system of record. No paid host: Memgraph on Railway is deferred until there is revenue |
 | 3.2 | Graph model | Backend | One `Entity` label plus a kind label; relationships `INVESTED_IN`, `ACCELERATED_AT`, `ORGANISED`, `HAS_ROLE`, `LOCATED_IN`, `IN_SECTOR`; a uniqueness constraint on id and a spatial point index, with the index statement checked against the Memgraph version used |
-| 3.3 | Memgraph in the local Docker setup | Backend | Beside Postgres, with a volume, and a start-up script for constraints and indexes |
-| 3.4 | Projection worker | Backend | Asynchronous Python over Bolt. Copies published records and their relationships from Postgres in batches, idempotently; a full rebuild and an incremental sync. Drafts never leave Postgres. Relationship types come from a fixed list |
-| 3.5 | Graph API | Backend | On Fastify: an entity's neighbourhood to a chosen depth; expanding one node; the shortest path between two entities; co-investors and shared portfolios; the most connected entities; all filterable by relationship type, sector, country and date. Rate limited, with a time limit per query |
+| 3.3 | Memgraph in the local Docker setup | Backend | **Deferred** with 3.4 and 3.11. Beside Postgres, with a volume, and a start-up script for constraints and indexes |
+| 3.4 | Projection worker | Backend | **Deferred.** Asynchronous Python over Bolt. Copies published records and their relationships from Postgres in batches, idempotently; a full rebuild and an incremental sync. Drafts never leave Postgres. Relationship types come from a fixed list |
+| 3.5 | Graph API | Backend | **Next.** Answered by Postgres for now. On Fastify: an entity's neighbourhood to a chosen depth; expanding one node; the shortest path between two entities; co-investors and shared portfolios; the most connected entities; all filterable by relationship type, sector, country and date. Rate limited, with a time limit per query |
 | 3.6 | Graph explorer page | Frontend | A third page at `/graph/`. Specified in `frontend_plan.md` section 15 |
 | 3.7 | Links between the map and the graph | Frontend | "View connections" from the details panel opens the graph on that organisation; "Show on map" from the graph does the reverse; both are share links |
-| 3.8 | Tests | Both | The graph matches Postgres after a sync (counts and sampled paths); API tests against a Memgraph service in CI; browser tests for the explorer page |
+| 3.8 | Tests | Both | API tests for each graph query on the sample data; browser tests for the explorer page. When Memgraph arrives: a check that it matches Postgres after a sync |
 | 3.9 | Ingestors, through the review queue | Backend | Relationship CSVs first (the importer already reads organisations). Then external APIs and other databases, once the owner names them. Each matches incoming names to existing records before proposing anything |
 | 3.10 | Pitch decks | Owner + backend | Upload, private storage, extraction by a language model, and review before anything is published. Blocked on the owner: decks are confidential, and their text would go to a hosted model |
-| 3.11 | Deploy on Railway | Owner + backend | Memgraph with a persistent volume at `/var/lib/memgraph`, the worker as its own service on a schedule, and a written procedure for rebuilding the graph from Postgres. Railway can also host the API and so settle 2.3 |
+| 3.11 | Deploy Memgraph | Owner + backend | **Deferred until there is revenue.** On a host with enough memory and a persistent volume at `/var/lib/memgraph`, with the worker as its own service and a written procedure for rebuilding the graph from Postgres |
 | 3.12 | Founders' universities | Owner | `FOUNDER_ALMA_MATER` is in the proposal. It is personal data of a kind the product has avoided so far and needs a decision before any is loaded |
 
 Not planned for now: loading map markers from the API by viewport, as the proposal's second phase describes. The map loads each layer once as a static file and clusters in the browser, which is why it works with the API down. Revisit when a layer passes about 50,000 points.
@@ -162,7 +167,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 6.1 | Add the Groq key and run the model extractor once | Owner + backend | Never run against Groq; the default model name is unconfirmed |
+| 6.1 | Run the model extractor once | Backend | The Groq key is in `.env`. Never run against Groq; the default model name is unconfirmed |
 | 6.2 | Labelled set: 50, then 200 news items | People | No accuracy figure exists until this does |
 | 6.3 | Read each publisher's terms of use | People | Recorded in `docs/sources.md`; needed before daily crawling |
 | 6.4 | Match extracted companies to existing records | Backend | The dataset importer's matching by website, name and other names can be reused |
@@ -212,27 +217,27 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | Step | What | Frontend | Backend | Urgency |
 |------|------|----------|---------|---------|
 | 1 | Owner checks | — | — | Critical |
-| 2 | Put it online | — | Static preview, database, API host, scheduled rebuild | High |
-| 3 | Graph intelligence | Graph explorer page, links to and from the map | Memgraph, projection worker, graph API, ingestors | High |
+| 2 | Put it online, privately | Access screen, GitHub Pages | Access key, Supabase database, API as an edge function | High, mostly done |
+| 3 | Graph intelligence | Graph explorer page, links to and from the map | Graph API on Postgres now; Memgraph and its worker later; ingestors | High |
 | 4 | Close the gaps in the data | Per-country summary | Events, sources, address lookup abroad, currency | High |
 | 5 | Review and accounts | Review screen, profile, submit | Sign-in, roles, audit | Medium |
 | 6 | Fresh data | — | Extraction to review queue, matching, scheduler | Medium |
 | 7 | Advanced map | Selection, time, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility, missing pages | Backups, security, legal | Medium, then Critical |
 
-Steps 2 and 3 are next and do not depend on each other: step 2 waits on the owner, while most of step 3 can be built locally now. Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
+Step 2 is done apart from small follow-ups. The graph API and explorer page in step 3 are next and can be built now. Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
 
 ## 4. Waiting on the owner
 
 These block other items and cannot be done from the code:
 
-1. Confirmation that the data's sources allow publishing (1.1). It blocks step 2.
-2. Confirmation of the graph architecture and its cost on Railway (3.1).
-3. A Supabase project and a host for the API, or Railway for all of it (2.2, 2.3, 3.11).
+1. Revoke the Supabase access token that was pasted into the chat and put a new one in `.env` (2.8).
+2. Decide who gets the access key, and merge the open branches so the uptime check can be turned on (1.6, 2.5).
+3. What to do about the old commits GitHub still holds (1.9): ask GitHub Support to remove them, or delete and recreate the repository.
 4. Checks of the investors placed abroad, the rounds, the investors import and the drafts (1.2 to 1.5).
 5. For the graph: whether pitch decks may be used and sent to a hosted model, whether founders' universities are recorded, and which external APIs and databases to connect (3.9, 3.10, 3.12).
 6. An events source, and any dataset of startups outside Kenya (4.1, 4.2).
-7. A Groq API key in `.env` (6.1).
+7. ~~A Groq API key in `.env`~~ Supplied; the extractor has not been run with it yet (6.1).
 8. A contact address for the crawler and geocoder (2.7).
 9. Whether to store and show business emails and phones, and investors' partners (4.9, 4.10).
 10. The reference screenshot inside the repo (1.8).

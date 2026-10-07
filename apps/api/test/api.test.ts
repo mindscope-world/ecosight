@@ -346,6 +346,27 @@ describe('filters', () => {
   });
 });
 
+describe('access key', () => {
+  it('keeps every route but the health check closed without the key', async () => {
+    const closed = await buildApp({ sql, accessKey: 'correct horse battery' });
+    try {
+      for (const path of ['/layers/offices.geojson', '/stats', '/search?q=sample', '/openapi.json'])
+        expect((await closed.inject(path)).statusCode).toBe(401);
+      expect((await closed.inject({ url: '/stats', headers: { 'x-access-key': 'wrong' } })).statusCode).toBe(401);
+      const opened = await closed.inject({ url: '/stats', headers: { 'x-access-key': 'correct horse battery' } });
+      expect(opened.statusCode).toBe(200);
+      // Nothing may keep a copy that could be served to someone without the key.
+      expect(opened.headers['cache-control']).toBe('private, no-store');
+      expect((await app.inject('/stats')).headers['cache-control']).toBe('public, max-age=60');
+      expect((await closed.inject('/health')).statusCode).toBe(200);
+      // A refused request gives nothing away about the data.
+      expect((await closed.inject('/stats')).json()).toEqual({ error: 'An access key is required' });
+    } finally {
+      await closed.close();
+    }
+  });
+});
+
 describe('rate limits', () => {
   it('turn a client away past its allowance, search sooner, and never the health check', async () => {
     const limited = await buildApp({ sql, rateLimit: 8 });

@@ -1,0 +1,22 @@
+# Render blueprint for the API, on the free plan (512 MB, sleeps after 15 minutes
+# without traffic, about a minute to wake). Not yet used: written from Render's
+# documentation and to be checked on first deploy.
+#
+# The three unset values are entered in Render's dashboard, never committed.
+services:
+  - type: web
+    name: ecosight-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./infra/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL # Supabase connection string, session pooler
+        sync: false
+      - key: ACCESS_KEY # long random value; the app will not open without it
+        sync: false
+      - key: CORS_ORIGINS # the web app's address
+        sync: false
+      - key: TRUST_PROXY
+        value: "1"

@@ -16,3 +16,5 @@ datasets/*/
 curation/
 test-results/
 playwright-report/
+supabase/functions/api/bundle.js
+supabase/.temp/

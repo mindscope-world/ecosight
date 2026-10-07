@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
@@ -20,18 +21,40 @@ export interface AppOptions {
   corsOrigins?: string[];
   /** Set when a proxy sits in front, so the client's address is read from its headers. */
   trustProxy?: boolean;
+  /**
+   * When set, every request must carry this key in an `x-access-key` header. The
+   * data may not be published, so a deployed API is never open to the public.
+   */
+  accessKey?: string;
 }
 
 /** Search costs more than a lookup, so each client gets a quarter of the general allowance. */
 export const SEARCH_SHARE = 4;
 
-export async function buildApp({ sql, logger = false, rateLimit: limit = false, corsOrigins, trustProxy = false }: AppOptions) {
+export async function buildApp({ sql, logger = false, rateLimit: limit = false, corsOrigins, trustProxy = false, accessKey }: AppOptions) {
   const app = Fastify({ logger, trustProxy }).withTypeProvider<TypeBoxTypeProvider>();
 
   await app.register(cors, { origin: corsOrigins?.length ? corsOrigins : true });
   if (limit !== false) {
     await app.register(rateLimit, { max: limit, timeWindow: '1 minute' });
     app.decorate('searchLimit', Math.max(1, Math.floor(limit / SEARCH_SHARE)));
+  }
+  if (accessKey) {
+    const expected = Buffer.from(accessKey);
+    app.addHook('onRequest', async (request, reply) => {
+      // The health check stays open for uptime probes, and browsers send OPTIONS without headers.
+      if (request.method === 'OPTIONS' || request.url.split('?')[0] === '/health') return;
+      const given = Buffer.from(String(request.headers['x-access-key'] ?? ''));
+      // Compared in constant time, so the key cannot be guessed a character at a time.
+      if (given.length !== expected.length || !timingSafeEqual(given, expected))
+        return reply.code(401).send({ error: 'An access key is required' });
+    });
+    // Routes mark their answers as publicly cacheable, which is right for an open
+    // API and wrong for a closed one: a browser or a proxy would hand a stored
+    // answer to the next visitor without asking for the key.
+    app.addHook('onSend', async (_request, reply) => {
+      reply.header('cache-control', 'private, no-store');
+    });
   }
   // Route schemas are the single source for the OpenAPI document.
   await app.register(swagger, {

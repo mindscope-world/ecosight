@@ -10,6 +10,7 @@
     "db:migrate": "pnpm --filter @atlas/db migrate",
     "db:seed": "pnpm --filter @atlas/db seed",
     "db:test": "pnpm --filter @atlas/db test-db",
+    "db:migrate:hosted": "pnpm --filter @atlas/db migrate-hosted",
     "layers:build": "pnpm --filter @atlas/api build-layers",
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",

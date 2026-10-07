@@ -13,17 +13,20 @@ import {
 import type { FeatureCollection, Point } from 'geojson';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  AccessError,
   fetchEvent,
   fetchEvents,
   fetchFilteredStats,
   fetchOffices,
   fetchOrg,
   fetchStats,
+  storedAccessKey,
   type CityStat,
   type EventCollection,
   type OfficeCollection,
   type Stats,
 } from './api';
+import { AccessGate } from './components/AccessGate';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
 import { EntityDetails, type Detail } from './components/EntityDetails';
 import { FilterPanel } from './components/FilterPanel';
@@ -131,6 +134,8 @@ export function App() {
   const [filteredStats, setFilteredStats] = useState<Stats | null>(null);
   const [statsBehind, setStatsBehind] = useState(false);
   const [failed, setFailed] = useState(false);
+  // True when the API refused us for want of an access key.
+  const [locked, setLocked] = useState(false);
 
   const [view, setView] = useState<View>(initial.view ?? 'map');
   const [enabled, setEnabled] = useState<ReadonlySet<string>>(
@@ -157,8 +162,10 @@ export function App() {
       fetchOffices(controller.signal).then(setOffices),
       fetchEvents(controller.signal).then(setEvents),
       fetchStats(controller.signal).then(setStats),
-    ]).catch(() => {
-      if (!controller.signal.aborted) setFailed(true);
+    ]).catch((error) => {
+      if (controller.signal.aborted) return;
+      if (error instanceof AccessError) setLocked(true);
+      else setFailed(true);
     });
     return () => controller.abort();
   }, []);
@@ -516,6 +523,8 @@ export function App() {
       onClose={() => setFiltersOpen(false)}
     />
   );
+
+  if (locked) return <AccessGate rejected={storedAccessKey() !== ''} />;
 
   return (
     <div className="flex h-full flex-col">

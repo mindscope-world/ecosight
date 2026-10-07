@@ -170,8 +170,30 @@ export interface Stats {
   }[];
 }
 
+const ACCESS_KEY_STORE = 'ecosight-access-key';
+
+/** Raised when the API wants an access key and has not been given a valid one. */
+export class AccessError extends Error {}
+
+export function storedAccessKey(): string {
+  try {
+    return localStorage.getItem(ACCESS_KEY_STORE) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function storeAccessKey(key: string): void {
+  try {
+    if (key) localStorage.setItem(ACCESS_KEY_STORE, key);
+    else localStorage.removeItem(ACCESS_KEY_STORE);
+  } catch {}
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(API_URL + path, { signal });
+  const key = storedAccessKey();
+  const res = await fetch(API_URL + path, { signal, headers: key ? { 'x-access-key': key } : undefined });
+  if (res.status === 401) throw new AccessError('An access key is required');
   if (!res.ok) throw new Error(`${path} responded ${res.status}`);
   return res.json() as Promise<T>;
 }

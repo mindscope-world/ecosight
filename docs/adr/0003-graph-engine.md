@@ -1,6 +1,22 @@
 # ADR 0003: A graph engine for ecosystem connections
 
-Oct 7, 2026 · Status: proposed by the owner; adapted here; not built
+Oct 7, 2026 · Status: accepted in part. Postgres as the system of record is accepted. The Memgraph deployment is deferred until there is revenue; the graph features are built on Postgres first
+
+## What the owner decided
+
+On Oct 7, 2026, after reading this record:
+
+- **Postgres is the system of record.** Accepted.
+- **No paid hosting before revenue.** Railway is out for now, and the free hosts
+  available (512 MB, no lasting disk, stopped when idle) cannot run Memgraph,
+  which holds its graph in memory.
+
+So the order changes. The graph API and the graph explorer page are built now,
+answered by Postgres, which holds every relationship already and handles the
+present size (about 120 organisations and under 200 links) without strain. The
+API is specified so the web app cannot tell which store answered. Memgraph and
+its projection worker stay in the plan as the step taken when the graph outgrows
+Postgres or when revenue pays for a host that can run it.
 
 ## The proposal
 

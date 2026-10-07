@@ -8,6 +8,7 @@ const app = await buildApp({
   rateLimit: Number(process.env.RATE_LIMIT_PER_MINUTE ?? 120),
   corsOrigins: process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean),
   trustProxy: process.env.TRUST_PROXY === '1',
+  accessKey: process.env.ACCESS_KEY || undefined,
 });
 app.addHook('onClose', async () => {
   await sql.end();
