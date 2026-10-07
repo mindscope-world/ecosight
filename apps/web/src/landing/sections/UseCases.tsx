@@ -1,6 +1,12 @@
 import type { ReactNode } from 'react';
+import type { LandingData } from '../data';
+import { hubPoints } from '../demo';
 import { ButtonLink, Eyebrow, MAP_URL, Reveal, Section } from '../ui';
-import { Schematic } from './Schematic';
+import { cityView, pointsNote, SectionMap } from './SectionMap';
+
+const HUBS = hubPoints();
+const AFRICA = { center: [20, 2] as [number, number], zoom: 2.3 };
+const EAST_AFRICA = { center: [35.5, -1.5] as [number, number], zoom: 4.3 };
 
 function UseCase({
   id,
@@ -41,7 +47,7 @@ function UseCase({
   );
 }
 
-export function FounderSection() {
+export function FounderSection({ data }: { data: LandingData }) {
   return (
     <UseCase
       id="founders"
@@ -50,13 +56,21 @@ export function FounderSection() {
       text="Discover investors active in your sector and stage. Find accelerators, grants, events, talent, and ecosystem partners near you."
       cta="Explore opportunities"
       href={`${MAP_URL}#v=1&p=discover`}
-      visual={<Schematic seed={11} count={70} clusters={[[0.5, 0.5, 0.42], [0.3, 0.3, 0.2]]} highlight={['investor', 'program', 'event']} />}
-      caption="Schematic: a city with its investor, program and event layers lit."
+      visual={
+        <SectionMap
+          label={`Map of investors, programs and events in ${data.city?.name ?? 'one city'}`}
+          view={cityView(data)}
+          points={data.points}
+          kinds={['investor', 'program', 'event']}
+          labels
+        />
+      }
+      caption={`${data.city?.name ?? 'One city'}: its investors, programs and events. ${pointsNote(data)}`}
     />
   );
 }
 
-export function InvestorSection() {
+export function InvestorSection({ data }: { data: LandingData }) {
   return (
     <UseCase
       id="investors"
@@ -67,20 +81,14 @@ export function InvestorSection() {
       cta="Explore market intelligence"
       href={`${MAP_URL}#v=1&p=ecosystems`}
       visual={
-        <Schematic
-          seed={23}
-          count={140}
-          clusters={[[0.22, 0.35, 0.22], [0.52, 0.6, 0.28], [0.8, 0.3, 0.2], [0.72, 0.75, 0.14]]}
-          highlight={['startup', 'investor']}
-          heat={[[0.52, 0.6, 0.16, '#22d3ee'], [0.22, 0.35, 0.1, '#3b82f6']]}
-        />
+        <SectionMap label="Map of startups and investors across Africa" view={AFRICA} points={data.points} hubs={HUBS} kinds={['startup', 'investor']} />
       }
-      caption="Schematic: city clusters, with capital activity shaded behind them."
+      caption={`Startups and investors by city, with the largest hubs ringed. ${pointsNote(data)}`}
     />
   );
 }
 
-export function EcosystemBuilderSection() {
+export function EcosystemBuilderSection({ data }: { data: LandingData }) {
   return (
     <UseCase
       id="builders"
@@ -90,26 +98,20 @@ export function EcosystemBuilderSection() {
       cta="Explore ecosystem gaps"
       href={`${MAP_URL}#v=1&l=startups,accelerators,density,accelerator-density`}
       visual={
-        <Schematic
-          seed={41}
-          count={150}
-          clusters={[[0.28, 0.45, 0.3], [0.72, 0.5, 0.3]]}
-          highlight={['startup', 'program']}
-          heat={[[0.28, 0.45, 0.2, '#22d3ee'], [0.72, 0.5, 0.2, '#f59e0b']]}
-        />
+        <SectionMap label="Map of startups and support programs in East Africa" view={EAST_AFRICA} points={data.points} kinds={['startup', 'program']} />
       }
-      caption="Schematic: two dense areas of startups. One has programs beside them; the amber one does not."
+      caption={`East Africa: startups, and the programs that support them. A city with one and not the other is a gap. ${pointsNote(data)}`}
     />
   );
 }
 
-export function UseCases() {
+export function UseCases({ data }: { data: LandingData }) {
   return (
     <Section tone="light">
       <div className="divide-y divide-slate/20">
-        <FounderSection />
-        <InvestorSection />
-        <EcosystemBuilderSection />
+        <FounderSection data={data} />
+        <InvestorSection data={data} />
+        <EcosystemBuilderSection data={data} />
       </div>
     </Section>
   );

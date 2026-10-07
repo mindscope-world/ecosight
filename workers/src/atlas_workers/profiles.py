@@ -8,20 +8,27 @@ looked for where it has already been published for the public to follow:
   often cites a founder's profile; and
 - on the organisation's own website, whose team and about pages commonly link
   each person's profile. Those pages are fetched only where the site's
-  robots.txt allows, a few per site, one request a second.
+  robots.txt allows, a few per site, one request a second; and
+- through a web search service, asked for the person's name and organisation
+  among LinkedIn profiles. Only the service's own answer is read: the address,
+  title and summary of each result. The result's page is never opened.
 
 An address is kept only when it plainly belongs to the person: the name in the
 address must carry the person's first and last name, and the match must be the
-only one for both the person and the profile. Anything less is reported and left
-for a person to settle. Only the address is stored, with the page it was found on.
+only one for both the person and the profile. A search result must also name the
+person's organisation in its title or summary, since a name alone is shared by
+many people. Anything less is reported and left for a person to settle. Only the
+address is stored, with the page or the search it was found through.
 """
 
+import json
 import re
 import time
 import unicodedata
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
-from urllib.parse import unquote, urljoin, urlsplit
+from pathlib import Path
+from urllib.parse import quote_plus, unquote, urljoin, urlsplit
 
 import httpx
 
@@ -35,6 +42,13 @@ _NOT_NAME = {"dr", "mr", "mrs", "ms", "prof", "eng", "md", "phd", "jr", "sr"}
 _PEOPLE_PAGE = re.compile(r"about|team|people|leadership|founder|who-we-are|management|company", re.I)
 PAGES_PER_SITE = 4
 DELAY = 1.0
+# SerpAPI: search engine results as data, with a free monthly allowance.
+SEARCH_URL = "https://serpapi.com/search.json"
+SEARCH_DELAY = 1.0
+# The page a person can open to see the same results.
+RESULT_PAGES = {"google": "https://www.google.com/search?q=", "duckduckgo": "https://duckduckgo.com/?q="}
+# Words that end a registered name and are dropped when looking for it in a result.
+_LEGAL_SUFFIX = re.compile(r"\b(limited|ltd|plc|inc|llc|sarl|gmbh|pty|co)\b\.?", re.I)
 
 
 def profile_url(url: str) -> str | None:
@@ -140,6 +154,86 @@ def site_profiles(client: httpx.Client, domain: str, pause: float = DELAY) -> di
     return found
 
 
+def mentions(text: str, organisations: list[str]) -> bool:
+    """True when the text names the organisation, under any name it goes by, legal suffix aside.
+
+    The name must stand as words of its own: "REMA" is not in "remarkable", though
+    "Sample Pay" is in "SamplePay".
+    """
+    plain = _plain(text)
+    for name in organisations:
+        words = re.findall(r"[a-z0-9]+", _plain(_LEGAL_SUFFIX.sub("", name)))
+        # A name of one or two letters turns up too often to mean anything.
+        if len("".join(words)) >= 3 and re.search(r"\b" + r"[\W_]*".join(map(re.escape, words)) + r"\b", plain):
+            return True
+    return False
+
+
+class SearchStopped(Exception):
+    """The search service refused: a bad key, or the allowance is used up."""
+
+
+class Search:
+    """Web search for one person's profile, through SerpAPI. Answers are kept on disk, so nothing is asked twice.
+
+    SerpAPI answers with the results of a search engine as data. Two engines are
+    used: Google, and DuckDuckGo for anyone Google did not find. DuckDuckGo is
+    reached through SerpAPI too: it has no search API of its own, and its
+    robots.txt forbids scripts from its results pages.
+    """
+
+    def __init__(
+        self,
+        client: httpx.Client,
+        key: str,
+        cache_path: Path,
+        engines: tuple[str, ...] = ("google", "duckduckgo"),
+        limit: int | None = None,
+        pause: float = SEARCH_DELAY,
+    ) -> None:
+        self.client, self.key, self.cache_path, self.pause = client, key, cache_path, pause
+        self.engines = engines
+        # How many requests this run may make. The free plan has a monthly allowance.
+        self.limit = limit
+        self.asked = 0
+        self._cache: dict[str, list[dict[str, str]]] = json.loads(cache_path.read_text()) if cache_path.is_file() else {}
+
+    def results(self, engine: str, query: str) -> list[dict[str, str]]:
+        cached = f"{engine}:{query}"
+        if cached not in self._cache:
+            if self.limit is not None and self.asked >= self.limit:
+                raise SearchStopped(f"this run's limit of {self.limit} requests was reached")
+            time.sleep(self.pause)
+            response = self.client.get(SEARCH_URL, params={"engine": engine, "q": query, "api_key": self.key})
+            self.asked += 1
+            body = response.json() if "json" in response.headers.get("content-type", "") else {}
+            error = str(body.get("error", ""))
+            # Finding nothing is an answer; anything else the service objects to ends the search.
+            if response.status_code != 200 and "returned any results" not in error:
+                raise SearchStopped(f"the search service answered {response.status_code}{': ' + error if error else ''}")
+            self._cache[cached] = [
+                {"url": item.get("link", ""), "title": item.get("title", ""), "description": item.get("snippet", "")}
+                for item in body.get("organic_results", [])
+            ]
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self.cache_path.write_text(json.dumps(self._cache, indent=1, sort_keys=True, ensure_ascii=False))
+        return self._cache[cached]
+
+    def profiles(self, name: str, organisations: list[str]) -> dict[str, str]:
+        """Profiles the search returns that carry the person's name and whose result names the organisation."""
+        query = f'"{name}" "{organisations[0]}" site:linkedin.com/in'
+        found: dict[str, str] = {}
+        for engine in self.engines:
+            for item in self.results(engine, query):
+                profile = profile_url(item["url"])
+                if profile and belongs_to(profile, name) and mentions(f"{item['title']} {item['description']}", organisations):
+                    # Where a person can run the same search and see the same result.
+                    found.setdefault(profile, RESULT_PAGES[engine] + quote_plus(query))
+            if found:
+                break  # The next engine is asked only when this one found nobody.
+        return found
+
+
 @dataclass
 class Person:
     id: str
@@ -148,6 +242,8 @@ class Person:
     organisation_id: str
     domain: str | None
     current: str | None
+    # Other names the organisation goes by.
+    aliases: tuple[str, ...] = ()
     profile: str | None = None
     source: str | None = None
     note: str | None = None
@@ -159,13 +255,16 @@ def read_people(conn) -> list[Person]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select pr.id, pr.name, g.name, g.id, g.website_domain, pr.linkedin_url
+            select pr.id, pr.name, g.name, g.id, g.website_domain, pr.linkedin_url, g.aliases
             from person_role pr join organisation g on g.id = pr.organisation_id
             where not pr.opted_out and g.status = 'published'
             order by g.name, pr.name
             """
         )
-        return [Person(str(i), name, org, str(org_id), domain, current) for i, name, org, org_id, domain, current in cur.fetchall()]
+        return [
+            Person(str(i), name, org, str(org_id), domain, current, tuple(aliases or ()))
+            for i, name, org, org_id, domain, current, aliases in cur.fetchall()
+        ]
 
 
 def recorded_profiles(conn) -> dict[str, dict[str, str]]:
@@ -206,22 +305,47 @@ def assign(people: list[Person], candidates: dict[str, dict[str, str]]) -> None:
                 person.profile, person.source = mine[0], offered[mine[0]]
 
 
-def find(conn, client: httpx.Client | None, progress=lambda done, total: None) -> list[Person]:
-    """Look for every person's profile. With no client, only the sources on record are read."""
+def _reassign(people: list[Person], candidates: dict[str, dict[str, str]]) -> None:
+    for person in people:
+        person.profile = person.source = person.note = None
+    assign(people, candidates)
+
+
+def find(
+    conn,
+    client: httpx.Client | None = None,
+    search: Search | None = None,
+    progress=lambda step, done, total: None,
+) -> tuple[list[Person], str | None]:
+    """Look for every person's profile, and say why the search stopped early if it did.
+
+    Each step is tried only for those the one before left without a profile: the
+    sources on record, then with a client the organisations' own sites, then with
+    a search service the web.
+    """
     people = read_people(conn)
     candidates = recorded_profiles(conn)
+    assign(people, candidates)
+    stopped = None
     if client is not None:
-        # Only sites of organisations with someone still to find are visited.
-        assign(people, candidates)
         domains = {p.organisation_id: p.domain for p in people if p.domain and not p.profile and not p.current}
         for done, (org_id, domain) in enumerate(sorted(domains.items(), key=lambda item: item[1]), 1):
-            progress(done, len(domains))
+            progress("reading organisations' own sites", done, len(domains))
             for profile, page in site_profiles(client, domain).items():
                 candidates.setdefault(org_id, {}).setdefault(profile, page)
-        for person in people:
-            person.profile = person.source = person.note = None
-    assign(people, candidates)
-    return people
+        _reassign(people, candidates)
+    if search is not None:
+        # Someone with profiles already offered but none chosen is left for a person, not searched for.
+        wanted = [p for p in people if not p.profile and not p.current and not p.note]
+        try:
+            for done, person in enumerate(wanted, 1):
+                progress("searching the web", done, len(wanted))
+                for profile, source in search.profiles(person.name, [person.organisation, *person.aliases]).items():
+                    candidates.setdefault(person.organisation_id, {}).setdefault(profile, source)
+        except (SearchStopped, httpx.HTTPError) as error:
+            stopped = f"The search stopped early: {error}. What was found before that stands."
+        _reassign(people, candidates)
+    return people, stopped
 
 
 def summarise(people: list[Person]) -> str:

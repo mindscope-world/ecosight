@@ -196,19 +196,27 @@ def cmd_profiles(args: argparse.Namespace) -> int:
     import psycopg
 
     from .crawl import make_client
-    from .profiles import apply, find, summarise
+    from .profiles import Search, apply, find, summarise
 
-    def progress(done: int, total: int) -> None:
-        print(f"\rreading organisations' own sites: {done} of {total}", end="", file=sys.stderr, flush=True)
+    def progress(step: str, done: int, total: int) -> None:
+        print(f"\r{step}: {done} of {total}   ", end="", file=sys.stderr, flush=True)
 
+    # Asked for before anything is fetched, so a missing key is known at once.
+    key = config.search_api_key() if args.search else None
     with psycopg.connect(config.database_url()) as conn:
-        if args.web:
+        if args.web or args.search:
             with make_client() as client:
-                people = find(conn, client, progress)
+                engines = ("google", "duckduckgo") if args.engine == "both" else (args.engine,)
+                search = Search(client, key, config.profile_search_cache(), engines, args.limit) if key else None
+                people, stopped = find(conn, client if args.web else None, search, progress)
             print(file=sys.stderr)
+            if search:
+                print(f"{search.asked} search request(s) made; the rest were answered from earlier runs.")
         else:
-            people = find(conn, None)
+            people, stopped = find(conn)
         print(summarise(people))
+        if stopped:
+            print(f"\n{stopped}", file=sys.stderr)
         if not args.apply:
             print("\nDry run: nothing was written to the database. Add --apply to save.")
             return 0
@@ -269,6 +277,9 @@ def main() -> int:
 
     profiles = commands.add_parser("find-profiles", help="find people's LinkedIn profile links without visiting LinkedIn (dry run unless --apply)")
     profiles.add_argument("--web", action="store_true", help="also read each organisation's own website for links to its people's profiles")
+    profiles.add_argument("--search", action="store_true", help="also ask a web search service for those still not found (needs SERPAPI_API_KEY)")
+    profiles.add_argument("--engine", choices=["google", "duckduckgo", "both"], default="both", help="which engine SerpAPI asks; both tries DuckDuckGo for anyone Google did not find")
+    profiles.add_argument("--limit", type=int, default=240, help="the most search requests to make in one run (the free plan allows 250 a month)")
     profiles.add_argument("--apply", action="store_true", help="write to the database")
     profiles.set_defaults(run=cmd_profiles)
 

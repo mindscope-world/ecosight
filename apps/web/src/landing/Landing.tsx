@@ -28,9 +28,9 @@ export function Landing() {
         <Hero data={data} />
         <TrustBar />
         <ProblemSection data={data} />
-        <EcosystemLayers />
+        <EcosystemLayers data={data} />
         <InteractiveMapPreview data={data} />
-        <UseCases />
+        <UseCases data={data} />
         <IntelligenceSection />
         <SignalsSection />
         <GlobalSection data={data} />

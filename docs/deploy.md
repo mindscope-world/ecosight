@@ -126,6 +126,11 @@ The build holds code only: five pages (`/`, `map/`, `graph/`, `dashboard/`, `rev
 `gh-pages` branch as a single commit and force-push it. Pages serves that branch
 from its root.
 
+GitHub Pages lets a browser keep a page for ten minutes, and a tab can stay open far
+longer. Each build therefore writes its id to `version.json`, and every page checks that
+file when it opens and when its tab is returned to, and reloads itself once if a newer
+build is live. Someone on the build before this was added still needs one hard refresh.
+
 The landing page needs no key: without one its map shows illustrative points and
 says so. The map app shows the access screen until the key is entered, and keeps
 the key in that browser.

@@ -1,5 +1,5 @@
 import type { FeatureCollection, LineString, Point } from 'geojson';
-import { Map as MapLibreMap, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
+import { Map as MapLibreMap, NavigationControl, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { BASEMAPS } from '../config';
@@ -8,7 +8,7 @@ import { tintStyle } from './tint';
 setWorkerUrl(workerUrl);
 
 /**
- * A quiet, mostly non-interactive map for the landing page: glowing points,
+ * A quiet map for the landing page, still unless asked to be interactive: glowing points,
  * pulsing hubs and connection lines over the app's own navy basemap. The app
  * itself uses MapAdapter; this is a separate, simpler thing for showing, not using.
  */
@@ -20,6 +20,12 @@ export interface PreviewOptions {
   globe?: boolean;
   /** Drift slowly east and back, so the view is never quite still. */
   drift?: boolean;
+  /**
+   * Let the reader drag the map and zoom with its buttons or a double click.
+   * The scroll wheel is left to the page, which would otherwise stop scrolling
+   * whenever the pointer crossed a map.
+   */
+  interactive?: boolean;
   /** Colour per value of each point's `kind` property. */
   colors: Record<string, string>;
 }
@@ -49,10 +55,12 @@ export class PreviewMap {
       container,
       center: options.center,
       zoom: options.zoom,
-      interactive: false,
+      interactive: Boolean(options.interactive),
+      scrollZoom: false,
       attributionControl: { compact: true },
       renderWorldCopies: false,
     });
+    if (options.interactive) this.map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
     this.map.setStyle(BASEMAPS.dark.url, {
       diff: false,
       transformStyle: (_previous, next) => this.restyle(next),
@@ -152,6 +160,10 @@ export class PreviewMap {
   private applyKinds(): void {
     const filter = this.kinds ? (['in', ['get', 'kind'], ['literal', this.kinds]] as never) : null;
     for (const layer of ['points', 'points-glow']) this.map.setFilter(layer, filter);
+  }
+
+  jumpTo(center: [number, number], zoom: number): void {
+    this.map.jumpTo({ center, zoom });
   }
 
   flyTo(center: [number, number], zoom: number): void {

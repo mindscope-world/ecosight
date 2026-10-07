@@ -1,6 +1,7 @@
 import httpx
+import pytest
 
-from atlas_workers.profiles import Person, assign, belongs_to, name_words, page_links, people_pages, profile_url, site_profiles
+from atlas_workers.profiles import Person, Search, SearchStopped, assign, mentions, belongs_to, name_words, page_links, people_pages, profile_url, site_profiles
 
 
 def test_only_personal_profiles_are_profile_addresses():
@@ -87,3 +88,82 @@ def test_a_site_is_read_within_its_robots_rules_and_linkedin_is_never_asked():
 
     with httpx.Client(transport=httpx.MockTransport(broken)) as client:
         assert site_profiles(client, "down.example", pause=0) == {}
+
+
+def test_a_result_must_name_the_organisation():
+    assert mentions("Jane Doe - Co-Founder - Sample Pay | LinkedIn", ["Sample Pay Limited"])
+    assert mentions("Founder at SamplePay", ["Sample Pay"])
+    assert mentions("CEO, Orbit Health", ["eHealth IT Services PLC", "Orbit Health"])
+    assert not mentions("Jane Doe - Nurse - City Hospital | LinkedIn", ["Sample Pay"])
+    # The name must stand as words of its own.
+    assert mentions("Founder, REMA", ["REMA"])
+    assert not mentions("Remarkable results", ["REMA"])
+    assert not mentions("A copy editor", ["Co"])
+
+
+RESULTS = {
+    "organic_results": [
+        {"link": "https://ke.linkedin.com/in/jane-doe-1", "title": "Jane Doe - Co-Founder - Sample Pay | LinkedIn", "snippet": "Nairobi"},
+        # The same name at another employer: a namesake.
+        {"link": "https://www.linkedin.com/in/jane-doe-nurse", "title": "Jane Doe - Nurse | LinkedIn", "snippet": "City Hospital"},
+        # The organisation is named, but the profile is someone else's.
+        {"link": "https://www.linkedin.com/in/john-roe", "title": "John Roe - COO - Sample Pay", "snippet": ""},
+        {"link": "https://www.linkedin.com/company/sample-pay", "title": "Sample Pay | LinkedIn", "snippet": "Jane Doe"},
+    ]
+}
+NOTHING = {"error": "Google hasn't returned any results for this query."}
+JSON = {"content-type": "application/json"}
+
+
+def test_search_keeps_the_profile_that_fits_the_name_and_the_organisation(tmp_path):
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        assert request.url.host == "serpapi.com"
+        return httpx.Response(200, json=RESULTS)
+
+    cache = tmp_path / "search.json"
+    with httpx.Client(transport=httpx.MockTransport(answer)) as client:
+        search = Search(client, "key-123", cache, pause=0)
+        found = search.profiles("Jane Doe", ["Sample Pay", "SamplePay Ltd"])
+        assert list(found) == ["https://www.linkedin.com/in/jane-doe-1"]
+        assert found["https://www.linkedin.com/in/jane-doe-1"].startswith("https://www.google.com/search?q=%22Jane+Doe%22")
+        assert dict(asked[0].url.params) == {"engine": "google", "q": '"Jane Doe" "Sample Pay" site:linkedin.com/in', "api_key": "key-123"}
+        # Found by the first engine, so the second is not asked; and the answer is kept, here and for the next run.
+        search.profiles("Jane Doe", ["Sample Pay"])
+        assert (len(asked), search.asked) == (1, 1)
+        assert Search(client, "key-123", cache, pause=0).profiles("Jane Doe", ["Sample Pay"]) == found
+        assert len(asked) == 1
+
+
+def test_the_second_engine_is_asked_only_for_those_the_first_did_not_find(tmp_path):
+    engines = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        engine = request.url.params["engine"]
+        engines.append(engine)
+        # Finding nothing is an answer, not a failure.
+        return httpx.Response(200, json=RESULTS) if engine == "duckduckgo" else httpx.Response(400, json=NOTHING)
+
+    with httpx.Client(transport=httpx.MockTransport(answer)) as client:
+        found = Search(client, "key", tmp_path / "search.json", pause=0).profiles("Jane Doe", ["Sample Pay"])
+    assert engines == ["google", "duckduckgo"]
+    assert found == {"https://www.linkedin.com/in/jane-doe-1": "https://duckduckgo.com/?q=%22Jane+Doe%22+%22Sample+Pay%22+site%3Alinkedin.com%2Fin"}
+
+
+def test_search_stops_when_the_service_refuses_or_the_limit_is_reached(tmp_path):
+    refused = httpx.Response(429, json={"error": "Your account has run out of searches."})
+    with httpx.Client(transport=httpx.MockTransport(lambda request: refused)) as client:
+        search = Search(client, "key", tmp_path / "search.json", pause=0)
+        with pytest.raises(SearchStopped, match="429: Your account has run out of searches"):
+            search.profiles("Jane Doe", ["Sample Pay"])
+
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(400, json=NOTHING))) as client:
+        search = Search(client, "key", tmp_path / "other.json", engines=("google",), limit=2, pause=0)
+        search.profiles("Jane Doe", ["Sample Pay"])
+        search.profiles("John Roe", ["Sample Pay"])
+        with pytest.raises(SearchStopped, match="limit of 2 requests"):
+            search.profiles("Ann Lee", ["Sample Pay"])
+        # What was already answered costs nothing more.
+        assert search.profiles("Jane Doe", ["Sample Pay"]) == {} and search.asked == 2

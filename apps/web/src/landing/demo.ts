@@ -144,16 +144,3 @@ export function connectionLines(): FeatureCollection<LineString> {
     })),
   };
 }
-
-/** Scattered dots for the page's small schematic panels. Positions are 0 to 1. */
-export function schematicDots(count: number, seed: number, clusters: [number, number, number][]) {
-  const random = seeded(seed);
-  return Array.from({ length: count }, () => {
-    const [cx, cy, spread] = clusters[Math.floor(random() * clusters.length)]!;
-    const distance = (random() + random()) * spread * 0.5;
-    const angle = random() * Math.PI * 2;
-    let roll = random();
-    const kind = KIND_SHARES.find(([, share]) => (roll -= share) < 0)?.[0] ?? 'startup';
-    return { x: cx + Math.cos(angle) * distance, y: cy + Math.sin(angle) * distance, kind };
-  });
-}

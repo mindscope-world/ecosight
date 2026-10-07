@@ -1,8 +1,9 @@
 import { Building2, CalendarDays, CircleDollarSign, GraduationCap, Rocket, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
+import type { LandingData } from '../data';
 import type { PreviewKind } from '../demo';
 import { Eyebrow, Reveal, Section } from '../ui';
-import { Schematic } from './Schematic';
+import { pointsNote, SectionMap } from './SectionMap';
 
 const LAYERS: { title: string; text: string; icon: LucideIcon; kinds: PreviewKind[] }[] = [
   { title: 'Startups', text: 'Discover companies by location, sector, stage, and activity.', icon: Rocket, kinds: ['startup'] },
@@ -12,14 +13,10 @@ const LAYERS: { title: string; text: string; icon: LucideIcon; kinds: PreviewKin
   { title: 'Organizations', text: 'Map NGOs, development organizations, universities, hubs, and government programs.', icon: Building2, kinds: ['program', 'investor'] },
 ];
 
-const CLUSTERS: [number, number, number][] = [
-  [0.3, 0.4, 0.3],
-  [0.62, 0.55, 0.36],
-  [0.78, 0.28, 0.2],
-  [0.45, 0.75, 0.22],
-];
+// Africa whole, where the product's records are.
+const VIEW = { center: [20, 2] as [number, number], zoom: 2.3 };
 
-export function EcosystemLayers() {
+export function EcosystemLayers({ data }: { data: LandingData }) {
   const [active, setActive] = useState<number | null>(null);
   return (
     <Section tone="white">
@@ -31,8 +28,13 @@ export function EcosystemLayers() {
           </p>
         </Reveal>
         <Reveal delay={0.1}>
-          <Schematic seed={7} clusters={CLUSTERS} count={130} highlight={active === null ? undefined : LAYERS[active]!.kinds} />
-          <p className="mt-2 text-xs text-slate">A schematic. Point at a layer to see it on its own.</p>
+          <SectionMap
+            label="Map of every layer across Africa"
+            view={VIEW}
+            points={data.points}
+            kinds={active === null ? null : LAYERS[active]!.kinds}
+          />
+          <p className="mt-2 text-xs text-slate">Point at a layer to see it on its own. {pointsNote(data)}</p>
         </Reveal>
       </div>
 
