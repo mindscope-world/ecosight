@@ -57,6 +57,8 @@ export function MapView({
       map.onPick((records) => latest.current.onPick(records));
       map.onHover(hoverCard);
       adapter.current = map;
+      // In development the map can be asked what it has drawn, which is how the browser tests check it.
+      if (import.meta.env.DEV) (window as unknown as { __ecosightMap?: MapLibreAdapter }).__ecosightMap = map;
       // The style may have been changed while the first one was still loading.
       if (latest.current.basemap !== applied.current) {
         applied.current = latest.current.basemap;

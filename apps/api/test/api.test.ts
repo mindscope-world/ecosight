@@ -477,6 +477,8 @@ describe('GET /openapi.json', () => {
       '/review/items/{id}/archive',
       '/review/items/{id}/reject',
       '/review/items/{id}/reopen',
+      '/review/withdrawn',
+      '/review/withdrawn/restore',
       '/rounds/{id}',
       '/search',
       '/stats',

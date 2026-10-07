@@ -135,3 +135,25 @@ test('a line, or every line of a record, can be hidden and shown again', async (
   await expect(page.locator('svg [data-edge][data-off]')).toHaveCount(0);
   await expect(status(page)).not.toContainText('off)');
 });
+
+test('a reviewer is offered a way to remove a relationship for everyone, and to change their mind', async ({ page }) => {
+  await page.goto('/graph/');
+  // A link between two organisations: an event or a person is not something a relationship is removed from.
+  await page.locator('#section-graph-links li', { hasText: 'Sample Fund 01' }).first().getByRole('button').click();
+  await expect(details(page)).toContainText('Selected link');
+  await details(page).getByRole('button', { name: 'Remove for everyone…' }).click();
+  const remove = details(page).getByRole('button', { name: 'Remove for everyone', exact: true });
+  // Nothing can be removed without saying why.
+  await expect(remove).toBeDisabled();
+  await details(page).getByLabel(/Why is this relationship wrong/).fill('The source names another company.');
+  await expect(remove).toBeEnabled();
+  await details(page).getByRole('button', { name: 'Cancel' }).click();
+  await expect(remove).toHaveCount(0);
+  await expect(status(page)).toContainText('Relationships9');
+
+  // What has been removed is listed on the review page, where it can be put back.
+  await page.goto('/review/');
+  await page.getByRole('tab', { name: /Removed relationships/ }).click();
+  await expect(page.getByRole('region', { name: 'Removed relationships' })).toContainText('No relationship has been removed.');
+});
+

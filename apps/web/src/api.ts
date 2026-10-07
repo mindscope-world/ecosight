@@ -466,6 +466,25 @@ export const settleReview = (
   body: { from_id?: string; to_id?: string; source_url?: string; note?: string } = {},
 ) => getJson<ReviewItem>(`/review/items/${id}/${action}`, undefined, body);
 
+/** A relationship a reviewer has taken down for everyone. */
+export interface WithdrawnEdge {
+  kind: string;
+  source: { id: string; name: string };
+  target: { id: string; name: string };
+  reason: string;
+  withdrawn_at: string;
+  withdrawn_by: string | null;
+}
+type EdgeRef = { kind: string; source: string; target: string };
+
+export const fetchWithdrawn = (signal?: AbortSignal) =>
+  getJson<{ withdrawn: WithdrawnEdge[] }>('/review/withdrawn', signal).then((answer) => answer.withdrawn);
+/** Take a published relationship down for everyone. Reviewers only. */
+export const withdrawEdge = (edge: EdgeRef & { reason: string }) =>
+  getJson<{ withdrawn: WithdrawnEdge[] }>('/review/withdrawn', undefined, edge).then((answer) => answer.withdrawn);
+export const restoreEdge = (edge: EdgeRef) =>
+  getJson<{ withdrawn: WithdrawnEdge[] }>('/review/withdrawn/restore', undefined, edge).then((answer) => answer.withdrawn);
+
 export interface SavedView {
   id: string;
   name: string;

@@ -4,12 +4,15 @@ import {
   ApiError,
   fetchMe,
   fetchReview,
+  fetchWithdrawn,
+  restoreEdge,
   settleReview,
   storedAccessKey,
   type Me,
   type OrgLink,
   type ReviewItem,
   type ReviewList,
+  type WithdrawnEdge,
 } from '../api';
 import { hasSession, SIGN_IN_AVAILABLE, signInProblem, signOut } from '../auth';
 import { AccessGate } from '../components/AccessGate';
@@ -21,7 +24,7 @@ import { NodePicker, type Picked } from '../graph/NodePicker';
 import { KIND_LABELS } from '../graph/style';
 import { countryName, formatDate } from '../lib/format';
 
-type Tab = 'pending' | 'archived' | 'settled';
+type Tab = 'pending' | 'archived' | 'settled' | 'withdrawn';
 
 const button = 'h-8 rounded border px-3 text-xs font-semibold disabled:opacity-40';
 
@@ -227,6 +230,8 @@ export function ReviewPage() {
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<Tab>('pending');
   const [list, setList] = useState<ReviewList | null>(null);
+  // Relationships taken down from the graph page, which can be put back here.
+  const [withdrawn, setWithdrawn] = useState<WithdrawnEdge[] | null>(null);
 
   useEffect(() => {
     fetchMe()
@@ -237,7 +242,8 @@ export function ReviewPage() {
   const allowed = canReview(me);
   const load = useCallback(() => {
     if (!allowed) return;
-    fetchReview(tab)
+    fetchWithdrawn().then(setWithdrawn, () => {});
+    fetchReview(tab === 'withdrawn' ? 'pending' : tab)
       .then((answer) => {
         setList(answer);
         setFailed(false);
@@ -291,6 +297,7 @@ export function ReviewPage() {
               ['pending', 'Waiting', list?.pending],
               ['archived', 'Archived', list?.archived],
               ['settled', 'Approved or rejected', list?.settled],
+              ['withdrawn', 'Removed relationships', withdrawn?.length],
             ] as const
           ).map(([id, label, count]) => (
             <button
@@ -306,8 +313,40 @@ export function ReviewPage() {
             </button>
           ))}
         </div>
-        {!list && <p className="mt-4 text-mute">Loading…</p>}
-        {list && list.items.length === 0 && (
+        {tab === 'withdrawn' && (
+          <section className="mt-5" aria-label="Removed relationships">
+            {withdrawn?.length === 0 && (
+              <p className="m-0 text-mute">
+                No relationship has been removed. A reviewer can remove one from its details on the graph page.
+              </p>
+            )}
+            <ul className="space-y-2">
+              {(withdrawn ?? []).map((edge) => (
+                <li key={`${edge.kind}-${edge.source.id}-${edge.target.id}`} className="rounded border border-line bg-panel p-3">
+                  <div className="font-medium">
+                    {edge.source.name} <span className="font-normal text-mute">{edge.kind.replace(/_/g, ' ')}</span> {edge.target.name}
+                  </div>
+                  <p className="m-0 mt-1 text-mute">Removed because: {edge.reason}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-mute">
+                      {new Date(edge.withdrawn_at).toLocaleDateString()}
+                      {edge.withdrawn_by && ` by ${edge.withdrawn_by}`}
+                    </span>
+                    <button
+                      type="button"
+                      className="h-7 rounded border border-line px-2 text-xs hover:border-accent hover:text-accent"
+                      onClick={() => restoreEdge({ kind: edge.kind, source: edge.source.id, target: edge.target.id }).then(setWithdrawn, () => {})}
+                    >
+                      Put it back
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {tab !== 'withdrawn' && !list && <p className="mt-4 text-mute">Loading…</p>}
+        {tab !== 'withdrawn' && list && list.items.length === 0 && (
           <p className="mt-4 text-mute">
             {tab === 'pending'
               ? 'Nothing is waiting for review.'
@@ -318,6 +357,7 @@ export function ReviewPage() {
         )}
         {groups.map(
           ([title, items]) =>
+            tab !== 'withdrawn' &&
             items.length > 0 && (
               <section key={title} className="mt-5" aria-label={title}>
                 <MicroLabel>
