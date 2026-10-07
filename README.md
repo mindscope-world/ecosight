@@ -108,7 +108,9 @@ the city, never at an address, and each carries the stated basis for its placeme
 
 `import-rounds` loads funding rounds a person has read out of a dataset's funding
 notes. Every round carries the words it was read from, and the load stops if a
-quote is not in the stored note. Re-running `import-orgs` removes the rounds of the
+quote is not in the stored note. The note is both funding cells of the row: the level or
+status, and the details. Where the amount is in one and the date in the other, the round
+gives the words for its date separately, as `date_quote`. Re-running `import-orgs` removes the rounds of the
 organisations it replaces, so run `import-rounds` again after it.
 
 Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on

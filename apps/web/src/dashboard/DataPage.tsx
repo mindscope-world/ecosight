@@ -222,10 +222,14 @@ function CountrySummary({ rows }: { rows: OrgRow[] }) {
   );
 }
 
-function decode(hash: string): { tab: string; selected: string | null } {
+function decode(hash: string): { tab: string; selected: string | null; unplaced: boolean } {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const tab = params.get('t');
-  return { tab: tab === COUNTRIES || TABS.some((layer) => layer.id === tab) ? tab! : TABS[0]!.id, selected: params.get('s') };
+  return {
+    tab: tab === COUNTRIES || TABS.some((layer) => layer.id === tab) ? tab! : TABS[0]!.id,
+    selected: params.get('s'),
+    unplaced: params.get('u') === '1',
+  };
 }
 
 const initial = decode(location.hash);
@@ -238,6 +242,8 @@ export function DataPage() {
   const [tab, setTab] = useState(initial.tab);
   const [query, setQuery] = useState('');
   const [country, setCountry] = useState('');
+  // Only the rows with no office on record, which the map cannot draw.
+  const [unplaced, setUnplaced] = useState(initial.unplaced);
   const [sort, setSort] = useState<{ key: string; descending: boolean }>({ key: 'name', descending: false });
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string | null>(initial.selected);
@@ -256,8 +262,8 @@ export function DataPage() {
   }, []);
 
   useEffect(() => {
-    history.replaceState(null, '', `#v=1&t=${tab}${selected ? `&s=${selected}` : ''}`);
-  }, [tab, selected]);
+    history.replaceState(null, '', `#v=1&t=${tab}${unplaced ? '&u=1' : ''}${selected ? `&s=${selected}` : ''}`);
+  }, [tab, selected, unplaced]);
 
   useEffect(() => {
     if (!selected) return;
@@ -282,6 +288,7 @@ export function DataPage() {
     const column = columns.find((item) => item.key === sort.key) ?? NAME;
     return all
       .filter((row) => !country || row.country === country)
+      .filter((row) => !unplaced || row.precision === null)
       .filter(
         (row) =>
           !text ||
@@ -297,10 +304,10 @@ export function DataPage() {
         const order = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
         return (sort.descending ? -order : order) || a.name.localeCompare(b.name);
       });
-  }, [all, query, country, sort, columns]);
+  }, [all, query, country, unplaced, sort, columns]);
 
   // A change to what is listed starts again from its first page.
-  useEffect(() => setPage(0), [tab, query, country, sort]);
+  useEffect(() => setPage(0), [tab, query, country, unplaced, sort]);
 
   if (locked) return <AccessGate rejected={storedAccessKey() !== ''} />;
 
@@ -309,12 +316,14 @@ export function DataPage() {
   const visible = shown.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const located = all.filter((row) => row.precision === 'address' || row.precision === 'area').length;
   const raised = all.reduce((sum, row) => sum + row.raised_usd, 0);
+  const offMap = all.filter((row) => row.precision === null).length;
   const cities = new Set(all.filter((row) => row.city).map((row) => `${row.country}/${row.city}`)).size;
 
   const pickTab = (id: string) => {
     setTab(id);
     setQuery('');
     setCountry('');
+    setUnplaced(false);
     setSort({ key: 'name', descending: false });
   };
 
@@ -454,12 +463,37 @@ export function DataPage() {
                       ))}
                     </select>
                   </label>
+                  {(offMap > 0 || unplaced) && (
+                    <button
+                      type="button"
+                      aria-pressed={unplaced}
+                      title={`${layer.label} on record with no office, which the map cannot draw`}
+                      onClick={() => {
+                        setUnplaced(!unplaced);
+                        // No office means no country, so a country filter would hide them all.
+                        setCountry('');
+                      }}
+                      className={`flex h-8 items-center gap-1.5 rounded border px-2.5 text-xs ${
+                        unplaced ? 'border-accent text-accent' : 'border-line hover:bg-raised'
+                      }`}
+                    >
+                      Not on the map
+                      <span className="tabular-nums text-mute">{offMap}</span>
+                    </button>
+                  )}
                   <span className="ml-auto text-[11px] tabular-nums text-mute" aria-live="polite">
                     {shown.length === 0
                       ? 'No rows match'
                       : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + visible.length} of ${shown.length}${shown.length < all.length ? ` (${all.length} in all)` : ''}`}
                   </span>
                 </div>
+
+                {unplaced && (
+                  <p className="m-0 mt-2 text-[11px] leading-snug text-mute">
+                    These are on record with no office, most of them named only as an investor in a funding round. The
+                    map cannot draw them, or the lines from them to the companies they back, until each is given a city.
+                  </p>
+                )}
 
                 <div className="mt-2 overflow-x-auto rounded border border-line">
                   <table className="w-full border-collapse text-left">

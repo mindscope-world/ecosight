@@ -13,32 +13,36 @@ Urgency:
 
 ## 1. What is built
 
-The code is public at <https://github.com/mindscope-world/ecosight>; the data is not in it. The repository's history was rewritten on Oct 7, 2026 to remove the curated data, so earlier commit ids no longer exist. `main` holds everything up to the investors dataset. Later work is on the `beyond-kenya` and `map-polish-and-e2e` branches, both pushed.
+The code is public at <https://github.com/mindscope-world/ecosight>; the data is not in it. The repository's history was rewritten on Oct 7, 2026 to remove the curated data, so earlier commit ids no longer exist. `main` holds everything up to the investors dataset. Later work is on the `beyond-kenya` and `map-polish-and-e2e` branches, both pushed; `map-polish-and-e2e` holds the newest, including the health technology import.
 
-Checks pass: 71 TypeScript tests, 74 Python tests, 11 end-to-end browser tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against a 600 KB budget. CI runs them on every pull request.
+Checks pass: 123 TypeScript tests, 90 Python tests, 29 end-to-end browser tests, typecheck, build, and first-load JavaScript of 122 KB for the landing page and 356 KB for the map app, each against a 600 KB budget. CI runs them on every pull request.
 
 ### Data
 
 | | Count |
 |---|---|
-| Organisations published | 213 |
-| Organisations on the map | 200, in 18 countries |
-| Startups | 69, all in Nairobi |
-| Investors, accelerators, hubs and funders | 69 published |
+| Organisations published | 316 |
+| Organisations on the map | 284, in 28 countries |
+| Startups | 151, in 18 countries |
+| Investors, accelerators, hubs and funders | 87 published |
 | Universities | 35 |
 | Public bodies | 29 |
-| NGOs | 12 |
-| Funding rounds | 36, for 25 organisations; USD 112.13 million in rounds with a stated dollar amount |
-| People named as founders | 141 |
-| Drafts held back for review | 37 |
+| NGOs | 14 |
+| Funding rounds | 95, for 67 organisations; USD 377.69 million in rounds with a dollar amount, stated or converted. 28 have no date |
+| Investor-to-company links | 64 |
+| People named as founders | 251 |
+| Published organisations with no office | 32, nearly all investors named only in a round (4.3) |
+| Drafts held back for review | 53 |
 | Events | 0 |
 
 - **Startups dataset** (`datasets/nairobi-startups-2026-10-06/`): 100 rows; the 69 marked verified are published, 31 are drafts.
 - **Funding rounds** (`curation/nairobi_startups_funding_rounds.json`): read by hand from the startups dataset's funding notes, each with the words it was read from, plus 16 items deliberately not recorded as rounds.
 - **Investors dataset** (`datasets/nairobi-investors-2026-10-07/`): 25 rows; 23 published, 2 drafts. Five were merged into investors already known from funding rounds.
 - **East Africa dataset** (`datasets/east-africa-2026-10-07/`): 100 universities, public bodies, NGOs and innovation hubs in nine countries; 96 published, 4 drafts. Five were merged into organisations already on record. Each row's type, city, country code and sector tags were set by hand in `curation/east_africa_100_organizations.mapping.json`. 68 are placed on a building or street, 32 at their city's centre.
+- **Health technology dataset** (`datasets/africa-health-sources-2026-10-07/`): 100 health technology organisations in 17 African countries, loaded on Oct 7, 2026, locally and on the hosted database. 84 published, 16 drafts: fourteen whose status the research calls unclear, one that ceased operating and one that is winding down. None was already on record. The dataset cites its sources by ID and lists the links in a file of their own, which the importer now reads. Each row's type, place, sector tags, confidence and address level were set by hand in `curation/African_Healthtech_100.mapping.json`. Of the published, 4 are placed at an address, 44 on a street or area and 36 at their city's centre.
+- **Its funding rounds** (`curation/African_Healthtech_100_funding_rounds.json`): 59 rounds for 42 organisations, read by hand from the dataset's two funding columns, plus 22 items deliberately not recorded. 34 are dated. They name 22 investors, 19 of them new to the record and none yet placed.
 - **Stated relationships** (`curation/stated_relationships.csv`): 19 ties read by hand from the two datasets' own text, each with the words it rests on. 16 are published; 3 name an organisation that is not on record and wait in the review queue.
-- **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed.
+- **Investors abroad** (`curation/investor_headquarters.json`): 17 placed at their headquarters city, on the curator's general knowledge and marked as unsourced on each card. 13 more are listed as not placed, and the 19 investors new with the health technology rounds are not in the file yet.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
 ### Database (Postgres, PostGIS, pgvector, pg_trgm; twelve migrations)
@@ -59,7 +63,7 @@ Five pages.
 
 **Graph page** at `/graph/`. Opens on the whole network of investments, programmes and organised events; any organisation can be made the starting point. Nodes use the map's shapes and colours and links are styled by kind. Click for details, double-click or a button to bring in a node's other connections, click a link for the rounds behind it. Six kinds of link can be switched on and off, with people, places and sectors off to begin with. A path finder, co-investor and shared-investor lists, a list of everything in view, and share links that restore the graph. Reached from "View connections" in the map's details panel, and leads back with "Show on map".
 
-**Dashboard** at `/dashboard/`. One tab per kind of organisation: startups, investors, accelerators, NGOs, innovation hubs, universities, government and corporates. Each has headline figures, bar charts (by country and sector; by stage and most raised for startups; largest portfolios for investors) and a table that sorts, searches, narrows by country and pages. A row opens the record's details with links to the map and the graph.
+**Dashboard** at `/dashboard/`. One tab per kind of organisation: startups, investors, accelerators, NGOs, innovation hubs, universities, government and corporates. Each has headline figures, bar charts (by country and sector; by stage and most raised for startups; largest portfolios for investors) and a table that sorts, searches, narrows by country and pages. A row opens the record's details with links to the map and the graph. A "Not on the map" button on a tab lists only its organisations with no office on record, with their number; on the Investors tab these are the investors the map cannot draw. The list has its own address (`#v=1&t=investors&u=1`).
 
 **Review queue** at `/review/`, for reviewers. What the importers held back, with the reason for each; approve, reject with a note, or reopen. The header of every page has an account menu: sign in by emailed link, see who is signed in, sign out.
 
@@ -67,8 +71,8 @@ Five pages.
 
 - `atlas convert-rounds`: US dollar figures for rounds reported in another currency, at published reference rates, with the basis recorded.
 - `atlas import-links`: relationships between organisations from a CSV, published only when both organisations are on record and the row has a source; the rest go to the review queue.
-- `atlas import-orgs`: dataset importer with a dry-run report, column mappings for other datasets, cached geocoding that refuses lookalike matches, merging into records already on file, values a curator sets for one row, and address lookup in any city.
-- `atlas import-rounds`: loads curated rounds and refuses any whose quote is not in the stored note.
+- `atlas import-orgs`: dataset importer with a dry-run report, column mappings for other datasets, cached geocoding that refuses lookalike matches, merging into records already on file, values a curator sets for one row, address lookup in any city, and sources cited by ID read from a dataset's source register.
+- `atlas import-rounds`: loads curated rounds and refuses any whose quote is not in the stored note. The note is both funding cells of the row, the level and the details; a round whose amount is in one and date in the other carries a second quote for the date.
 - `atlas import-locations`: places organisations that have no office at a named city.
 - `atlas crawl`: raw document store and two RSS crawlers (TechCabal, Disrupt Africa).
 - `atlas extract` and `atlas eval`: extraction with a rule-based baseline and a Groq model through LangChain, and an accuracy harness.
@@ -91,12 +95,13 @@ No code. These make what exists trustworthy, and 1.1 blocks any public deploymen
 |---|------|-------|
 | 1.1 | ~~Confirm whether the data may be published~~ | **Decided: it may not.** The datasets and everything curated from them are out of git and purged from the repository's history. A deployed API requires an access key, and the map data is never put on a public host as files. See 1.9 for what is left of the purge |
 | 1.2 | Check the investors placed abroad | `curation/investor_headquarters.json`: 17 placements from general knowledge, and 13 not placed that the owner may know |
-| 1.3 | Check the 36 curated rounds | Investor types are the curator's classification; a bare "$" is read as US dollars; one round is dated by its announcement, not its close; one round counts equity and debt together |
+| 1.3 | Check the 36 curated Nairobi rounds | Investor types are the curator's classification; a bare "$" is read as US dollars; one round is dated by its announcement, not its close; one round counts equity and debt together |
 | 1.4 | Check the investors import | One investor in the dataset is treated as the same organisation as a differently named investor in a funding round; two rows are held as drafts. Both judgments are in the mapping file under `curation/` |
-| 1.5 | Review the 37 drafts | In particular the 6 startups marked inactive or unclear, and the 4 East African bodies held back: two replaced by successor agencies, one the research calls historical, one whose status is unclear |
+| 1.5 | Review the 53 drafts | 16 are from the health technology dataset. In particular the 6 startups marked inactive or unclear, and the 4 East African bodies held back: two replaced by successor agencies, one the research calls historical, one whose status is unclear |
 | 1.5b | Check the East Africa import | `curation/east_africa_100_organizations.mapping.json`: the type and sector tags given to each of the 100 rows are the curator's reading of the dataset's descriptions. Leadership was loaded only where a person is named as a founder (11 people at 6 organisations) |
+| 1.5f | Check the health technology import | `curation/African_Healthtech_100.mapping.json` and `curation/African_Healthtech_100_funding_rounds.json`. Judgments to confirm: which 16 rows are held as drafts; Baobab Circle placed in Nairobi and RxAll in New Haven in the United States, where their offices are, not in the market the dataset files them under; confidence read from the word each cell opens with, "Medium-High" as medium; three organisations typed as NGOs and the rest as startups; founders restated by hand for ten rows; investor types in the rounds file; a Series D, an angel round and unlabelled investments recorded with no stage |
 | 1.5c | Check the stated relationships | `curation/stated_relationships.csv`: 16 ties published from the datasets' own wording. Judgments to confirm: a campus inside an innovation district is recorded as "hosted by" it; a startup with an office in a hub's building as "hosted by" the hub; a portfolio listing with no round as "backed by". Three rows wait in the queue because the other organisation is not on record |
-| 1.5d | Settle the review queue | 37 draft organisations and 3 proposed relationships are waiting at `/review/`. Sign in with the owner's address, which is on the list as admin |
+| 1.5d | Settle the review queue | 53 draft organisations and 3 proposed relationships are waiting at `/review/`. Sign in with the owner's address, which is on the list as admin |
 | 1.5e | Set up a mail service for sign-in | Until then Supabase emails sign-in links only to the project's own members, a couple an hour. Needed before anyone else is given an account |
 | 1.6 | Merge the `beyond-kenya` branch | Needs a pull request into `main` |
 | 1.7 | Confirm the decisions listed in section 1 | They were taken on recommendation, not signed off |
@@ -142,7 +147,7 @@ Items 3.5 to 3.8 are next and need nothing from the owner.
 | 3.7 | ~~Links between the map and the graph~~ | Done | "View connections" in the map's and the dashboard's details panels; "Show on map" from the graph. Both are share links |
 | 3.8 | ~~Tests~~ | Done for now | 28 API tests for the graph queries and six browser tests for the page. When Memgraph arrives: a check that it matches Postgres after a sync |
 | 3.8b | ~~Dashboard of tables~~ | Done | At `/dashboard/`, fed by a new `/orgs` list route. Not built: export to a file, and an events table (there are no events) |
-| 3.8c | Relationship data | Data | **The graph is still thin**, though less so: 37 investment links, 3 programme places and 13 other ties (part of, hosted by, member of, founded by, backed by), on 79 organisations. Most of the East African institutions still have no links. Needs relationship datasets from the owner: programme cohorts, partnerships, grants. The file format is in `datasets/README.md` |
+| 3.8c | Relationship data | Data | **The graph is still thin**, though less so: 64 investment links, 3 programme places and 13 other ties (part of, hosted by, member of, founded by, backed by), on 79 organisations. Most of the East African institutions still have no links. The health technology dataset's funding and founder notes name programmes, hosts and parent organisations that have not been read into a relationships file yet (4.12). Needs relationship datasets from the owner: programme cohorts, partnerships, grants. The file format is in `datasets/README.md` |
 | 3.9 | Ingestors, through the review queue | Backend | **Relationship CSVs: done.** `atlas import-links` reads "from, relation, to" rows with a source link and a quote. A row whose two organisations are both published and which has a source is loaded; every other row goes to the review queue with its reason. No organisation is created from a name and no name is matched by guesswork. Six new kinds of tie live in `organisation_link` (migration 0009); programme places use the programme tables. First file loaded: 19 relationships stated in the datasets already held, 16 published and 3 queued. **Still to do:** external APIs and other databases, once the owner names them |
 | 3.10 | Pitch decks | Owner + backend | Upload, private storage, extraction by a language model, and review before anything is published. Blocked on the owner: decks are confidential, and their text would go to a hosted model |
 | 3.11 | Deploy Memgraph | Owner + backend | **Deferred until there is revenue.** On a host with enough memory and a persistent volume at `/var/lib/memgraph`, with the worker as its own service and a written procedure for rebuilding the graph from Postgres |
@@ -157,14 +162,16 @@ The data the graph starts with is modest: about 120 organisations, 37 investor-t
 | # | Item | Track | Notes |
 |---|------|-------|-------|
 | 4.1 | Events | Data + backend | There are none, so the Events layer and its panels are empty. Needs a dataset or a crawler |
-| 4.2 | Startups outside Kenya | Data | The importer accepts them (`City`, `Country`, optionally `Latitude` and `Longitude`); no dataset has been supplied |
-| 4.3 | Sources for the investors placed abroad | Data | Replace general-knowledge cities with sourced addresses; place the 13 that are missing |
+| 4.2 | ~~Startups outside Kenya~~ | Done for health | The health technology dataset put 84 published organisations in 17 countries on the map. Other sectors outside Kenya still have no dataset |
+| 4.3 | Place the investors with no office, and source the ones placed | Data | **Next.** 32 published organisations have no office, so the map draws neither them nor their lines to the companies they back: 26 on the dashboard's Investors tab, 5 development funders on its NGOs tab and 1 corporate. 19 came with the health technology rounds; 13 were already listed as not placed. The dashboard's "Not on the map" button lists them. Each needs a city in `curation/investor_headquarters.json`, loaded with `atlas import-locations`. Then replace general-knowledge cities with sourced addresses |
 | 4.4 | ~~Keep city-level records out of the density layers~~ | Done | The four heatmaps count only records whose position means something; the layer list says so |
 | 4.5 | ~~Street-level address lookup outside Nairobi~~ | Done | An address is looked up within about 30 km of its city's centre, with the same refusal of lookalike matches. A university or public body whose address is not found is placed where the map names it. Otherwise the city's centre |
 | 4.6 | ~~Per-country summary~~ | Done | A "By country" tab on the dashboard: one row per country with organisations, cities, each kind, rounds and money raised, counted where each organisation is based, with bars for organisations and money by country. A country's name opens the map filtered to it. Worked out in the browser from the rows the dashboard already loads |
-| 4.7 | ~~Currency conversion~~ | Done | `atlas convert-rounds` gives rounds in another currency a US dollar figure at the European Central Bank reference rate (through the free Frankfurter service): the day's rate for a round dated to a day, the period's average for one dated to a month or year. The original amount is kept and the rate and its basis are stored with the round. The one Canadian-dollar round is converted. **Limits:** currencies the ECB does not publish, the Kenyan shilling among them, are left unconverted; and `import-rounds` rebuilds rounds, so run `convert-rounds` after it |
-| 4.8 | Founded year | Data | The filter and the card support it; neither dataset has the column |
+| 4.7 | ~~Currency conversion~~ | Done | `atlas convert-rounds` gives rounds in another currency a US dollar figure at the European Central Bank reference rate (through the free Frankfurter service): the day's rate for a round dated to a day, the period's average for one dated to a month or year. The original amount is kept and the rate and its basis are stored with the round. The one Canadian-dollar round is converted. **Limits:** currencies the ECB does not publish, the Kenyan shilling and the Nigerian naira among them, are left unconverted, as is any round with no date; and `import-rounds` rebuilds rounds, so run `convert-rounds` after it |
+| 4.8 | Founded year | Data | The filter and the card support it; no dataset has the column |
 | 4.9 | Business contacts and logos | Owner + backend | Decide whether public business emails and phones are stored and shown; add a logo field |
+| 4.11 | Dates for undated rounds | Data | 28 rounds have no date because the research gives none in words that can be quoted. Without a date a round is missing from funding by month and, in another currency, has no dollar figure |
+| 4.12 | Relationships from the health technology dataset | Data | Read the programmes, hosts and parent organisations its notes name into a relationships file for `atlas import-links` |
 | 4.10 | Partners and directors of investors | Owner | The investors dataset lists them; only founders are loaded today |
 
 ### Step 5 — Review and accounts (Medium, High for 5.1 and 5.2)
@@ -211,7 +218,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 8.1 | End-to-end tests for the core loop | Frontend | **Mostly done.** Twenty browser tests run in CI on all four pages: loading and counts, search, following connections, filters, share links, minimising panels, the phone layout, and the landing page with and without the API. Not covered: anything drawn on the map itself (markers, heatmaps, lines), because the tests block the public basemap to stay independent of it |
+| 8.1 | End-to-end tests for the core loop | Frontend | **Mostly done.** 29 browser tests run in CI on the five pages: loading and counts, search, following connections, filters, share links, minimising panels, the phone layout, and the landing page with and without the API. Not covered: anything drawn on the map itself (markers, heatmaps, lines), because the tests block the public basemap to stay independent of it |
 | 8.2 | Performance checks in CI | Frontend | First map on a mid-range phone, filter change under 300 ms |
 | 8.3 | Accessibility pass on both pages | Frontend | Keyboard paths, contrast, screen-reader labels |
 | 8.4 | Compare the map app with the reference screenshot | Frontend | Depends on 1.8 |
@@ -244,7 +251,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 7 | Advanced map | Selection, time, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility, missing pages | Backups, security, legal | Medium, then Critical |
 
-Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); the relationship importer is built and the first ties are loaded (3.9). What the graph needs now is more relationship data from the owner (3.8c), and the review screen (5.2) to settle what the importer queues. Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
+Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); the relationship importer is built and the first ties are loaded (3.9). What comes next needs nothing from the owner: placing the 32 organisations with no office (4.3) and reading relationships out of the health technology dataset (4.12). The graph still needs more relationship data from the owner (3.8c). Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
 
 ## 4. Waiting on the owner
 
@@ -255,7 +262,7 @@ These block other items and cannot be done from the code:
 3. What to do about the old commits GitHub still holds (1.9): ask GitHub Support to remove them, or delete and recreate the repository.
 4. Checks of the investors placed abroad, the rounds, the investors import and the drafts (1.2 to 1.5).
 5. For the graph: whether pitch decks may be used and sent to a hosted model, whether founders' universities are recorded, and which external APIs and databases to connect (3.9, 3.10, 3.12).
-6. An events source, and any dataset of startups outside Kenya (4.1, 4.2).
+6. An events source, and datasets of startups outside Kenya in sectors other than health (4.1, 4.2). Also checks of the health technology import and its rounds (1.5f), and the cities of the 32 organisations with no office where the owner knows them (4.3).
 7. ~~A Groq API key in `.env`~~ Supplied; the extractor has not been run with it yet (6.1).
 8. A contact address for the crawler and geocoder (2.7).
 9. Whether to store and show business emails and phones, and investors' partners (4.9, 4.10).
@@ -268,9 +275,9 @@ The importer reads a CSV; a mapping file handles different column headings. Most
 | Data | Why |
 |------|-----|
 | Events: name, venue, city, start and end, link | The Events layer is empty |
-| Startups in other cities, with `City` and `Country` | Only Nairobi has startups |
-| Sourced addresses for the investors abroad | Their cities are from general knowledge today |
-| Relationships: who invested in whom, who went through which programme, with dates | These are the links the graph is made of; only 37 investment links exist today |
+| Startups in other cities, with `City` and `Country` | Outside Nairobi only health technology startups are on record |
+| Cities and sourced addresses for investors | 32 have no office and are not on the map; 17 are placed from general knowledge |
+| Relationships: who invested in whom, who went through which programme, with dates | These are the links the graph is made of; only 64 investment links exist today |
 | Founded year | The filter and the card are ready for it |
 | Latitude and longitude, where known | Places a record exactly, in any country |
 

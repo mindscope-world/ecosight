@@ -6,6 +6,7 @@ import pytest
 from atlas_workers import config
 from atlas_workers.rounds import apply, check_against_database, read_file, summarise
 
+STATUS = "Series A (latest publicly evidenced stage: June 2023)"
 NOTE = "TechCrunch reported a $1 million seed round in March 2022, led by Example Ventures. Earlier grant undated."
 
 
@@ -66,7 +67,7 @@ def conn():
             "insert into organisation (name, slug, types, status) values ('Sample Pay Rounds', 'sample-pay-rounds', '{startup}', 'published') returning id"
         )
         org_id = cur.fetchone()[0]
-        payload = {"import": "test_rounds_dataset", "record": 901, "fields": {"funding_details": NOTE, "source_funding": "https://rounds.test/a; https://rounds.test/b"}}
+        payload = {"import": "test_rounds_dataset", "record": 901, "fields": {"funding_status": STATUS, "funding_details": NOTE, "source_funding": "https://rounds.test/a; https://rounds.test/b"}}
         cur.execute(
             "insert into review_item (record_type, record_id, payload, method, status) values ('organisation', %s, %s, 'manual', 'approved')",
             (org_id, json.dumps(payload)),
@@ -92,6 +93,29 @@ def test_quotes_must_come_from_the_stored_note(conn, tmp_path):
     assert "quote is not in" in check_against_database(conn, doc["dataset"], invented)[1][0]
     _, missing, _ = read_file(write(tmp_path, record=999))
     assert "was not loaded" in check_against_database(conn, doc["dataset"], missing)[1][0]
+
+
+def test_a_date_can_be_read_from_the_funding_status(conn, tmp_path):
+    # The amount is in one cell and its date in the other, so each is quoted from where it stands.
+    dated = {"stage": None, "amount": 2000, "date": "2023-06", "investors": [], "quote": "Earlier grant undated", "date_quote": "June 2023"}
+    doc, rounds, problems = read_file(write(tmp_path, **dated))
+    assert problems == []
+    orgs, problems = check_against_database(conn, doc["dataset"], rounds)
+    assert problems == []
+    apply(conn, doc, rounds, orgs)
+    with conn.cursor() as cur:
+        cur.execute("select quote from field_source where record_type = 'funding_round' and quote like 'Earlier grant%'")
+        assert cur.fetchall() == [("Earlier grant undated … June 2023",)]
+
+    # A round can be quoted from the status alone, but no quote runs from one cell into the other.
+    _, whole, _ = read_file(write(tmp_path, quote="Series A (latest publicly evidenced stage: June 2023)"))
+    assert check_against_database(conn, doc["dataset"], whole)[1] == []
+    _, across, _ = read_file(write(tmp_path, quote="June 2023) TechCrunch reported"))
+    assert "quote is not in" in check_against_database(conn, doc["dataset"], across)[1][0]
+    _, invented, _ = read_file(write(tmp_path, **{**dated, "date_quote": "May 2021"}))
+    assert "date quote is not in" in check_against_database(conn, doc["dataset"], invented)[1][0]
+    _, _, problems = read_file(write(tmp_path, date=None, precision=None, date_quote="June 2023"))
+    assert any("a date quote needs a date" in line for line in problems)
 
 
 def test_loading_twice_leaves_one_copy(conn, tmp_path):
