@@ -415,7 +415,7 @@ export const fetchMe = () => (me ??= getJson<Me>('/me'));
 
 export interface ReviewItem {
   id: string;
-  kind: 'organisation' | 'relationship' | 'other';
+  kind: 'organisation' | 'relationship' | 'round' | 'other';
   status: 'pending' | 'approved' | 'rejected' | 'archived';
   reason: string | null;
   note: string | null;
@@ -445,6 +445,25 @@ export interface ReviewItem {
     quote: string | null;
     from_match: OrgLink | null;
     to_match: OrgLink | null;
+  } | null;
+  /** A funding round read from a news report, each value with the words it was read from. */
+  round: {
+    title: string | null;
+    source_url: string | null;
+    publisher: string | null;
+    extractor: string | null;
+    announced_on: string | null;
+    company: string | null;
+    company_quote: string | null;
+    company_match: OrgLink | null;
+    amount: number | null;
+    amount_quote: string | null;
+    currency: string | null;
+    stage: string | null;
+    stage_quote: string | null;
+    investors: { name: string; quote: string | null; match: OrgLink | null }[];
+    /** The company already has a round on record that looks like this one. */
+    duplicate: boolean;
   } | null;
 }
 

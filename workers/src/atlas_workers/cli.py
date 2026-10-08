@@ -43,6 +43,23 @@ def cmd_crawl(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_news(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .news import read_news, summarise
+    from .store import LocalStorage, RawStore
+
+    with psycopg.connect(config.database_url()) as conn:
+        store = RawStore(conn, LocalStorage(config.raw_store_dir()))
+        outcome, proposals = read_news(conn, store, make_extractor(args.extractor), args.apply)
+    print(summarise(outcome, proposals))
+    if args.apply:
+        print(f"\n{outcome.proposed} proposed round(s) are waiting in the review queue. Nothing was published.")
+    else:
+        print("\nDry run: nothing was written to the database. Add --apply to queue these for review.")
+    return 0
+
+
 def cmd_extract(args: argparse.Namespace) -> int:
     raw = json.loads(Path(args.document).read_text())
     document = Document(raw["url"], raw["title"], raw["text"])
@@ -257,6 +274,11 @@ def main() -> int:
     extract.add_argument("document")
     extract.add_argument("--extractor", **extractors)
     extract.set_defaults(run=cmd_extract)
+
+    news = commands.add_parser("extract-news", help="read stored news and queue the funding rounds it reports for review (dry run unless --apply)")
+    news.add_argument("--extractor", **extractors)
+    news.add_argument("--apply", action="store_true", help="write to the database")
+    news.set_defaults(run=cmd_news)
 
     evaluate = commands.add_parser("eval", help="score an extractor on the labelled set")
     evaluate.add_argument("--labelled", default=str(config.REPO_ROOT / "eval" / "labelled.jsonl"))

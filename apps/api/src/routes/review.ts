@@ -34,6 +34,20 @@ interface OrgRef {
 }
 
 const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+/** One value of a round read from the news: what was read, and the words it was read from. */
+const stated = (value: unknown): { value: unknown; quote: string | null } | null =>
+  value && typeof value === 'object' && 'value' in value
+    ? { value: (value as { value: unknown }).value, quote: text((value as { quote?: unknown }).quote) }
+    : null;
+/** A stage as the round tables write it: "pre-series a" is "pre-series-a". */
+const stageOf = (value: unknown) => text(value)?.toLowerCase().replace(/\s+/g, '-') ?? null;
+
+/** A round already on record for an organisation, to tell a proposed one that repeats it. */
+interface OnRecord {
+  stage: string | null;
+  amount: number | null;
+  currency: string | null;
+}
 /** The name without a researcher's bracketed note, as the importers read it. */
 const plainName = (name: string) => name.replace(/\s*\(.*$/, '').trim() || name.trim();
 const isUrl = (value: string | null): value is string => value !== null && /^https?:\/\//i.test(value);
@@ -63,13 +77,64 @@ export const reviewRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
     return known;
   }
 
-  function describe(row: Row, known: Map<string, OrgRef>): ReviewItem {
+  /** Rounds on record by organisation, for spotting a proposed round that repeats one. */
+  async function roundsOnRecord(): Promise<Map<string, OnRecord[]>> {
+    const rows = await sql<(OnRecord & { organisation_id: string })[]>`
+      select organisation_id, stage, amount_original::float8 as amount, currency::text as currency
+      from funding_round where status = 'published'`;
+    const rounds = new Map<string, OnRecord[]>();
+    for (const { organisation_id, ...round } of rows) rounds.set(organisation_id, [...(rounds.get(organisation_id) ?? []), round]);
+    return rounds;
+  }
+
+  /** A round read from a news report, with the record each name finds. */
+  function describeRound(payload: Row['payload'], known: Map<string, OrgRef>, onRecord: Map<string, OnRecord[]>): ReviewItem['round'] {
+    const find = (name: string | null) => (name ? (known.get(slugify(plainName(name))) ?? null) : null);
+    const company = stated(payload.company);
+    const amount = stated(payload.amount);
+    const stage = stated(payload.stage);
+    const companyName = text(company?.value);
+    const match = find(companyName);
+    const sum = typeof amount?.value === 'number' ? amount.value : null;
+    const currency = text(stated(payload.currency)?.value);
+    const round = stageOf(stage?.value);
+    return {
+      title: text(payload.title),
+      source_url: text(payload.url),
+      publisher: text(payload.publisher),
+      extractor: text(payload.extractor),
+      announced_on: text(payload.published),
+      company: companyName,
+      company_quote: company?.quote ?? null,
+      company_match: match,
+      amount: sum,
+      amount_quote: amount?.quote ?? null,
+      currency,
+      stage: round,
+      stage_quote: stage?.quote ?? null,
+      investors: (Array.isArray(payload.investors) ? payload.investors : []).flatMap((entry) => {
+        const investor = stated(entry);
+        const name = text(investor?.value);
+        return name ? [{ name, quote: investor!.quote, match: find(name) }] : [];
+      }),
+      // The same sum in the same currency, or the same named stage, is taken to be the same round.
+      duplicate: (match ? (onRecord.get(match.id) ?? []) : []).some(
+        (other) => (sum !== null && other.amount === sum && other.currency === currency) || (round !== null && other.stage === round),
+      ),
+    };
+  }
+
+  function describe(row: Row, known: Map<string, OrgRef>, onRecord: Map<string, OnRecord[]> = new Map()): ReviewItem {
     const relationship = row.record_type === 'organisation_link' || row.record_type === 'program';
+    // A round read from the news. Rounds loaded from a curated file also pass through this table, already approved.
+    const news = row.record_type === 'funding_round' && row.payload.news === true;
     const from = text(row.payload.from);
     const to = text(row.payload.to);
     return {
       id: row.id,
-      kind: row.record_type === 'organisation' ? 'organisation' : relationship ? 'relationship' : 'other',
+      kind: row.record_type === 'organisation' ? 'organisation' : relationship ? 'relationship' : news ? 'round' : 'other',
+      // Once approved, the round it became is on record itself, and would only match itself.
+      round: news ? describeRound(row.payload, known, row.status === 'pending' ? onRecord : new Map()) : null,
       status: row.status,
       reason: row.reason,
       note: text(row.payload.review_note),
@@ -159,13 +224,14 @@ export const reviewRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
         limit 300
       `;
       const known = await knownOrganisations();
+      const onRecord = await roundsOnRecord();
       const [counts] = await sql<{ pending: number; archived: number; settled: number }[]>`
         select count(*) filter (where status = 'pending')::int as pending,
                count(*) filter (where status = 'archived')::int as archived,
                count(*) filter (where reviewed_by is not null and status in ('approved', 'rejected'))::int as settled
         from review_item
       `;
-      return { ...counts!, items: rows.map((row) => describe(row, known)) };
+      return { ...counts!, items: rows.map((row) => describe(row, known, onRecord)) };
     },
   );
 
@@ -209,6 +275,49 @@ export const reviewRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
             values (${user.id}, 'organisation', ${org}, 'status', '"draft"', '"published"')`;
         });
         return describe((await load(item.id))!, await knownOrganisations());
+      }
+
+      if (item.record_type === 'funding_round' && item.payload.news === true) {
+        // A round read from the news. The company is the record the reviewer chose, or the one its name finds.
+        const known = await knownOrganisations();
+        const round = describe(item, known).round!;
+        const chosen = request.body.from_id;
+        if (chosen) {
+          const [ok] = await sql`select 1 from organisation where id = ${chosen} and status = 'published'`;
+          if (!ok) return reply.code(422).send({ error: 'The organisation chosen is not a published record' });
+        }
+        const company = chosen ?? round.company_match?.id;
+        if (!company) return reply.code(422).send({ error: `Choose the record for ${round.company ?? 'the company'}, or reject the item` });
+        if (!isUrl(round.source_url)) return reply.code(422).send({ error: 'A round needs a link to its source before it is published' });
+        if ((round.amount === null) !== (round.currency === null))
+          return reply.code(422).send({ error: 'The amount and its currency must both be stated' });
+        // Investors are linked only where their name finds a record; the rest are kept by name on the item.
+        const investors = [...new Set(round.investors.flatMap((investor) => (investor.match && investor.match.id !== company ? [investor.match.id] : [])))];
+        const unlinked = round.investors.filter((investor) => !investor.match).map((investor) => investor.name);
+        const inDollars = round.currency === 'USD' ? round.amount : null;
+        await sql.begin(async (tx) => {
+          const [created] = await tx<{ id: string }[]>`
+            insert into funding_round
+              (organisation_id, stage, amount_original, currency, amount_usd, fx_rate, announced_on, announced_precision, status)
+            values (${company}, ${round.stage}, ${round.amount}, ${round.currency}, ${inDollars}, ${inDollars === null ? null : 1},
+                    ${round.announced_on}, ${round.announced_on ? 'day' : null}, 'published')
+            returning id`;
+          for (const investor of investors)
+            await tx`insert into round_investor (round_id, investor_id) values (${created!.id}, ${investor}) on conflict do nothing`;
+          const quote = [round.company_quote, round.amount_quote, round.stage_quote].filter(Boolean).join(' … ') || round.title;
+          await tx`
+            insert into field_source (record_type, record_id, field, source_url, method, quote, verified_at)
+            values ('funding_round', ${created!.id}, 'round', ${round.source_url}, 'ai', ${quote}, now())`;
+          await tx`
+            update review_item set
+              record_id = ${created!.id}, status = 'approved', reviewed_by = ${user.id}, reviewed_at = now(),
+              payload = payload || ${tx.json({ organisation_id: company, investors_linked: investors, investors_not_linked: unlinked })}
+            where id = ${item.id}`;
+          await tx`
+            insert into audit_log (actor, record_type, record_id, field, new_value)
+            values (${user.id}, 'funding_round', ${created!.id}, 'status', '"published"')`;
+        });
+        return describe((await load(item.id))!, known, await roundsOnRecord());
       }
 
       if (item.record_type !== 'organisation_link')

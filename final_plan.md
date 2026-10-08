@@ -15,7 +15,7 @@ Urgency:
 
 The code is public at <https://github.com/mindscope-world/ecosight>; the data is not in it. The repository's history was rewritten on Oct 7, 2026 to remove the curated data, so earlier commit ids no longer exist. `main` holds everything: the `beyond-kenya` and `map-polish-and-e2e` branches were merged into it on Oct 8, 2026.
 
-Checks pass: 135 TypeScript tests, 105 Python tests, 38 end-to-end browser tests, typecheck, build, and first-load JavaScript of 124 KB for the landing page and 369 KB for the map app, each against a 600 KB budget. CI runs them on every pull request.
+Checks pass: 137 TypeScript tests, 107 Python tests, 39 end-to-end browser tests, typecheck, build, and first-load JavaScript of 124 KB for the landing page and 369 KB for the map app, each against a 600 KB budget. CI runs them on every pull request.
 
 ### Data
 
@@ -48,7 +48,7 @@ Checks pass: 135 TypeScript tests, 105 Python tests, 38 end-to-end browser tests
 - **Investors abroad** (`curation/investor_headquarters.json`): 40 placed at their headquarters city, all looked up or checked by web search on Oct 8, 2026. 19 cite the organisation's own site, 16 a directory or news page, and 5 are still from the curator's general knowledge with no page. Renew Capital was moved from Addis Ababa to Denver, where its own site says its head office is. 9 are listed as not placed, each with the reason.
 - **The data is private.** Datasets and the curated files are kept out of git and were purged from the repository's history on Oct 7, 2026. `datasets/README.md` indexes them. The synthetic sample lives only in the test database.
 
-### Database (Postgres, PostGIS, pgvector, pg_trgm; sixteen migrations)
+### Database (Postgres, PostGIS, pgvector, pg_trgm; seventeen migrations)
 
 Organisations with eleven entity types, other names they go by, founded year, active status and funding note; offices at address, area or city precision in any country; funding rounds with date precision; round investors; programs; events; people in roles, each with a LinkedIn profile link where one was found published and the page it was found on; a small stored logo per organisation; relationships a reviewer has taken down for everyone, which the graph and the cards leave out while the records behind them stay; per-field sources with their stated basis; review queue; audit log; submissions; claims; private fund tables under row-level security; a view of per-organisation funding facts; full-text search; a rule that keeps angels at city level.
 
@@ -68,7 +68,7 @@ Five pages.
 
 **Dashboard** at `/dashboard/`. One tab per kind of organisation: startups, investors, accelerators, NGOs, innovation hubs, universities, government and corporates. Each has headline figures, bar charts (by country and sector; by stage and most raised for startups; largest portfolios for investors) and a table that sorts, searches, narrows by country and pages. A row opens the record's details with links to the map and the graph. A "Not on the map" button on a tab lists only its organisations with no office on record, with their number; on the Investors tab these are the investors the map cannot draw. The list has its own address (`#v=1&t=investors&u=1`). The map's activity figures link to narrower lists the same way (`&w=added`, `rounds`, `active`, `programs`): startups added and rounds announced in the last 30 days, investors active in the last 12 months, programmes added. Each list shows a chip that removes it, and an empty one offers every row, so no link is a dead end.
 
-**Review queue** at `/review/`, for reviewers. What the importers held back, with the reason for each; approve, reject with a note, or reopen. A tab lists the relationships taken down from the graph page, each with its reason, and puts one back. On the graph page a reviewer sees "Remove for everyone" in a link's details, which asks for a reason. The header of every page has an account menu: sign in by emailed link, see who is signed in, sign out.
+**Review queue** at `/review/`, for reviewers. What the importers held back, with the reason for each; approve, reject with a note, or reopen. Funding rounds read from the news wait here too, each shown with its amount, stage and investors, the words they were read from and the article; approving one publishes the round for the company on record, and warns first if the company already has a round like it. A tab lists the relationships taken down from the graph page, each with its reason, and puts one back. On the graph page a reviewer sees "Remove for everyone" in a link's details, which asks for a reason. The header of every page has an account menu: sign in by emailed link, see who is signed in, sign out.
 
 ### Pipeline (Python)
 
@@ -81,6 +81,7 @@ Five pages.
 - `atlas fetch-logos`: fetches each organisation's logo from its own website, the icon the site declares for itself, within robots.txt, and stores it (up to 64 KB) so the app never loads it from another site.
 - `atlas crawl`: raw document store and two RSS crawlers (TechCabal, Disrupt Africa).
 - `atlas extract` and `atlas eval`: extraction with a rule-based baseline and a Groq model through LangChain, and an accuracy harness.
+- `atlas extract-news`: reads every stored news document once and puts each funding round it reports in the review queue, with the article and the words behind each value. Nothing is published from it. Each reading is recorded, so a document is never read twice.
 
 ### Deployment
 
@@ -203,8 +204,8 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 6.1 | Run the model extractor once | Backend | The Groq key is in `.env`. Never run against Groq; the default model name is unconfirmed |
 | 6.2 | Labelled set: 50, then 200 news items | People | No accuracy figure exists until this does |
 | 6.3 | Read each publisher's terms of use | People | Recorded in `docs/sources.md`; needed before daily crawling |
-| 6.4 | Match extracted companies to existing records | Backend | The dataset importer's matching by website, name and other names can be reused |
-| 6.5 | Write extraction results to the review queue | Backend | With per-field source and confidence. Useful once 5.2 exists |
+| 6.4 | ~~Match extracted companies to existing records~~ | Done Oct 8, 2026 | A proposed round's company and investors are matched to published records by name and other names when the reviewer looks at it, so a record added later is found. No organisation is created from a name: the reviewer names the record a company means, and an investor not on record is kept by name only |
+| 6.5 | ~~Write extraction results to the review queue~~ | Done Oct 8, 2026 | `atlas extract-news`, migration 0017, and a "Funding rounds" group on the review page. First run, on one crawl of the two feeds with the rule-based extractor: 20 entries read, 2 proposed (NeoFleet Capital, USD 4 million; MNT-Halan, USD 76.5 million, which is a securitisation and not an equity round, so one to reject). **Limits:** the rule-based extractor only reads headlines of the form "X raises $Y" and "Z invests $Y in X"; a feed holds only its latest ten entries, so the yield comes from running it often; no confidence score is stored |
 | 6.6 | Confidence scoring and the auto-approval rule | Backend | Rounds above USD 1 million always go to a person |
 | 6.7 | Choose the model on the labelled set | Backend | |
 | 6.8 | Daily scheduler, run-health alerts, more crawlers | Backend | |
@@ -258,7 +259,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 7 | Advanced map | Selection, time, satellite | Spatial filters, aggregates | Medium |
 | 8 | Quality and launch | Tests, performance, accessibility, missing pages | Backups, security, legal | Medium, then Critical |
 
-Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); the relationship importer is built and the first ties are loaded (3.9). What comes next: the DuckDuckGo search for the remaining founders when the allowance renews (4.13); a page from its own site for the 21 investor placements that still rest on a directory or on memory (4.3); and, the largest step not started, running the news extractor and sending its results to the review queue (step 6). The graph still needs more relationship data from the owner (3.8c). Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
+Step 2 is done apart from small follow-ups. The graph API, the graph page and the dashboard are built and deployed (3.5 to 3.8b); the relationship importer is built and the first ties are loaded (3.9). What comes next: the DuckDuckGo search for the remaining founders when the allowance renews (4.13); a page from its own site for the 21 investor placements that still rest on a directory or on memory (4.3); and, in step 6, a schedule for the crawl and the news reader once the publishers' terms have been read (6.3, 6.8), and a trial of the model extractor against the rule-based one (6.1). The graph still needs more relationship data from the owner (3.8c). Step 6 does not depend on any frontend work. Step 8.7 has the longest lead time and should start during step 2.
 
 ## 4. Waiting on the owner
 

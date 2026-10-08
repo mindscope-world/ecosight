@@ -65,6 +65,8 @@ uv sync
 uv run pytest
 uv run atlas crawl                 # fetch the news feeds into data/raw and raw_document
 uv run atlas extract <file.json>   # extract one stored article with the rule-based baseline
+uv run atlas extract-news          # dry run: read stored news and list the funding rounds it reports
+uv run atlas extract-news --apply  # put them in the review queue; nothing is published until a reviewer approves
 uv run atlas eval                  # per-field accuracy on eval/labelled.jsonl
 uv run atlas import-orgs <file.csv>          # dry run: writes data/import-report.md, changes nothing
 uv run atlas import-orgs <file.csv> --apply  # load it; re-running replaces what it loaded before

@@ -292,3 +292,84 @@ describe('taking a relationship down for everyone', () => {
   });
 });
 
+describe('a funding round read from the news', () => {
+  const news = (changes: object = {}) => ({
+    import: 'news', news: true, extractor: 'rules', publisher: 'test-feed',
+    url: 'https://news.test/sample-startup-07-raises', title: 'Sample Startup 07 raises $2.5 million seed round',
+    published: '2026-10-06',
+    company: { value: 'Sample Startup 07', quote: 'Sample Startup 07' },
+    amount: { value: 2500000, quote: '$2.5 million' }, currency: { value: 'USD', quote: '$2.5 million' },
+    stage: { value: 'pre-series a', quote: 'pre-Series A' },
+    investors: [{ value: 'Sample Fund 02', quote: 'Sample Fund 02' }, { value: 'Unknown Capital', quote: 'Unknown Capital' }],
+    ...changes,
+  });
+  const add = async (payload: object) =>
+    (await sql`
+      insert into review_item (record_type, payload, method, status, reason)
+      values ('funding_round', ${sql.json(payload as never)}, 'ai', 'pending', 'Read from a news report') returning id`)[0]!.id as string;
+  const clear = async () => {
+    await sql`delete from field_source where source_url like 'https://news.test/%'`;
+    await sql`delete from funding_round where id in (select record_id from review_item where payload->>'import' = 'news' and payload->>'url' like 'https://news.test/%')`;
+    await sql`delete from review_item where payload->>'import' = 'news' and payload->>'url' like 'https://news.test/%'`;
+  };
+
+  it('waits with the record each name finds, and becomes a round only when approved', async () => {
+    try {
+      const id = await add(news());
+      const item = (await queue()).items.find((entry: any) => entry.id === id);
+      expect(item.kind).toBe('round');
+      expect(item.round).toMatchObject({
+        company: 'Sample Startup 07', amount: 2500000, currency: 'USD', stage: 'pre-series-a', announced_on: '2026-10-06',
+        source_url: 'https://news.test/sample-startup-07-raises', duplicate: false,
+      });
+      expect(item.round.company_match.name).toBe('Sample Startup 07');
+      expect(item.round.investors.map((investor: any) => [investor.name, investor.match?.name ?? null])).toEqual([
+        ['Sample Fund 02', 'Sample Fund 02'], ['Unknown Capital', null],
+      ]);
+      const company = item.round.company_match.id;
+      const key = { 'x-access-key': 'the-key' };
+      const before = (await app.inject({ url: `/orgs/${company}`, headers: key })).json();
+      expect(before.rounds).toHaveLength(0);
+
+      expect((await post(`/review/items/${id}/approve`, as('viewer-token'))).statusCode).toBe(403);
+      const approved = await post(`/review/items/${id}/approve`, reviewer);
+      expect(approved.statusCode).toBe(200);
+      expect(approved.json().status).toBe('approved');
+      const after = (await app.inject({ url: `/orgs/${company}`, headers: key })).json();
+      expect(after.rounds).toEqual([expect.objectContaining({ stage: 'pre-series-a', amount_usd: 2500000, announced_on: '2026-10-06', announced_precision: 'day' })]);
+      // The investor on record is linked; the one nobody has on record is kept by name, not created.
+      expect(after.connections.investors.map((investor: any) => investor.name)).toEqual(['Sample Fund 02']);
+      const [source] = await sql`
+        select s.method::text as method, s.quote from field_source s
+        where s.record_type = 'funding_round' and s.source_url = 'https://news.test/sample-startup-07-raises'`;
+      expect(source).toMatchObject({ method: 'ai', quote: 'Sample Startup 07 … $2.5 million … pre-Series A' });
+      const [kept] = await sql`select payload->'investors_not_linked' as names from review_item where id = ${id}`;
+      expect(kept!.names).toEqual(['Unknown Capital']);
+      expect((await post(`/review/items/${id}/approve`, reviewer)).statusCode).toBe(409);
+
+      // The same report read again would repeat the round now on record, and says so.
+      const again = await add(news());
+      expect((await queue()).items.find((entry: any) => entry.id === again).round.duplicate).toBe(true);
+    } finally {
+      await clear();
+    }
+  });
+
+  it('cannot be approved until the company is a record on file', async () => {
+    try {
+      const id = await add(news({ company: { value: 'Nobody Knows Ltd', quote: 'Nobody Knows Ltd' } }));
+      expect((await queue()).items.find((entry: any) => entry.id === id).round.company_match).toBeNull();
+      const refused = await post(`/review/items/${id}/approve`, reviewer);
+      expect(refused.statusCode).toBe(422);
+      expect(refused.json().error).toContain('Choose the record for Nobody Knows Ltd');
+      // The reviewer says which record it means, and it goes ahead.
+      const [fund] = await sql`select id from organisation where slug = 'sample-startup-08'`;
+      expect((await post(`/review/items/${id}/approve`, reviewer, { from_id: fund!.id })).statusCode).toBe(200);
+      const [round] = await sql`select count(*)::int as rounds from funding_round where organisation_id = ${fund!.id} and stage = 'pre-series-a'`;
+      expect(round!.rounds).toBe(1);
+    } finally {
+      await clear();
+    }
+  });
+});
+

@@ -81,3 +81,52 @@ test('an incomplete record can be archived, found in the archive, and reopened',
   await archived.getByRole('button', { name: 'Reopen' }).click();
   await expect(page.getByRole('tab', { name: /Archived/ })).toContainText('0');
 });
+
+test('a funding round read from the news is shown with what it was read from', async ({ page }) => {
+  // The sample has no news, so two proposed rounds are added to the waiting list on its way to the page.
+  const round = (id: string, changes: object) => ({
+    id, kind: 'round', status: 'pending', reason: 'Read from a news report by an extractor; a person must confirm it before it is published',
+    note: null, source: 'news', created_at: '2026-10-08T09:00:00Z', reviewed_at: null, reviewed_by: null, organisation: null, proposal: null,
+    round: {
+      title: 'Sample Startup 07 raises $2.5 million seed round', source_url: 'https://news.example/sample-startup-07-raises',
+      publisher: 'test-feed', extractor: 'rules', announced_on: '2026-10-06', company: 'Sample Startup 07', company_quote: 'Sample Startup 07',
+      company_match: { id: '00000000-0000-4000-8000-000000000007', name: 'Sample Startup 07', types: ['startup'] },
+      amount: 2500000, amount_quote: '$2.5 million', currency: 'USD', stage: 'seed', stage_quote: 'seed round',
+      investors: [
+        { name: 'Sample Fund 02', quote: 'Sample Fund 02', match: { id: '00000000-0000-4000-8000-000000000002', name: 'Sample Fund 02', types: ['fund'] } },
+        { name: 'Unknown Capital', quote: 'Unknown Capital', match: null },
+      ],
+      duplicate: true,
+      ...changes,
+    },
+  });
+  await page.route('**/review/items?status=pending', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.items.push(round('00000000-0000-4000-8000-0000000000a1', {}), round('00000000-0000-4000-8000-0000000000a2', { company: 'Nobody Knows Ltd', company_match: null, duplicate: false }));
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto('/review/');
+  const rounds = page.getByRole('region', { name: 'Funding rounds' }).getByRole('listitem');
+  await expect(rounds).toHaveCount(2);
+
+  const known = rounds.first();
+  await expect(known).toContainText('Funding round read from the news · test-feed');
+  await expect(known).toContainText('Sample Startup 07');
+  await expect(known).toContainText('$2.5M');
+  await expect(known).toContainText('“$2.5 million”');
+  await expect(known).toContainText(/Unknown Capital\s*not on record/);
+  await expect(known).toContainText('already has a round on record');
+  await expect(known.getByRole('link', { name: 'news.example' })).toHaveAttribute('href', 'https://news.example/sample-startup-07-raises');
+  await expect(known.getByRole('button', { name: 'Approve and publish' })).toBeEnabled();
+
+  // A company nobody has on record has to be named before the round can be approved.
+  const unknown = rounds.nth(1);
+  await expect(unknown).toContainText('Nobody Knows Ltd not on record');
+  await expect(unknown.getByRole('button', { name: 'Approve and publish' })).toBeDisabled();
+  await unknown.getByLabel('It means').fill('Sample Startup 08');
+  await unknown.getByRole('button', { name: 'Sample Startup 08', exact: true }).click();
+  await expect(unknown.getByRole('button', { name: 'Approve and publish' })).toBeEnabled();
+});
+
