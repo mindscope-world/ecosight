@@ -18,3 +18,5 @@ test-results/
 playwright-report/
 supabase/functions/api/bundle.js
 supabase/.temp/
+# The labelled news items hold publishers' article text, which is not ours to republish.
+eval/labelled.jsonl
