@@ -13,15 +13,24 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .. import config
 from . import RESULT_SCHEMA, STAGES, Document, ExtractionResult, Value
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 SYSTEM_PROMPT = f"""You extract facts about startup funding rounds from news text.
 Return JSON only, matching this schema:
 {json.dumps(RESULT_SCHEMA)}
 
 Rules:
-- is_funding_announcement is true only if the text reports that one named company raised money.
-  Market summaries about many companies, launches, hires and opinion pieces are false.
+- is_funding_announcement is true only if the text is a report that one named company has just
+  raised money from investors or lenders: a round that has closed, and is the news of the text.
+  It is false for:
+  - market summaries, newsletters and roundups that cover several stories;
+  - launches, hires, opinion pieces and acquisitions of one company by another;
+  - money still being raised or planned: "is raising", "in the process of raising", "seeks",
+    "targets", "plans to raise";
+  - an investment firm raising a fund of its own;
+  - a share sale on a stock exchange, an IPO or a listing, and shareholders selling existing shares;
+  - a text about something else that only mentions a round the company raised earlier,
+    as in "went on to raise", "has previously raised", "after raising".
 - company: the company that received the money, without descriptions such as "Kenyan fintech".
 - amount: the full number in the stated currency with thousands and millions written out:
   2500000 for "$2.5 million", 76500000 for "$76.5m", 500000 for "$500k". Never 2.5 or 76.5.

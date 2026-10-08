@@ -156,4 +156,4 @@ A card with no logo shows the organisation's initials.
 
 Add `--extractor llm` to `extract` or `eval` to use a model instead. It runs on
 [Groq](https://console.groq.com) through LangChain and needs `GROQ_API_KEY` in
-`.env`. `GROQ_MODEL` changes the model (default `llama-3.3-70b-versatile`).
+`.env`. `GROQ_MODEL` changes the model (default `openai/gpt-oss-120b`).

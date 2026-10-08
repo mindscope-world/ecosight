@@ -90,7 +90,7 @@ def test_llm_extractor_runs_on_any_langchain_chat_model():
     result = extractor.extract(DOC)
     assert result.is_funding_announcement
     assert result.stage.value == "seed"
-    assert extractor.name == "llm:demo:v1"
+    assert extractor.name == "llm:demo:v2"
 
 
 def test_groq_model_needs_a_key(monkeypatch):
@@ -102,7 +102,7 @@ def test_groq_model_needs_a_key(monkeypatch):
 def test_groq_model_is_configured_for_json(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     model = groq_model()
-    assert model.model_name == "llama-3.3-70b-versatile"
+    assert model.model_name == "openai/gpt-oss-120b"
     assert model.temperature < 0.001
     assert model.model_kwargs == {"response_format": {"type": "json_object"}}
 

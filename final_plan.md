@@ -201,7 +201,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 6.1 | Run the model extractor once | Backend | The Groq key is in `.env`. Never run against Groq; the default model name is unconfirmed |
+| 6.1 | ~~Run the model extractor once~~ | Done Oct 8, 2026 | Run on the same 20 feed entries as the rule-based extractor, without touching the review queue. The default model no longer existed on Groq; it is now `openai/gpt-oss-120b`. With the first instructions the model flagged 5 entries, 3 of them wrongly: a share sale on a stock exchange, a fund still being raised, and a launch story that mentions an old round. With tighter instructions (prompt v2) it flags the same 2 as the rules, and reads more from them: both investors in NeoFleet's round, which the rules missed, and that MNT-Halan's deal is debt. A second or two an entry. **Not settled:** 20 entries with 2 rounds is too few to say which finds more; that needs the labelled set (6.2). The news reader still uses the rules unless told `--extractor llm` |
 | 6.2 | Labelled set: 50, then 200 news items | People | No accuracy figure exists until this does |
 | 6.3 | Read each publisher's terms of use | People | Recorded in `docs/sources.md`; needed before daily crawling |
 | 6.4 | ~~Match extracted companies to existing records~~ | Done Oct 8, 2026 | A proposed round's company and investors are matched to published records by name and other names when the reviewer looks at it, so a record added later is found. No organisation is created from a name: the reviewer names the record a company means, and an investor not on record is kept by name only |

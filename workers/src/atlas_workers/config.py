@@ -58,7 +58,7 @@ def search_api_key() -> str:
 
 
 # Extraction model on Groq, called through LangChain. Groq has a free tier.
-GROQ_MODEL = os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile"
+GROQ_MODEL = os.environ.get("GROQ_MODEL") or "openai/gpt-oss-120b"
 
 
 def groq_api_key() -> str:
