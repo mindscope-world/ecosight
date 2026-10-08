@@ -13,6 +13,7 @@ own copy of the files; a fresh clone will not have them.
 | `nairobi-investors-2026-10-07/` | `nairobi_vc_accelerator_dataset_2026-10-07.csv`: 25 venture capital firms, impact investors and accelerators with a Nairobi presence. Read through `curation/nairobi_vc_accelerator_dataset_2026-10-07.mapping.json` | Loaded. 23 published, 2 kept as drafts; 5 were merged into investors already on record |
 | `east-africa-2026-10-07/` | `east_africa_100_organizations.csv`: 100 universities, public bodies, NGOs and innovation hubs in Kenya, Uganda, Tanzania, Rwanda, Ethiopia, Burundi, Somalia, South Sudan and Djibouti. The `.xlsx` is the same data; the `.md` describes the columns. Read through `curation/east_africa_100_organizations.mapping.json` | Loaded. 96 published, 4 kept as drafts; 5 were merged into organisations already on record |
 | `africa-health-sources-2026-10-07/` | `African_Healthtech_100.csv`: 100 health technology organisations in 17 African countries. `African_Healthtech_Sources.csv` is its source register, one link per row, which the organisations file cites by ID. The `.xlsx` is the same data. Read through `curation/African_Healthtech_100.mapping.json` | Loaded. 84 published, 16 kept as drafts. 59 funding rounds read from it |
+| `relationship-organisations-2026-10-08/` | `organisations_named_in_relationships.csv`: 16 organisations the health technology dataset names as a parent, host, funder or programme runner, each with the page its head office was taken from. Uses the first dataset's column headings; read through `curation/organisations_named_in_relationships.mapping.json` for its other names and sector tags | Loaded. 16 published |
 
 The health technology dataset's stated relationships are in `curation/African_Healthtech_100_relationships.csv`,
 loaded with `import-links` after its organisations.
@@ -37,6 +38,9 @@ uv run atlas import-orgs ../datasets/east-africa-2026-10-07/east_africa_100_orga
 uv run atlas import-orgs ../datasets/africa-health-sources-2026-10-07/African_Healthtech_100.csv \\
   --mapping ../curation/African_Healthtech_100.mapping.json --publish-all --snapshot 2026-10-07 --apply
 uv run atlas import-rounds ../curation/African_Healthtech_100_funding_rounds.json --apply
+uv run atlas import-orgs ../datasets/relationship-organisations-2026-10-08/organisations_named_in_relationships.csv \\
+  --mapping ../curation/organisations_named_in_relationships.mapping.json --publish-all --snapshot 2026-10-08 --apply
+uv run atlas import-links ../curation/African_Healthtech_100_relationships.csv --snapshot 2026-10-07 --apply
 ```
 
 Load them in that order on an empty database. Each command can be run again safely.

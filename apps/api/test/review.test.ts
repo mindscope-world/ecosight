@@ -271,6 +271,10 @@ describe('taking a relationship down for everyone', () => {
         expect.objectContaining({ kind: 'invested_in', reason: 'The source was about another company.', withdrawn_by: 'reviewer@example.org', source: { id: fund, name: 'Sample Fund 01' } }),
       ]);
       expect([await portfolio(), await investors(), await drawn()]).toEqual([5, 0, 5]);
+      // The tables count it the same way.
+      const rows = (await app.inject({ url: '/orgs', headers: key })).json().organisations;
+      expect(rows.find((row: any) => row.id === fund).portfolio).toBe(5);
+      expect(rows.find((row: any) => row.id === startup)).toMatchObject({ investors: 0, rounds: 1 });
       expect((await post('/review/withdrawn', reviewer, { ...edge, reason: 'again' })).statusCode).toBe(409);
       // The round it was read from is still on record.
       expect((await app.inject({ url: `/orgs/${startup}`, headers: key })).json().rounds).toHaveLength(1);

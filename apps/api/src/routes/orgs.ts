@@ -41,7 +41,9 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
           (select count(distinct ri.investor_id)::int from funding_round r
             join round_investor ri on ri.round_id = r.id
             join organisation i on i.id = ri.investor_id and i.status = 'published'
-            where r.organisation_id = g.id and r.status = 'published') as investors,
+            where r.organisation_id = g.id and r.status = 'published'
+              and not exists (select 1 from withdrawn_edge w
+                where w.kind = 'invested_in' and w.source_org = i.id and w.target_org = g.id)) as investors,
           (select count(distinct pp.organisation_id)::int from program p
             join program_participant pp on pp.program_id = p.id
             join organisation x on x.id = pp.organisation_id and x.status = 'published'
