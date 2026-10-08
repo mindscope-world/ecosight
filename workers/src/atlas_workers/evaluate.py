@@ -52,6 +52,9 @@ def field_correct(name: str, result: ExtractionResult, expected: dict) -> bool:
     got = getattr(result, name)
     if want is None or got is None:
         return want is None and got is None
+    if isinstance(want, list):
+        # A label may list every name a report uses for the company: "NeoFleet Capital" in the headline, "NeoFleet" below it.
+        return _name(got.value) in {_name(v) for v in want}
     if name == "amount":
         # Reported amounts are rounded, so allow half a percent.
         return abs(float(got.value) - float(want)) <= 0.005 * abs(float(want))

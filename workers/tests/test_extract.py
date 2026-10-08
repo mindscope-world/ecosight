@@ -118,6 +118,10 @@ def test_field_scoring():
     assert field_correct("investors", result, {"investors": ["example ventures"]})
     assert not field_correct("investors", result, {"investors": ["Example Ventures", "Other"]})
     assert field_correct("stage", result, {})  # absent on both sides
+    # A label may accept every name a report uses for the company.
+    named = ExtractionResult(is_funding_announcement=True, company=Value("Sample Pay", "x"))
+    assert field_correct("company", named, {"company": ["Sample Pay Limited", "Sample Pay"]})
+    assert not field_correct("company", named, {"company": ["Other Pay", "Another"]})
     assert not field_correct("company", result, {"company": "Sample Pay"})
 
 
