@@ -1,0 +1,11 @@
+# Once a day. If the machine was off at the time, the run is made up when it is next on.
+[Unit]
+Description=Daily ecoSight backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

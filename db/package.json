@@ -8,6 +8,8 @@
     "test-db": "tsx --env-file-if-exists=../.env test-db.ts",
     "users": "tsx --env-file-if-exists=../.env users.ts",
     "migrate-hosted": "tsx --env-file-if-exists=../.env migrate-hosted.ts",
+    "backup": "tsx --env-file-if-exists=../.env backup.ts",
+    "restore-check": "tsx --env-file-if-exists=../.env restore-check.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
