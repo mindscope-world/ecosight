@@ -118,6 +118,24 @@ def test_a_date_can_be_read_from_the_funding_status(conn, tmp_path):
     assert any("a date quote needs a date" in line for line in problems)
 
 
+def test_a_date_can_be_read_from_the_address_of_a_source_on_record(conn, tmp_path):
+    with conn.cursor() as cur:
+        cur.execute(
+            "insert into field_source (record_type, record_id, field, source_url, method) "
+            "select 'organisation', id, 'funding', 'https://rounds.test/2022/03/07/sample-pay-raises', 'manual' from organisation where slug = 'sample-pay-rounds'"
+        )
+    conn.commit()
+    dated = {"date": "2022-03-07", "precision": "day", "date_quote": "2022/03/07", "source": "https://rounds.test/2022/03/07/sample-pay-raises"}
+    doc, rounds, problems = read_file(write(tmp_path, **dated))
+    assert problems == [] and check_against_database(conn, doc["dataset"], rounds)[1] == []
+
+    # The source must be one on record for the organisation, and the date must be in its address.
+    _, elsewhere, _ = read_file(write(tmp_path, **{**dated, "source": "https://other.test/2022/03/07/story"}))
+    assert "date quote is not in the organisation's funding note" in check_against_database(conn, doc["dataset"], elsewhere)[1][0]
+    _, wrong, _ = read_file(write(tmp_path, **{**dated, "date_quote": "2021/01/01"}))
+    assert "not in the address of the round's source" in check_against_database(conn, doc["dataset"], wrong)[1][0]
+
+
 def test_loading_twice_leaves_one_copy(conn, tmp_path):
     doc, rounds, _ = read_file(write(tmp_path))
     orgs, _ = check_against_database(conn, doc["dataset"], rounds)

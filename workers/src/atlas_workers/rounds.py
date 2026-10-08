@@ -8,6 +8,11 @@ note, or whose organisation is not found, stops the load.
 The note is both funding cells of the row: the level or status, and the details.
 A dataset may give a round's amount in one and its date in the other, so a round
 can carry a second quote, `date_quote`, for the words its date was read from.
+
+A date may also be read from the address of the round's source, when that source
+is on record for the organisation and its address carries the date it was
+published: ".../2022/03/07/..." for a round announced that day. The round then
+names that source and quotes the date as the address writes it.
 """
 
 import json
@@ -113,6 +118,8 @@ def check_against_database(conn, dataset: str, rounds: list[Round]) -> tuple[dic
         cur.execute(
             """
             select (payload->>'record')::int, record_id,
+                   (select coalesce(array_agg(s.source_url), '{}') from field_source s
+                     where s.record_type = 'organisation' and s.record_id = r.record_id and s.source_url is not null),
                    -- Kept apart by a line break, so no quote can run from one cell into the other.
                    concat_ws(E'\n|\n', payload->'fields'->>'funding_status', payload->'fields'->>'funding_details'),
                    payload->'fields'->>'source_funding', g.status::text
@@ -122,8 +129,8 @@ def check_against_database(conn, dataset: str, rounds: list[Round]) -> tuple[dic
             (dataset,),
         )
         orgs = {
-            number: {"id": org_id, "note": note or "", "source": source or "", "status": status}
-            for number, org_id, note, source, status in cur.fetchall()
+            number: {"id": org_id, "note": note or "", "source": source or "", "status": status, "sources": set(sources)}
+            for number, org_id, sources, note, source, status in cur.fetchall()
         }
     for index, item in enumerate(rounds, 1):
         where = f"round {index} ({item.organisation})"
@@ -133,7 +140,11 @@ def check_against_database(conn, dataset: str, rounds: list[Round]) -> tuple[dic
         elif _squash(item.quote) not in _squash(org["note"]):
             problems.append(f"{where}: quote is not in the organisation's funding note")
         elif item.date_quote and _squash(item.date_quote) not in _squash(org["note"]):
-            problems.append(f"{where}: date quote is not in the organisation's funding note")
+            # Not in the note: then it must be in the address of the source the round names, and that source on record.
+            if not item.source or item.source not in org["sources"]:
+                problems.append(f"{where}: date quote is not in the organisation's funding note")
+            elif item.date_quote not in item.source:
+                problems.append(f"{where}: date quote is not in the address of the round's source")
         elif org["status"] != "published":
             problems.append(f"{where}: the organisation is not published")
     return orgs, problems

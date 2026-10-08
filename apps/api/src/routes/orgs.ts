@@ -41,7 +41,9 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
           (select count(distinct ri.investor_id)::int from funding_round r
             join round_investor ri on ri.round_id = r.id
             join organisation i on i.id = ri.investor_id and i.status = 'published'
-            where r.organisation_id = g.id and r.status = 'published') as investors,
+            where r.organisation_id = g.id and r.status = 'published'
+              and not exists (select 1 from withdrawn_edge w
+                where w.kind = 'invested_in' and w.source_org = i.id and w.target_org = g.id)) as investors,
           (select count(distinct pp.organisation_id)::int from program p
             join program_participant pp on pp.program_id = p.id
             join organisation x on x.id = pp.organisation_id and x.status = 'published'
@@ -93,6 +95,9 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
               join round_investor ri on ri.round_id = r.id
               join organisation i on i.id = ri.investor_id and i.status = 'published'
               where r.organisation_id = g.id and r.status = 'published'
+                -- A relationship a reviewer has withdrawn is shown nowhere.
+                and not exists (select 1 from withdrawn_edge w
+                  where w.kind = 'invested_in' and w.source_org = i.id and w.target_org = g.id)
             ), '[]'::jsonb),
             'portfolio', coalesce((
               select jsonb_agg(distinct jsonb_build_object('id', c.id, 'name', c.name, 'types', c.types))
@@ -100,6 +105,8 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
               join funding_round r on r.id = ri.round_id and r.status = 'published'
               join organisation c on c.id = r.organisation_id and c.status = 'published'
               where ri.investor_id = g.id
+                and not exists (select 1 from withdrawn_edge w
+                  where w.kind = 'invested_in' and w.source_org = g.id and w.target_org = c.id)
             ), '[]'::jsonb),
             -- Programs this organisation runs or took part in, with the other party.
             'programs', coalesce((
@@ -112,7 +119,9 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
               join organisation x
                 on x.id = case when p.organisation_id = g.id then pp.organisation_id else p.organisation_id end
                 and x.status = 'published'
-              where p.organisation_id = g.id or pp.organisation_id = g.id
+              where (p.organisation_id = g.id or pp.organisation_id = g.id)
+                and not exists (select 1 from withdrawn_edge w
+                  where w.kind = 'accelerated_at' and w.source_org = pp.organisation_id and w.target_org = p.organisation_id)
             ), '[]'::jsonb),
             'events', coalesce((
               select jsonb_agg(jsonb_build_object('id', e.id, 'name', e.name) order by e.starts_at)
@@ -129,6 +138,8 @@ export const orgRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, { 
                 on x.id = case when l.source_id = g.id then l.target_id else l.source_id end
                 and x.status = 'published'
               where l.status = 'published' and (l.source_id = g.id or l.target_id = g.id)
+                and not exists (select 1 from withdrawn_edge w
+                  where w.kind = l.kind::text and w.source_org = l.source_id and w.target_org = l.target_id)
             ), '[]'::jsonb),
             'people', coalesce((
               select jsonb_agg(jsonb_build_object('name', pr.name, 'role', pr.role, 'linkedin_url', pr.linkedin_url) order by pr.name)

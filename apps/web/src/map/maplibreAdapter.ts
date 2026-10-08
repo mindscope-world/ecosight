@@ -526,6 +526,32 @@ export class MapLibreAdapter implements MapAdapter {
     this.map.on('moveend', () => listener(this.getCamera()));
   }
 
+  /**
+   * What is drawn, in numbers, and where a place falls on the screen. For the
+   * browser tests, which cannot see a canvas: nothing in the app reads this.
+   */
+  inspect(): { markers: number; clusters: number; ringed: number; lines: number; card: string | null } {
+    const map = this.map;
+    const drawn = (suffix: string) =>
+      [...this.layers]
+        .filter(([, state]) => state.kind === 'points' && state.visible)
+        .map(([id]) => `${id}-${suffix}`)
+        .filter((layer) => map.getLayer(layer));
+    return {
+      markers: map.queryRenderedFeatures({ layers: drawn('points') }).length,
+      clusters: map.queryRenderedFeatures({ layers: drawn('clusters') }).length,
+      ringed: this.highlight.length,
+      lines: this.links.length,
+      card: this.hoverPopup.isOpen() ? (this.hoverPopup.getElement()?.textContent ?? '') : null,
+    };
+  }
+
+  screenPoint(lon: number, lat: number): { x: number; y: number } {
+    const box = this.map.getCanvas().getBoundingClientRect();
+    const point = this.map.project([lon, lat]);
+    return { x: box.left + point.x, y: box.top + point.y };
+  }
+
   destroy(): void {
     cancelAnimationFrame(this.pulse);
     this.hoverPopup.remove();

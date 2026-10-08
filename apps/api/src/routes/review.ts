@@ -345,4 +345,101 @@ export const reviewRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app,
       return describe((await load(item.id))!, await knownOrganisations());
     },
   );
+
+  // Taking a published relationship down for everyone, and putting it back. The
+  // records it was read from are untouched: it is only left out of what is shown.
+  const Edge = Type.Object({
+    kind: Type.String({ minLength: 1, maxLength: 40 }),
+    source: Type.String({ format: 'uuid' }),
+    target: Type.String({ format: 'uuid' }),
+  });
+  const Withdrawn = Type.Object({
+    kind: Type.String(),
+    source: Type.Object({ id: Type.String(), name: Type.String() }),
+    target: Type.Object({ id: Type.String(), name: Type.String() }),
+    reason: Type.String(),
+    withdrawn_at: Type.String({ format: 'date-time' }),
+    withdrawn_by: Type.Union([Type.String(), Type.Null()]),
+  });
+  const edgeAnswers = { 200: Type.Object({ withdrawn: Type.Array(Withdrawn) }), 401: ErrorBody, 403: ErrorBody, 404: ErrorBody, 409: ErrorBody };
+
+  const withdrawn = async () => {
+    const rows = await sql<
+      { kind: string; source: { id: string; name: string }; target: { id: string; name: string }; reason: string; withdrawn_at: Date; withdrawn_by: string | null }[]
+    >`
+    select w.kind, jsonb_build_object('id', s.id, 'name', s.name) as source,
+           jsonb_build_object('id', t.id, 'name', t.name) as target,
+           w.reason, w.withdrawn_at, u.email as withdrawn_by
+    from withdrawn_edge w
+    join organisation s on s.id = w.source_org
+    join organisation t on t.id = w.target_org
+    left join app_user u on u.id = w.withdrawn_by
+    order by w.withdrawn_at desc
+  `;
+    return rows.map((row) => ({ ...row, withdrawn_at: row.withdrawn_at.toISOString() }));
+  };
+
+  app.get(
+    '/review/withdrawn',
+    { schema: { summary: 'Relationships a reviewer has taken down', response: edgeAnswers } },
+    async (request, reply) => {
+      if (!reviewer(request, reply)) return reply;
+      return { withdrawn: await withdrawn() };
+    },
+  );
+
+  app.post(
+    '/review/withdrawn',
+    {
+      schema: {
+        summary: 'Take a published relationship between two organisations down for everyone',
+        body: Type.Object({ ...Edge.properties, reason: Type.String({ minLength: 1, maxLength: 300 }) }),
+        response: edgeAnswers,
+      },
+    },
+    async (request, reply) => {
+      const user = reviewer(request, reply);
+      if (!user) return reply;
+      const { kind, source, target } = request.body;
+      const reason = request.body.reason.trim();
+      if (!reason) return reply.code(409).send({ error: 'Say why the relationship is being taken down' });
+      const [onRecord] = await sql`
+        select 1 from graph_edge_all where kind = ${kind} and source_org = ${source} and target_org = ${target} limit 1`;
+      if (!onRecord) return reply.code(404).send({ error: 'No such relationship is on record' });
+      const done = await sql.begin(async (tx) => {
+        const added = await tx`
+          insert into withdrawn_edge (kind, source_org, target_org, reason, withdrawn_by)
+          values (${kind}, ${source}, ${target}, ${reason}, ${user.id})
+          on conflict do nothing returning 1`;
+        if (!added.length) return false;
+        await tx`
+          insert into audit_log (actor, record_type, record_id, field, new_value)
+          values (${user.id}, 'relationship', ${source}, ${kind}, ${tx.json({ withdrawn: true, target, reason })})`;
+        return true;
+      });
+      if (!done) return reply.code(409).send({ error: 'This relationship has already been taken down' });
+      return { withdrawn: await withdrawn() };
+    },
+  );
+
+  app.post(
+    '/review/withdrawn/restore',
+    { schema: { summary: 'Put a relationship that was taken down back', body: Edge, response: edgeAnswers } },
+    async (request, reply) => {
+      const user = reviewer(request, reply);
+      if (!user) return reply;
+      const { kind, source, target } = request.body;
+      const done = await sql.begin(async (tx) => {
+        const removed = await tx`
+          delete from withdrawn_edge where kind = ${kind} and source_org = ${source} and target_org = ${target} returning reason`;
+        if (!removed.length) return false;
+        await tx`
+          insert into audit_log (actor, record_type, record_id, field, previous_value, new_value)
+          values (${user.id}, 'relationship', ${source}, ${kind}, ${tx.json({ withdrawn: true, target })}, ${tx.json({ withdrawn: false, target })})`;
+        return true;
+      });
+      if (!done) return reply.code(404).send({ error: 'This relationship is not among those taken down' });
+      return { withdrawn: await withdrawn() };
+    },
+  );
 };

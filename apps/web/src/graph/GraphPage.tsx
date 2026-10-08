@@ -5,11 +5,13 @@ import {
   expandNode,
   fetchCoInvestment,
   fetchGraphOverview,
+  fetchMe,
   fetchMostConnected,
   fetchNeighbourhood,
   fetchOrg,
   fetchPath,
   storedAccessKey,
+  withdrawEdge,
   type CoInvestment,
   type EdgeKind,
   type GraphAnswer,
@@ -17,6 +19,7 @@ import {
   type GraphNode,
 } from '../api';
 import { AccessGate } from '../components/AccessGate';
+import { canReview } from '../components/Account';
 import { ActionLink, EntityDetails, type Detail } from '../components/EntityDetails';
 import { SiteNav } from '../components/SiteNav';
 import { Icon, MicroLabel, Section, ShapeIcon, useMediaQuery } from '../components/ui';
@@ -130,6 +133,13 @@ export function GraphPage() {
   const [pathTo, setPathTo] = useState<Picked | null>(null);
   const [path, setPath] = useState<PathResult>({ status: 'idle' });
   const [sheet, setSheet] = useState<'controls' | 'details' | null>(null);
+  // A reviewer can take a relationship down for everyone, which is more than hiding its line.
+  const [reviewer, setReviewer] = useState(false);
+  const [removing, setRemoving] = useState<{ reason: string; busy: boolean; problem: string | null } | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    fetchMe().then((me) => setReviewer(canReview(me)), () => {});
+  }, []);
   // Expansions named in a share link, replayed once after the first load.
   const replay = useRef(initial.expanded);
 
@@ -170,7 +180,7 @@ export function GraphPage() {
       setStatus(start && /responded 404/.test(String(error)) ? 'missing' : 'error');
     });
     return () => controller.abort();
-  }, [start, kinds]);
+  }, [start, kinds, reload]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -492,6 +502,52 @@ export function GraphPage() {
             </button>
             {offSet.has(selectedEdge.id) && <span className="text-[11px] text-mute">Hidden in this view only.</span>}
           </div>
+          {reviewer && selectedEdge.source.startsWith('org:') && selectedEdge.target.startsWith('org:') && (
+            <div className="mt-3 border-t border-line pt-3">
+              {!removing ? (
+                <button type="button" className={`${buttonClass} border-warn/60 text-warn`} onClick={() => setRemoving({ reason: '', busy: false, problem: null })}>
+                  Remove for everyone…
+                </button>
+              ) : (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setRemoving({ ...removing, busy: true, problem: null });
+                    withdrawEdge({ kind: selectedEdge.kind, source: selectedEdge.source.slice(4), target: selectedEdge.target.slice(4), reason: removing.reason })
+                      .then(() => {
+                        setRemoving(null);
+                        setSelected(null);
+                        setReload((key) => key + 1);
+                      })
+                      .catch(() => setRemoving({ ...removing, busy: false, problem: 'It could not be removed.' }));
+                  }}
+                >
+                  <label className="block text-[11px] text-mute" htmlFor="remove-reason">
+                    Why is this relationship wrong? It will be taken off the map, the graph and the cards for every reader, and can
+                    be restored from the review page.
+                  </label>
+                  <textarea
+                    id="remove-reason"
+                    required
+                    maxLength={300}
+                    rows={2}
+                    value={removing.reason}
+                    onChange={(event) => setRemoving({ ...removing, reason: event.target.value })}
+                    className="mt-1 w-full rounded border border-line bg-bg p-1.5 text-xs"
+                  />
+                  <div className="mt-1.5 flex gap-1.5">
+                    <button type="submit" disabled={removing.busy || !removing.reason.trim()} className="h-7 rounded bg-warn px-2 text-xs font-semibold text-bg disabled:opacity-40">
+                      Remove for everyone
+                    </button>
+                    <button type="button" className={buttonClass} onClick={() => setRemoving(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                  {removing.problem && <p role="alert" className="m-0 mt-1.5 text-[11px] text-warn">{removing.problem}</p>}
+                </form>
+              )}
+            </div>
+          )}
         </div>
         {selectedEdge.evidence.length > 0 && (
           <section className="border-t border-line px-3 py-2.5">

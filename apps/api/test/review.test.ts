@@ -245,3 +245,50 @@ describe('GET /notifications', () => {
     expect((await app.inject({ url: '/notifications', headers: { 'x-access-key': 'the-key' } })).json().waiting_review).toBeNull();
   });
 });
+
+describe('taking a relationship down for everyone', () => {
+  const orgId = async (slug: string) => (await sql`select id from organisation where slug = ${slug}`)[0]!.id as string;
+
+  it('leaves it out of the graph and the cards until it is put back', async () => {
+    const fund = await orgId('sample-fund-01');
+    const startup = await orgId('sample-startup-05');
+    const edge = { kind: 'invested_in', source: fund, target: startup };
+    const key = { 'x-access-key': 'the-key' };
+    const portfolio = async () => (await app.inject({ url: `/orgs/${fund}`, headers: key })).json().connections.portfolio.length;
+    const investors = async () => (await app.inject({ url: `/orgs/${startup}`, headers: key })).json().connections.investors.length;
+    const drawn = async () => (await app.inject({ url: `/graph/neighbourhood?id=org:${fund}`, headers: key })).json().edges.length;
+    expect([await portfolio(), await investors(), await drawn()]).toEqual([6, 1, 6]);
+
+    try {
+      // Not for a viewer, not without a reason, and not for a relationship nobody has on record.
+      expect((await post('/review/withdrawn', as('viewer-token'), { ...edge, reason: 'x' })).statusCode).toBe(403);
+      expect((await post('/review/withdrawn', reviewer, { ...edge, reason: '' })).statusCode).toBe(400);
+      expect((await post('/review/withdrawn', reviewer, { ...edge, source: startup, target: fund, reason: 'x' })).statusCode).toBe(404);
+
+      const taken = await post('/review/withdrawn', reviewer, { ...edge, reason: 'The source was about another company.' });
+      expect(taken.statusCode).toBe(200);
+      expect(taken.json().withdrawn).toEqual([
+        expect.objectContaining({ kind: 'invested_in', reason: 'The source was about another company.', withdrawn_by: 'reviewer@example.org', source: { id: fund, name: 'Sample Fund 01' } }),
+      ]);
+      expect([await portfolio(), await investors(), await drawn()]).toEqual([5, 0, 5]);
+      // The tables count it the same way.
+      const rows = (await app.inject({ url: '/orgs', headers: key })).json().organisations;
+      expect(rows.find((row: any) => row.id === fund).portfolio).toBe(5);
+      expect(rows.find((row: any) => row.id === startup)).toMatchObject({ investors: 0, rounds: 1 });
+      expect((await post('/review/withdrawn', reviewer, { ...edge, reason: 'again' })).statusCode).toBe(409);
+      // The round it was read from is still on record.
+      expect((await app.inject({ url: `/orgs/${startup}`, headers: key })).json().rounds).toHaveLength(1);
+
+      const back = await post('/review/withdrawn/restore', reviewer, edge);
+      expect(back.json().withdrawn).toEqual([]);
+      expect([await portfolio(), await investors(), await drawn()]).toEqual([6, 1, 6]);
+      expect((await post('/review/withdrawn/restore', reviewer, edge)).statusCode).toBe(404);
+      const [log] = await sql`select count(*)::int as entries from audit_log where record_type = 'relationship' and record_id = ${fund}`;
+      expect(log!.entries).toBe(2);
+    } finally {
+      await sql`delete from withdrawn_edge where source_org = ${fund}`;
+      await sql`delete from audit_log where record_type = 'relationship' and record_id = ${fund}`;
+    }
+  });
+});
+
