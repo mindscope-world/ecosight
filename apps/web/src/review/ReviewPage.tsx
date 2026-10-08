@@ -22,7 +22,7 @@ import { MicroLabel, ShapeIcon } from '../components/ui';
 import { layerForTypes, TYPE_LABELS } from '../entities';
 import { NodePicker, type Picked } from '../graph/NodePicker';
 import { KIND_LABELS } from '../graph/style';
-import { countryName, formatDate } from '../lib/format';
+import { countryName, formatDate, formatMoney } from '../lib/format';
 
 type Tab = 'pending' | 'archived' | 'settled' | 'withdrawn';
 
@@ -99,7 +99,9 @@ function Card({ item, onDone }: { item: ReviewItem; onDone: () => void }) {
       });
   };
 
-  const ready = !proposal || ((proposal.from_match || from) && (proposal.to_match || to));
+  const round = item.round;
+  // A round needs its company to be a record on file; a relationship needs both sides.
+  const ready = round ? Boolean(round.company_match || from) : !proposal || ((proposal.from_match || from) && (proposal.to_match || to));
   let body: ReactNode;
   if (org) {
     body = (
@@ -134,6 +136,56 @@ function Card({ item, onDone }: { item: ReviewItem; onDone: () => void }) {
         {proposal.quote && <p className="m-0 mt-1.5 max-w-3xl leading-snug text-mute">“{proposal.quote}”</p>}
         <div className="mt-1 text-[11px]">
           <Link url={proposal.source_url} />
+        </div>
+      </>
+    );
+  } else if (round) {
+    const linked = round.investors.filter((investor) => investor.match);
+    body = (
+      <>
+        <div className="text-[11px] text-mute">
+          Funding round read from the news{round.publisher && ` · ${round.publisher}`}
+          {round.announced_on && ` · reported ${formatDate(round.announced_on)}`}
+        </div>
+        <div className="mt-1.5">
+          <Side name={round.company} match={round.company_match} chosen={from} onChoose={setFrom} editable={pending} />
+        </div>
+        <dl className="mt-2 grid max-w-xl grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt className="text-mute">Amount</dt>
+          <dd className="m-0 tabular-nums">
+            {round.amount !== null && round.currency ? formatMoney(round.amount, round.currency) : 'Not stated'}
+            {round.amount_quote && <span className="ml-2 text-[11px] text-mute">“{round.amount_quote}”</span>}
+          </dd>
+          <dt className="text-mute">Stage</dt>
+          <dd className="m-0">
+            {round.stage ?? 'Not stated'}
+            {round.stage_quote && <span className="ml-2 text-[11px] text-mute">“{round.stage_quote}”</span>}
+          </dd>
+          <dt className="text-mute">Investors</dt>
+          <dd className="m-0">
+            {round.investors.length === 0 && 'None named'}
+            {round.investors.map((investor) => (
+              <div key={investor.name}>
+                {investor.match?.name ?? investor.name}
+                {!investor.match && <span className="ml-1.5 text-[11px] text-warn">not on record</span>}
+              </div>
+            ))}
+          </dd>
+        </dl>
+        {round.investors.length > linked.length && (
+          <p className="m-0 mt-1.5 max-w-3xl text-[11px] leading-snug text-mute">
+            An investor that is not on record is not created by approving: the round is published without a link to it, and
+            its name is kept with this item.
+          </p>
+        )}
+        {round.duplicate && (
+          <p className="m-0 mt-1.5 text-warn" role="note">
+            This company already has a round on record with the same amount or stage. This may be the same round.
+          </p>
+        )}
+        {round.title && <p className="m-0 mt-1.5 max-w-3xl leading-snug text-mute">“{round.title}”</p>}
+        <div className="mt-1 text-[11px]">
+          <Link url={round.source_url} />
         </div>
       </>
     );
@@ -287,6 +339,7 @@ export function ReviewPage() {
     const groups: [string, ReviewItem[]][] = [
       ['Organisations', list?.items.filter((item) => item.kind === 'organisation') ?? []],
       ['Relationships', list?.items.filter((item) => item.kind === 'relationship') ?? []],
+      ['Funding rounds', list?.items.filter((item) => item.kind === 'round') ?? []],
       ['Other', list?.items.filter((item) => item.kind === 'other') ?? []],
     ];
     content = (

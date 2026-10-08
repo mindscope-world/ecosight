@@ -394,7 +394,7 @@ export const Me = Type.Object({
 
 export const ReviewItem = Type.Object({
   id: Type.String({ format: 'uuid' }),
-  kind: Type.Union([Type.Literal('organisation'), Type.Literal('relationship'), Type.Literal('other')]),
+  kind: Type.Union([Type.Literal('organisation'), Type.Literal('relationship'), Type.Literal('round'), Type.Literal('other')]),
   status: Type.Union([Type.Literal('pending'), Type.Literal('approved'), Type.Literal('rejected'), Type.Literal('archived')]),
   // Why it was not published by the importer's own rules.
   reason: Nullable(Type.String()),
@@ -431,6 +431,28 @@ export const ReviewItem = Type.Object({
       // The published record each name finds, when it finds one.
       from_match: Nullable(OrgLink),
       to_match: Nullable(OrgLink),
+    }),
+  ),
+  // A funding round read from a news report: every value with the words it was read from.
+  round: Nullable(
+    Type.Object({
+      title: Nullable(Type.String()),
+      source_url: Nullable(Type.String()),
+      publisher: Nullable(Type.String()),
+      extractor: Nullable(Type.String()),
+      announced_on: Nullable(Type.String({ format: 'date' })),
+      company: Nullable(Type.String()),
+      company_quote: Nullable(Type.String()),
+      // The published record the company's name finds, when it finds one.
+      company_match: Nullable(OrgLink),
+      amount: Nullable(Type.Number()),
+      amount_quote: Nullable(Type.String()),
+      currency: Nullable(Type.String()),
+      stage: Nullable(Type.String()),
+      stage_quote: Nullable(Type.String()),
+      investors: Type.Array(Type.Object({ name: Type.String(), quote: Nullable(Type.String()), match: Nullable(OrgLink) })),
+      // True when the company already has a round on record that looks like this one.
+      duplicate: Type.Boolean(),
     }),
   ),
 });
