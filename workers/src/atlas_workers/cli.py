@@ -276,7 +276,8 @@ def main() -> int:
     extract.set_defaults(run=cmd_extract)
 
     news = commands.add_parser("extract-news", help="read stored news and queue the funding rounds it reports for review (dry run unless --apply)")
-    news.add_argument("--extractor", **extractors)
+    # The model reads more of each report than the rules do (eval/README.md); every result still waits for a reviewer.
+    news.add_argument("--extractor", choices=extractors["choices"], default="llm", help="llm (the default, needs GROQ_API_KEY) or rules")
     news.add_argument("--apply", action="store_true", help="write to the database")
     news.set_defaults(run=cmd_news)
 

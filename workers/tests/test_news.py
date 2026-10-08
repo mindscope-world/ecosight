@@ -82,3 +82,28 @@ def test_a_reported_round_waits_in_the_review_queue_and_nothing_is_published(sto
     # Every document has been read, so a second run finds nothing to do.
     outcome, _ = read_news(conn, store, RuleExtractor(), apply=True)
     assert (outcome.read, outcome.proposed) == (0, 0) and len(mine(conn)) == 1
+
+
+def test_a_failing_extractor_ends_the_run_and_leaves_the_rest_unread(stored):
+    conn, store = stored
+
+    class Flaky:
+        name = "flaky"
+
+        def __init__(self):
+            self.calls = 0
+
+        def extract(self, document):
+            self.calls += 1
+            if self.calls == 2:
+                raise RuntimeError("rate limit reached")
+            return RuleExtractor().extract(document)
+
+    outcome, _ = read_news(conn, store, Flaky(), apply=True)
+    assert outcome.read == 1 and "RuntimeError: rate limit reached" in outcome.stopped
+    assert "Stopped early" in summarise(outcome, [])
+    # The two it did not get to are read by the next run, and nothing is read twice.
+    outcome, _ = read_news(conn, store, RuleExtractor(), apply=True)
+    assert (outcome.read, outcome.stopped) == (2, None)
+    assert len(mine(conn)) == 1
+

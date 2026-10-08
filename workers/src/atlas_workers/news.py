@@ -25,6 +25,8 @@ class Outcome:
     read: int = 0
     proposed: int = 0
     unreadable: int = 0
+    # Why the run ended before every document was read, when it did.
+    stopped: str | None = None
 
 
 def published_on(text: str | None) -> date | None:
@@ -89,8 +91,15 @@ def read_news(conn, store: RawStore, extractor: Extractor, apply: bool) -> tuple
             # The stored bytes are gone or are not a feed entry. It is left unread, to be looked at.
             outcome.unreadable += 1
             continue
+        try:
+            extracted = extractor.extract(document)
+        except Exception as error:  # noqa: BLE001 - a hosted model can fail in ways this code cannot list
+            # A model that is out of allowance or cannot be reached ends the run. What was read stands,
+            # and this document and those after it are still unread, so the next run takes them up.
+            outcome.stopped = f"{type(error).__name__}: {str(error)[:200]}"
+            break
         outcome.read += 1
-        result = verify(extractor.extract(document), document)
+        result = verify(extracted, document)
         # A round with no company named, once checked against the text, proposes nothing.
         funding = result.is_funding_announcement and result.company is not None
         payload = proposal(stored, result, extractor.name, document_id) if funding else None
@@ -121,6 +130,8 @@ def summarise(outcome: Outcome, proposals: list[dict]) -> str:
         + (f", {outcome.unreadable} could not be read" if outcome.unreadable else ""),
         "",
     ]
+    if outcome.stopped:
+        lines[1:1] = [f"Stopped early; the rest are left for the next run. The extractor failed with {outcome.stopped}"]
     for item in proposals:
         amount, currency, stage = item["amount"], item["currency"], item["stage"]
         money = f"{currency['value'] if currency else ''} {amount['value']:,.0f}".strip() if amount else "amount not stated"

@@ -5,6 +5,11 @@ Check a source again before changing how it is crawled. Nothing from these
 sources is republished: the text is stored privately for extraction, and the map
 shows only extracted facts with a link back to the article.
 
+Since Oct 8, 2026 the news reader (`atlas extract-news`) sends each stored entry's
+text to a hosted model on Groq to be read, unless it is run with `--extractor rules`.
+The text goes to Groq for that purpose only and is not published anywhere. Whether a
+publisher's terms allow that is part of what a person still has to check below.
+
 | Source | What is fetched | robots.txt (checked Oct 6, 2026) | Rate | Notes |
 |--------|-----------------|----------------------------------|------|-------|
 | TechCabal | RSS feed, `https://techcabal.com/feed/` | No robots.txt (404), so no restriction stated | One feed request per run | Terms of use not yet read by a person |
