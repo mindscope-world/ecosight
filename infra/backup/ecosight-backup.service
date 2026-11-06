@@ -1,0 +1,17 @@
+# Takes a backup of the hosted database and the files kept out of git, then
+# restores it into a scratch database to prove it can be restored.
+# Installed for one user by infra/backup/install.sh; see docs/backup.md.
+[Unit]
+Description=ecoSight backup and restore check
+Wants=network-online.target
+After=network-online.target
+OnFailure=ecosight-backup-failed.service
+
+[Service]
+Type=oneshot
+# A login shell, so pnpm and node are found as they are in a terminal.
+ExecStart=/bin/bash -lc 'exec "@REPO@/scripts/backup-and-verify.sh"'
+# What the run said, kept beside the backups. A failed run also shows as failed in `systemctl --user status`.
+StandardOutput=append:@REPO@/data/backups/backup.log
+StandardError=append:@REPO@/data/backups/backup.log
+TimeoutStartSec=30min

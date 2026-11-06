@@ -1,0 +1,8 @@
+# Says so on the desktop when the daily backup fails, so a failure is not found
+# weeks later. Without a desktop session it does nothing; the log still has it.
+[Unit]
+Description=Tell the user the ecoSight backup failed
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/notify-send --urgency=critical "ecoSight backup failed" "See data/backups/backup.log, or run: systemctl --user status ecosight-backup.service"

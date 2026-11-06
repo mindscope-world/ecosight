@@ -12,6 +12,8 @@
     "db:test": "pnpm --filter @atlas/db test-db",
     "users": "pnpm --filter @atlas/db users",
     "db:migrate:hosted": "pnpm --filter @atlas/db migrate-hosted",
+    "db:backup": "pnpm --filter @atlas/db backup",
+    "db:backup:verify": "pnpm --filter @atlas/db restore-check",
     "layers:build": "pnpm --filter @atlas/api build-layers",
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",

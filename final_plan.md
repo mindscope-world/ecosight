@@ -233,7 +233,7 @@ Independent of the frontend; can run alongside steps 4 and 5.
 | 8.5 | Privacy, Terms and Data Policy pages | Owner | Required before a public launch. Plain text in the footer today |
 | 8.6 | About, Methodology and Contact pages | Owner + frontend | Methodology can be drawn from `docs/sources.md` and the import rules |
 | 8.7 | Legal: data residency, ODPC registration | People | Long lead time; start during step 2 |
-| 8.8 | Backups with a tested restore | Backend | |
+| 8.8 | ~~Backups with a tested restore~~ | Done Oct 8, 2026 | `pnpm db:backup` dumps the hosted database and archives the files kept out of git; `pnpm db:backup:verify` restores the dump into a scratch database and checks the rows, views, triggers, access rules and the map's own queries, then unpacks the files. A daily systemd timer on the owner's machine does both and keeps 14 of each. The check was tested by damaging dumps three ways, and the real API was run against a restored copy. First run found a real fault: a plain restore stops on the dump's first line. `docs/backup.md` has the steps. **Still to do (owner):** set `BACKUP_COPY_DIR` to a second disk or an encrypted synced folder, because the files archive sits on the same disk as the files; keep `.env`'s keys in a password manager; rehearse a restore against a spare hosted project |
 | 8.9 | Security review and a load test at 10 times launch scale | Backend | |
 | 8.10 | Social preview image and sharing metadata | Frontend | Once the copy is final |
 | 8.11 | Offline caching | Frontend | |

@@ -30,6 +30,8 @@ Open <http://localhost:5173> for the landing page and <http://localhost:5173/map
 ```sh
 pnpm typecheck
 pnpm db:test      # build the separate test database with the synthetic sample
+pnpm db:backup    # dump the hosted database and archive the files kept out of git (docs/backup.md)
+pnpm db:backup:verify   # restore the newest dump into a scratch database and check it
 pnpm test         # API tests run against that test database
 pnpm build
 pnpm check:bundle # fails if either page's first-load JavaScript exceeds 600 KB compressed

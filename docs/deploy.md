@@ -177,6 +177,11 @@ console, and its client id and secret entered under Authentication > Providers.
    `WEB_URL` and `API_URL`. The Uptime workflow then checks the site, the API and
    the public basemap every half hour, and emails on failure.
 
+## Backups
+
+Backing up the hosted database, checking that a backup restores, and restoring it
+to a new project are in `docs/backup.md`.
+
 ## Limits of the free tiers
 
 - **Supabase pauses a free project after a week without activity.** The uptime
