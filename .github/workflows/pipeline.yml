@@ -1,0 +1,38 @@
+name: Pipeline
+# Crawls the news feeds, reads what was stored, flags stale records, and checks the run's health.
+# The schedule is off until the publishers' terms are read and the secrets below are set (docs/pipeline.md).
+on:
+  # schedule:
+  #   - cron: '17 4 * * *'      # the daily run, 07:17 in Nairobi
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      CRAWLER_USER_AGENT: ${{ vars.CRAWLER_USER_AGENT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+        working-directory: workers
+      - run: uv run atlas run-daily
+        working-directory: workers
+
+  health:
+    # A separate job on its own schedule would catch a pipeline that stopped running; here it checks the run just made.
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+        working-directory: workers
+      - run: uv run atlas health
+        working-directory: workers

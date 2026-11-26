@@ -11,14 +11,14 @@ from . import config
 from .extract import Document, Extractor, verify
 
 
-def make_extractor(name: str) -> Extractor:
+def make_extractor(name: str, model: str | None = None) -> Extractor:
     if name == "rules":
         from .extract.rules import RuleExtractor
 
         return RuleExtractor()
     from .extract.llm import LlmExtractor
 
-    return LlmExtractor()
+    return LlmExtractor(model_name=model)
 
 
 def cmd_crawl(args: argparse.Namespace) -> int:
@@ -51,13 +51,62 @@ def cmd_news(args: argparse.Namespace) -> int:
 
     with psycopg.connect(config.database_url()) as conn:
         store = RawStore(conn, LocalStorage(config.raw_store_dir()))
-        outcome, proposals = read_news(conn, store, make_extractor(args.extractor), args.apply)
+        outcome, proposals = read_news(conn, store, make_extractor(args.extractor, args.model), args.apply, args.auto_approve)
     print(summarise(outcome, proposals))
     if args.apply:
-        print(f"\n{outcome.proposed} proposed round(s) are waiting in the review queue. Nothing was published.")
+        waiting = outcome.proposed - outcome.auto_approved
+        print(f"\n{waiting} proposed round(s) are waiting in the review queue; {outcome.auto_approved} published automatically.")
     else:
         print("\nDry run: nothing was written to the database. Add --apply to queue these for review.")
     return 0
+
+
+def cmd_stale(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .stale import flag_stale, summarise
+
+    with psycopg.connect(config.database_url()) as conn:
+        print(summarise(flag_stale(conn, args.apply)))
+    print("\nSaved." if args.apply else "\nDry run: nothing was written to the database. Add --apply to save.")
+    return 0
+
+
+def cmd_run_daily(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from .crawl import make_client
+    from .pipeline import run_daily
+    from .sources import SOURCES
+    from .store import LocalStorage, RawStore
+
+    with psycopg.connect(config.database_url()) as conn, make_client() as client:
+        store = RawStore(conn, LocalStorage(config.raw_store_dir()))
+        status, stats = run_daily(conn, store, client, SOURCES, make_extractor(args.extractor, args.model), args.auto_approve)
+    print(json.dumps({"status": status, **stats}, indent=2))
+    return 0 if status == "ok" else 1
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    import os
+
+    import psycopg
+
+    from .pipeline import check_health, notify
+
+    with psycopg.connect(config.database_url()) as conn:
+        problems = check_health(conn)
+    if not problems:
+        print("The pipeline is healthy.")
+        return 0
+    print("\n".join(problems), file=sys.stderr)
+    hook = os.environ.get("ALERT_WEBHOOK_URL", "").strip()
+    if hook:
+        try:
+            notify(problems, hook)
+        except Exception as error:  # noqa: BLE001 - the exit code still reports the problem
+            print(f"Could not send the alert: {error}", file=sys.stderr)
+    return 1
 
 
 def cmd_extract(args: argparse.Namespace) -> int:
@@ -75,7 +124,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
     if not items:
         print(f"{args.labelled} has no labelled items", file=sys.stderr)
         return 1
-    report = evaluate(make_extractor(args.extractor), items)
+    report = evaluate(make_extractor(args.extractor, args.model), items)
     print(json.dumps(report.as_dict(), indent=2) if args.json else report.as_text())
     if args.failures:
         print("\n" + "\n".join(report.failures))
@@ -270,6 +319,7 @@ def main() -> int:
     crawl.set_defaults(run=cmd_crawl)
 
     extractors = {"choices": ["rules", "llm"], "default": "rules"}
+    model_help = "Groq model for the llm extractor (default GROQ_MODEL, openai/gpt-oss-120b); to choose between models, run `atlas eval --extractor llm --model X` for each on the same labelled set"
     extract = commands.add_parser("extract", help="extract one stored document (a JSON file)")
     extract.add_argument("document")
     extract.add_argument("--extractor", **extractors)
@@ -278,12 +328,28 @@ def main() -> int:
     news = commands.add_parser("extract-news", help="read stored news and queue the funding rounds it reports for review (dry run unless --apply)")
     # The model reads more of each report than the rules do (eval/README.md); every result still waits for a reviewer.
     news.add_argument("--extractor", choices=extractors["choices"], default="llm", help="llm (the default, needs GROQ_API_KEY) or rules")
+    news.add_argument("--model", help=model_help)
+    news.add_argument("--auto-approve", action="store_true", help="publish, without a reviewer, a round of USD 1 million or less that passes every check in confidence.py (off by default)")
     news.add_argument("--apply", action="store_true", help="write to the database")
     news.set_defaults(run=cmd_news)
+
+    daily = commands.add_parser("run-daily", help="crawl every source, read what was stored, flag stale records, and record the run")
+    daily.add_argument("--extractor", choices=extractors["choices"], default="llm")
+    daily.add_argument("--model", help=model_help)
+    daily.add_argument("--auto-approve", action="store_true", help="as for extract-news")
+    daily.set_defaults(run=cmd_run_daily)
+
+    health = commands.add_parser("health", help="say what is wrong with the daily run, if anything; exits 1 and posts to ALERT_WEBHOOK_URL when something is")
+    health.set_defaults(run=cmd_health)
+
+    stale = commands.add_parser("flag-stale", help="flag organisations not confirmed for 12 months (dry run unless --apply)")
+    stale.add_argument("--apply", action="store_true", help="write to the database")
+    stale.set_defaults(run=cmd_stale)
 
     evaluate = commands.add_parser("eval", help="score an extractor on the labelled set")
     evaluate.add_argument("--labelled", default=str(config.REPO_ROOT / "eval" / "labelled.jsonl"))
     evaluate.add_argument("--extractor", **extractors)
+    evaluate.add_argument("--model", help=model_help)
     evaluate.add_argument("--json", action="store_true", help="print the report as JSON")
     evaluate.add_argument("--failures", action="store_true", help="list each wrong field")
     evaluate.set_defaults(run=cmd_eval)

@@ -1,5 +1,6 @@
 import {
   ACTIVE_INVESTOR_DAYS,
+  type Area,
   decodeFilters,
   INVESTOR_TYPES,
   type Filters,
@@ -19,6 +20,7 @@ export const FilterQuery = {
   fd: Type.Optional(Type.String({ description: 'Years with a funding round, from-to' })),
   fi: Type.Optional(Type.String({ description: 'Investors only: active, lead or portfolio' })),
   fe: Type.Optional(Type.String({ description: 'Event start dates, from_to (YYYY-MM-DD)' })),
+  fz: Type.Optional(Type.String({ description: 'Area: c:lon,lat,km for a circle, p:lon,lat_lon,lat_... for a polygon' })),
 };
 
 export function filtersFrom(query: Record<string, unknown>): Filters {
@@ -28,6 +30,19 @@ export function filtersFrom(query: Record<string, unknown>): Filters {
     if (typeof value === 'string') params.set(key, value);
   }
   return decodeFilters(params);
+}
+
+/**
+ * True when the place `geom` lies in the area drawn on the map; nothing is added when there is none.
+ * A circle is measured on the sphere and a polygon on the longitude and latitude plane, the way
+ * `inArea` in the shared schema package does. Every number comes from the validated filter, never raw text.
+ */
+export function areaCondition(sql: Sql, area: Area | null, geom: ReturnType<Sql>) {
+  if (area === null) return sql``;
+  if (area.type === 'circle')
+    return sql`and st_distancesphere(${geom}::geometry, st_setsrid(st_makepoint(${area.lon}, ${area.lat}), 4326)) <= ${area.km * 1000}`;
+  const ring = [...area.ring, area.ring[0]!].map(([lon, lat]) => `${lon} ${lat}`).join(', ');
+  return sql`and st_contains(st_geomfromtext(${`POLYGON((${ring}))`}, 4326), ${geom}::geometry)`;
 }
 
 /**
@@ -45,12 +60,13 @@ export function organisationConditions(sql: Sql, filters: Filters) {
     ${f.foundedFrom !== null ? sql`and g.founded_year >= ${f.foundedFrom}` : none}
     ${f.foundedTo !== null ? sql`and g.founded_year <= ${f.foundedTo}` : none}
     ${
-      f.city !== null || f.country !== null
+      f.city !== null || f.country !== null || f.area !== null
         ? sql`and exists (
             select 1 from office o
             where o.organisation_id = g.id and o.valid_to is null
               ${f.city !== null ? sql`and o.city = ${f.city}` : none}
               ${f.country !== null ? sql`and o.country = ${f.country}` : none}
+              ${areaCondition(sql, f.area, sql`o.geom`)}
           )`
         : none
     }
@@ -95,5 +111,6 @@ export function eventConditions(sql: Sql, filters: Filters) {
     ${filters.country !== null ? sql`and country = ${filters.country}` : none}
     ${filters.eventFrom !== null ? sql`and starts_at::date >= ${filters.eventFrom}::date` : none}
     ${filters.eventTo !== null ? sql`and starts_at::date <= ${filters.eventTo}::date` : none}
+    ${areaCondition(sql, filters.area, sql`geom`)}
   `;
 }

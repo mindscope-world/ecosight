@@ -1,7 +1,7 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
 import type { Sql } from '../db.js';
-import { eventConditions, FilterQuery, filtersFrom, organisationConditions } from '../filters.js';
+import { areaCondition, eventConditions, FilterQuery, filtersFrom, organisationConditions } from '../filters.js';
 import { OrgType } from '../schemas.js';
 
 const FeatureCollection = Type.Object({
@@ -62,6 +62,49 @@ export const layerRoutes: FastifyPluginAsyncTypebox<{ sql: Sql }> = async (app, 
           -- With a place filter, only the offices in that place are drawn.
           and (${filters.city}::text is null or o.city = ${filters.city})
           and (${filters.country}::text is null or o.country = ${filters.country})
+          ${areaCondition(sql, filters.area, sql`o.geom`)}
+      `;
+      reply.header('cache-control', 'public, max-age=60');
+      return { type: 'FeatureCollection' as const, features: row?.features ?? [] };
+    },
+  );
+
+  app.get(
+    '/layers/rounds.geojson',
+    {
+      schema: {
+        summary: 'Published funding rounds, each placed at its organisation\'s main office',
+        response: { 200: FeatureCollection },
+      },
+    },
+    async (_req, reply) => {
+      // One point per round, at the head office when there is one. A round with no office on record is left out.
+      // The date is as precise as the source gave it: a month or a year is not made into a day.
+      const [row] = await sql<{ features: unknown[] }[]>`
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'type', 'Feature',
+          'geometry', st_asgeojson(o.geom, 6)::jsonb,
+          'properties', jsonb_build_object(
+            'round_id', r.id,
+            'org_id', o.organisation_id,
+            'name', o.name,
+            'types', o.types,
+            'sector', o.sectors[1],
+            'stage', r.stage,
+            'amount_usd', r.amount_usd::float8,
+            'announced_on', r.announced_on::text,
+            'announced_precision', r.announced_precision,
+            'city', o.city,
+            'country', o.country,
+            'precision', o.precision
+          )
+        ) order by r.announced_on nulls first, r.id), '[]'::jsonb) as features
+        from funding_round r
+        join lateral (
+          select * from public_office p where p.organisation_id = r.organisation_id
+          order by p.is_hq desc, p.valid_from nulls last, p.office_id limit 1
+        ) o on true
+        where r.status = 'published'
       `;
       reply.header('cache-control', 'public, max-age=60');
       return { type: 'FeatureCollection' as const, features: row?.features ?? [] };

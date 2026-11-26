@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countActive, decodeFilters, encodeFilters, matches, matchesEvent, narrowsOrganisations, NO_FILTERS } from './filters';
+import { circleRing, countActive, distanceKm, inArea, decodeFilters, encodeFilters, matches, matchesEvent, narrowsOrganisations, NO_FILTERS } from './filters';
 import { decodeUrlState, encodeUrlState } from './urlState';
 
 const id = '3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c';
@@ -127,12 +127,45 @@ describe('filters', () => {
     const all = {
       sectors: ['fintech'], stages: ['seed'], city: 'Nairobi', country: 'KE', status: 'active' as const,
       foundedFrom: 2015, foundedTo: null, raisedMin: 1_000_000, fundedFrom: null, fundedTo: 2023,
-      investor: 'lead' as const, eventFrom: '2026-10-01', eventTo: null,
+      investor: 'lead' as const, eventFrom: '2026-10-01', eventTo: null, area: null,
     };
     const query = encodeFilters(all).join('&');
     expect(query).toBe('fs=fintech&fg=seed&fc=Nairobi&fk=KE&fa=active&fy=2015-&fr=1000000&fd=-2023&fi=lead&fe=2026-10-01_');
     expect(decodeFilters(new URLSearchParams(query))).toEqual(all);
     expect(countActive(all)).toBe(10);
     expect(decodeFilters(new URLSearchParams('fk=Kenya&fi=whale&fe=soon_2026-13-01&fd=x-y'))).toEqual(NO_FILTERS);
+  });
+});
+
+describe('area filter', () => {
+  const circle = { type: 'circle' as const, lon: 36.82, lat: -1.29, km: 5 };
+  const square = { type: 'polygon' as const, ring: [[36.8, -1.3], [36.9, -1.3], [36.9, -1.2], [36.8, -1.2]] as [number, number][] };
+
+  it('round-trips a circle and a polygon through the link', () => {
+    for (const area of [circle, square]) {
+      const filters = { ...NO_FILTERS, area };
+      expect(countActive(filters)).toBe(1);
+      expect(decodeFilters(new URLSearchParams(encodeFilters(filters).join('&')))).toEqual(filters);
+    }
+    expect(encodeFilters({ ...NO_FILTERS, area: circle })).toEqual(['fz=c:36.82,-1.29,5']);
+  });
+
+  it('drops an area that is malformed or out of bounds', () => {
+    for (const bad of ['c:36,-1', 'c:36,-1,0', 'c:36,-1,99999', 'c:200,0,5', 'p:1,1_2,2', 'x:1,2,3', 'c36,-1,5', 'p:a,b_c,d_e,f'])
+      expect(decodeFilters(new URLSearchParams({ fz: bad })).area).toBeNull();
+  });
+
+  it('tells what is inside', () => {
+    expect(inArea(36.82, -1.29, circle)).toBe(true);
+    expect(inArea(36.82, -1.2, circle)).toBe(false); // about 10 km north
+    expect(inArea(36.85, -1.25, square)).toBe(true);
+    expect(inArea(36.95, -1.25, square)).toBe(false);
+    expect(inArea(0, 0, null)).toBe(true);
+  });
+
+  it('draws a circle whose edge is the radius away', () => {
+    const ring = circleRing(36.82, -1.29, 5);
+    expect(ring[0]).toEqual(ring.at(-1));
+    for (const point of ring) expect(distanceKm([36.82, -1.29], point)).toBeCloseTo(5, 2);
   });
 });

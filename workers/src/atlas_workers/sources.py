@@ -15,4 +15,5 @@ class FeedSource:
 SOURCES: tuple[FeedSource, ...] = (
     FeedSource("techcabal", "TechCabal", "https://techcabal.com/feed/"),
     FeedSource("disrupt-africa", "Disrupt Africa", "https://disruptafrica.com/feed/"),
+    FeedSource("techmoran", "TechMoran", "https://techmoran.com/feed/"),
 )

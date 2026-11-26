@@ -63,6 +63,8 @@ export const OrgDetail = Type.Object({
   funding_note: Nullable(Type.String()),
   // The organisation's own logo as a data URL, so the app asks no other site for it. Null when none is held.
   logo: Nullable(Type.String()),
+  // When the record was found to be unconfirmed for 12 months. Null while its facts are current.
+  stale_since: Nullable(Type.String({ format: 'date-time' })),
   rounds: Type.Array(
     Type.Object({
       id: Type.String({ format: 'uuid' }),

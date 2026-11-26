@@ -82,11 +82,11 @@ def parse_response(content: str) -> ExtractionResult:
     )
 
 
-def groq_model() -> BaseChatModel:
+def groq_model(name: str | None = None) -> BaseChatModel:
     from langchain_groq import ChatGroq
 
     return ChatGroq(
-        model=config.GROQ_MODEL,
+        model=name or config.GROQ_MODEL,
         api_key=config.groq_api_key(),
         temperature=0,
         # The free tier is rate limited; retries wait out a 429.
@@ -97,7 +97,7 @@ def groq_model() -> BaseChatModel:
 
 class LlmExtractor:
     def __init__(self, model: BaseChatModel | None = None, model_name: str | None = None) -> None:
-        self.model = model or groq_model()
+        self.model = model or groq_model(model_name)
         self.name = f"llm:{model_name or config.GROQ_MODEL}:{PROMPT_VERSION}"
 
     def extract(self, document: Document) -> ExtractionResult:

@@ -12,7 +12,7 @@ import { summariseCountries } from './countries';
 import { SUBSETS } from './subsets';
 
 /** One tab per kind of organisation the map draws. Events have no table yet: there are none on record. */
-const TABS = POINT_LAYERS.filter((layer) => layer.id !== 'events');
+const TABS = POINT_LAYERS.filter((layer) => layer.id !== 'events' && !layer.overlay);
 const PAGE_SIZE = 25;
 /** The tab that is not a kind of organisation: every kind, by country. */
 const COUNTRIES = 'countries';

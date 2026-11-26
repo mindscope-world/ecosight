@@ -14,6 +14,7 @@ publisher's terms allow that is part of what a person still has to check below.
 |--------|-----------------|----------------------------------|------|-------|
 | TechCabal | RSS feed, `https://techcabal.com/feed/` | No robots.txt (404), so no restriction stated | One feed request per run | Terms of use not yet read by a person |
 | Disrupt Africa | RSS feed, `https://disruptafrica.com/feed/` | `Disallow:` empty, everything allowed | One feed request per run | Terms of use not yet read by a person |
+| TechMoran | RSS feed, `https://techmoran.com/feed/` | `Disallow:` empty, everything allowed (checked Nov 26, 2026) | One feed request per run | Terms of use not yet read by a person |
 
 Rules the crawler follows for every source:
 
@@ -24,7 +25,7 @@ Rules the crawler follows for every source:
   with a working contact address before running on a schedule.
 - It waits 5 seconds between the robots.txt request and the feed request.
 
-Considered and left out: Techpoint Africa (its feed returned 403 to the crawler's
+Considered and left out: Ventureburn (its robots.txt allows crawling but states `ai-train=no, use=reference` and reserves rights under the EU text-and-data-mining rules, and the news reader sends text to a model; ask the publisher first). Techpoint Africa (its feed returned 403 to the crawler's
 user agent, and robots.txt asks for a 10 second crawl delay).
 
 Open: a person needs to read each publisher's terms of use and record the result

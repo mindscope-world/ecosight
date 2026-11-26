@@ -16,6 +16,14 @@ export function hoverCard({ layer, properties: record }: PickedRecord): HoverCar
     const when = text(record.starts_at);
     return { title: name, lines: ['Event', [text(record.venue), place].filter(Boolean).join(', '), when ? formatDateTime(when) : ''].filter(Boolean) };
   }
+  if (layer === 'activity') {
+    const sum = Number(record.amount_usd) || 0;
+    const stage = text(record.stage);
+    const when = text(record.announced_on);
+    const precision = text(record.announced_precision);
+    const date = when ? (precision === 'year' ? when.slice(0, 4) : precision === 'month' ? when.slice(0, 7) : when) : '';
+    return { title: name, lines: ['Funding round' + (stage ? ` · ${stage}` : ''), sum > 0 ? formatUsd(sum) : 'Amount not stated', date, place].filter(Boolean) };
+  }
   const types = Array.isArray(record.types) ? (record.types as string[]) : [];
   const kind = types.map((type) => TYPE_LABELS[type] ?? type).join(' · ') || (POINT_LAYERS.find((entry) => entry.id === layer)?.noun ?? '');
   const sectors = Array.isArray(record.sectors) ? (record.sectors as string[]).slice(0, 2).join(' / ') : '';

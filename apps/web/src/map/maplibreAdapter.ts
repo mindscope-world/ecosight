@@ -1,4 +1,5 @@
-import type { FeatureCollection, LineString, Point } from 'geojson';
+import { AREA_MAX_KM, AREA_MAX_VERTICES, circleRing, distanceKm, type Area } from '@atlas/schema';
+import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import {
   Map as MapLibreMap,
   NavigationControl,
@@ -15,7 +16,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ELEVATION_TILES, LABEL_FONT, type Basemap } from '../config';
 import { SHAPE_PATHS } from '../entities';
-import type { Camera, HeatLayerSpec, HoverCard, MapAdapter, PickedRecord, PointLayerSpec } from './adapter';
+import type { Camera, DrawMode, HeatLayerSpec, HoverCard, MapAdapter, PickedRecord, PointLayerSpec } from './adapter';
 import { distinctRecords, indexSpots, markerId, sharedSpots, spotKey, type Placed, type SpotIndex } from './spots';
 import { tintStyle } from './tint';
 
@@ -27,6 +28,10 @@ const ICON_PIXELS = 48;
 const LINKS = 'links';
 const SHARED = 'shared-spots';
 const SELECTED = 'selected';
+const AREA = 'area';
+const DRAFT = 'area-draft';
+// A click this close to a polygon's first corner, in pixels, closes it.
+const CLOSE_REACH = 10;
 // One beat of the ring around the selected record, in milliseconds.
 const PULSE_MS = 1600;
 // How far from the pointer, in pixels, a marker still counts as clicked.
@@ -86,6 +91,8 @@ export class MapLibreAdapter implements MapAdapter {
   private pickListener: (records: PickedRecord[]) => void = () => {};
   private describe: (record: PickedRecord) => HoverCard | null = () => null;
   private readonly hoverPopup = new Popup({ closeButton: false, closeOnClick: false, offset: 14, maxWidth: '260px', className: 'atlas-hover' });
+  private area: Area | null = null;
+  private drawing: { mode: DrawMode; points: [number, number][]; cursor: [number, number] | null; listener: (area: Area | null) => void } | null = null;
   private highlight: [number, number][] = [];
   private pulse = 0;
   private styleReady = false;
@@ -110,10 +117,27 @@ export class MapLibreAdapter implements MapAdapter {
       this.drawLinks();
       this.drawShared();
       this.drawHighlight();
+      this.drawArea();
     });
     // One listener for every layer. A listener per layer would each answer for
     // its own marker, and the last to answer would hide the others.
-    this.map.on('click', (event) => void this.pick(event.point.x, event.point.y));
+    this.map.on('click', (event) => {
+      if (this.drawing) this.drawClick([event.lngLat.lng, event.lngLat.lat], event.point);
+      else void this.pick(event.point.x, event.point.y);
+    });
+    this.map.on('mousemove', (event) => {
+      if (!this.drawing) return;
+      this.drawing.cursor = [event.lngLat.lng, event.lngLat.lat];
+      this.showDraft();
+    });
+    this.map.on('dblclick', (event) => {
+      if (this.drawing?.mode !== 'polygon') return;
+      event.preventDefault();
+      // The two clicks of the double click each added a corner at the same place.
+      this.drawing.points.pop();
+      this.finishPolygon();
+    });
+    window.addEventListener('keydown', this.onKey);
     this.setBasemap(options.basemap);
   }
 
@@ -459,6 +483,124 @@ export class MapLibreAdapter implements MapAdapter {
     else this.drawLinks();
   }
 
+  setArea(area: Area | null): void {
+    this.area = area;
+    const source = this.map.getSource<GeoJSONSource>(AREA);
+    if (source) source.setData(this.areaData(area));
+    else this.drawArea();
+  }
+
+  private areaData(area: Area | null): FeatureCollection<Polygon> {
+    return { type: 'FeatureCollection', features: area ? [this.areaFeature(area)] : [] };
+  }
+
+  private areaFeature(area: Area): Feature<Polygon> {
+    const ring = area.type === 'circle' ? circleRing(area.lon, area.lat, area.km) : [...area.ring, area.ring[0]!];
+    return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} };
+  }
+
+  /** The selected area, and the one being drawn, under the markers and over the basemap. */
+  private drawArea(): void {
+    const map = this.map;
+    if (!this.styleReady || map.getSource(AREA)) return;
+    const above = map.getStyle().layers.find((layer) => layer.id.endsWith('-clusters'))?.id;
+    map.addSource(AREA, { type: 'geojson', data: this.areaData(this.area) });
+    map.addSource(DRAFT, { type: 'geojson', data: this.draftData() });
+    for (const [id, opacity, dash] of [[AREA, 0.1, [1]], [DRAFT, 0.06, [2, 2]]] as const) {
+      map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': '#22d3ee', 'fill-opacity': opacity } }, above);
+      map.addLayer({ id: `${id}-line`, type: 'line', source: id, paint: { 'line-color': '#22d3ee', 'line-width': 2, 'line-dasharray': [...dash] } }, above);
+    }
+  }
+
+  private draftData(): FeatureCollection {
+    const draw = this.drawing;
+    const features: Feature[] = [];
+    if (draw) {
+      const { points, cursor } = draw;
+      if (draw.mode === 'circle' && points[0] && cursor) {
+        const km = Math.max(0.05, distanceKm(points[0], cursor));
+        features.push(this.areaFeature({ type: 'circle', lon: points[0][0], lat: points[0][1], km }));
+      } else if (draw.mode === 'polygon' && points.length) {
+        const path = cursor ? [...points, cursor] : points;
+        features.push(
+          path.length >= 3
+            ? this.areaFeature({ type: 'polygon', ring: path })
+            : { type: 'Feature', geometry: { type: 'LineString', coordinates: path }, properties: {} },
+        );
+      }
+      // The corners placed so far.
+      for (const point of points) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: point }, properties: {} });
+    }
+    return { type: 'FeatureCollection', features };
+  }
+
+  private showDraft(): void {
+    this.map.getSource<GeoJSONSource>(DRAFT)?.setData(this.draftData());
+  }
+
+  startDraw(mode: DrawMode, listener: (area: Area | null) => void): void {
+    // Replacing a drawing in progress is not a cancellation: the caller asked for the new one.
+    if (this.drawing) this.endDraw();
+    this.drawing = { mode, points: [], cursor: null, listener };
+    this.hoverPopup.remove();
+    this.map.getCanvas().style.cursor = 'crosshair';
+    this.map.doubleClickZoom.disable();
+    this.showDraft();
+  }
+
+  cancelDraw(): void {
+    const draw = this.drawing;
+    if (!draw) return;
+    this.endDraw();
+    draw.listener(null);
+  }
+
+  private endDraw(): void {
+    this.drawing = null;
+    this.map.getCanvas().style.cursor = '';
+    this.map.doubleClickZoom.enable();
+    this.showDraft();
+  }
+
+  private finish(area: Area): void {
+    const draw = this.drawing!;
+    this.endDraw();
+    draw.listener(area);
+  }
+
+  private drawClick(at: [number, number], pixel: { x: number; y: number }): void {
+    const draw = this.drawing!;
+    if (draw.mode === 'circle') {
+      if (!draw.points.length) {
+        draw.points.push(at);
+        this.showDraft();
+        return;
+      }
+      const km = Math.min(AREA_MAX_KM, Math.max(0.1, Math.round(distanceKm(draw.points[0]!, at) * 10) / 10));
+      this.finish({ type: 'circle', lon: draw.points[0]![0], lat: draw.points[0]![1], km });
+      return;
+    }
+    const first = draw.points[0];
+    if (first && draw.points.length >= 3) {
+      const start = this.map.project(first);
+      if (Math.hypot(start.x - pixel.x, start.y - pixel.y) <= CLOSE_REACH) return this.finishPolygon();
+    }
+    if (draw.points.length < AREA_MAX_VERTICES) draw.points.push(at);
+    this.showDraft();
+  }
+
+  private finishPolygon(): void {
+    const draw = this.drawing;
+    if (!draw || draw.points.length < 3) return;
+    this.finish({ type: 'polygon', ring: draw.points });
+  }
+
+  private readonly onKey = (event: KeyboardEvent): void => {
+    if (!this.drawing) return;
+    if (event.key === 'Escape') this.cancelDraw();
+    else if (event.key === 'Enter' && this.drawing.mode === 'polygon') this.finishPolygon();
+  };
+
   private linkData(): FeatureCollection<LineString> {
     return {
       type: 'FeatureCollection',
@@ -530,7 +672,7 @@ export class MapLibreAdapter implements MapAdapter {
    * What is drawn, in numbers, and where a place falls on the screen. For the
    * browser tests, which cannot see a canvas: nothing in the app reads this.
    */
-  inspect(): { markers: number; clusters: number; ringed: number; lines: number; card: string | null } {
+  inspect(): { markers: number; clusters: number; ringed: number; lines: number; card: string | null; area: boolean; drawing: boolean } {
     const map = this.map;
     const drawn = (suffix: string) =>
       [...this.layers]
@@ -542,6 +684,8 @@ export class MapLibreAdapter implements MapAdapter {
       clusters: map.queryRenderedFeatures({ layers: drawn('clusters') }).length,
       ringed: this.highlight.length,
       lines: this.links.length,
+      area: this.area !== null,
+      drawing: this.drawing !== null,
       card: this.hoverPopup.isOpen() ? (this.hoverPopup.getElement()?.textContent ?? '') : null,
     };
   }
@@ -553,6 +697,7 @@ export class MapLibreAdapter implements MapAdapter {
   }
 
   destroy(): void {
+    window.removeEventListener('keydown', this.onKey);
     cancelAnimationFrame(this.pulse);
     this.hoverPopup.remove();
     this.map.remove();

@@ -34,6 +34,8 @@ export interface PointLayerDef {
   color: string;
   shape: Shape;
   defaultOn: boolean;
+  /** Drawn over the organisation layers and not one of them: it has no entity type of its own. */
+  overlay?: boolean;
 }
 
 export interface HeatLayerDef {
@@ -79,6 +81,8 @@ export const LAYERS: LayerDef[] = [
   { kind: 'points', id: 'universities', label: 'Universities', noun: 'University', types: ['university'], color: VIOLET, shape: 'building', defaultOn: true },
   { kind: 'points', id: 'government', label: 'Government', noun: 'Government program', types: ['government_program'], color: VIOLET, shape: 'triangle', defaultOn: true },
   { kind: 'points', id: 'corporates', label: 'Corporates', noun: 'Corporate', types: ['corporate'], color: BLUE, shape: 'square', defaultOn: true },
+  // Funding rounds as they happened, for the timeline. It is not a kind of organisation, so it is left out of the entity filters.
+  { kind: 'points', id: 'activity', label: 'Recent activity', noun: 'Funding round', types: [], color: '#f2d14b', shape: 'hub', defaultOn: false, overlay: true },
   { kind: 'heat', id: 'funding-heat', label: 'Funding heatmap', source: 'startups', weight: { property: 'raised_usd', max: 5_000_000 }, ramp: CYAN_RAMP, defaultOn: false },
   // Three separate measures of where things are: each counts one kind of organisation and nothing else.
   { kind: 'heat', id: 'density', label: 'Startup density', source: 'startups', ramp: BLUE_RAMP, defaultOn: false },
@@ -121,7 +125,7 @@ export const VIEW_LABELS: Record<View, string> = {
 
 export const VIEW_LAYERS: Record<View, string[]> = {
   map: DEFAULT_LAYER_IDS,
-  discover: POINT_LAYERS.map((layer) => layer.id),
+  discover: POINT_LAYERS.filter((layer) => !layer.overlay).map((layer) => layer.id),
   ecosystems: ['startups', 'density'],
   investors: ['investors'],
   startups: ['startups'],
