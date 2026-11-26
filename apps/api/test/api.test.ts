@@ -173,6 +173,7 @@ describe('GET /rounds/:id', () => {
 
     // A logo is given as a data URL, so the app asks no other site for it; none held is null.
     expect(first.logo).toBeNull();
+    expect(first.stale_since).toBeNull();
     const firstId = await id('sample-startup-01');
     try {
       await sql`

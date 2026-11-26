@@ -50,6 +50,8 @@ export interface OrgDetail {
   funding_note: string | null;
   /** The organisation's own logo as a data URL, or null when none is held. */
   logo: string | null;
+  /** When the record was found unconfirmed for 12 months, or null while its facts are current. */
+  stale_since: string | null;
   offices: {
     id: string;
     is_hq: boolean;

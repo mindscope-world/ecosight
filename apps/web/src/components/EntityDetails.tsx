@@ -175,6 +175,11 @@ function OrgBody({
             )}
           </div>
         </div>
+        {org.stale_since && (
+          <p className="m-0 mt-3 rounded border border-line px-2 py-1.5 text-[11px] leading-snug text-mute">
+            Not confirmed for over 12 months, so these details may be out of date.
+          </p>
+        )}
         <div className="mt-3 grid grid-cols-3 gap-2">
           <Fact label="Founded" value={org.founded_year ?? '—'} />
           {company ? (
