@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { encodeFilters, matches, NO_FILTERS, type Filters } from '@atlas/schema';
+import { encodeFilters, inArea, matches, NO_FILTERS, type Filters } from '@atlas/schema';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../src/app.js';
 import { buildLayers } from '../src/build-layers.js';
@@ -332,6 +332,20 @@ describe('GET /stats', () => {
   });
 });
 
+describe('rounds layer', () => {
+  it('has one point per published round, dated as precisely as the source gave', async () => {
+    const { features } = (await app.inject('/layers/rounds.geojson')).json();
+    expect(features.length).toBeGreaterThan(0);
+    for (const f of features) {
+      expect(f.geometry.type).toBe('Point');
+      expect(f.properties).toMatchObject({ round_id: expect.any(String), org_id: expect.any(String), name: expect.any(String) });
+      if (f.properties.announced_on) expect(f.properties.announced_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+    const [counted] = await sql<{ n: number }[]>`select count(*)::int as n from funding_round r join organisation g on g.id = r.organisation_id where r.status = 'published' and g.status = 'published'`;
+    expect(features.length).toBeLessThanOrEqual(counted!.n);
+  });
+});
+
 describe('filters', () => {
   const query = (filters: Filters) => encodeFilters(filters).join('&');
   const cases: [string, Partial<Filters>][] = [
@@ -349,15 +363,30 @@ describe('filters', () => {
     ['a city', { city: 'Nairobi' }],
     ['a city with no records', { city: 'Mombasa' }],
     ['a country', { country: 'KE' }],
+    ['a circle', { area: { type: 'circle', lon: 36.82, lat: -1.29, km: 4 } }],
+    ['a polygon', { area: { type: 'polygon', ring: [[36.7, -1.4], [36.85, -1.4], [36.85, -1.25], [36.7, -1.25]] } }],
+    ['a circle and a sector', { area: { type: 'circle', lon: 36.82, lat: -1.29, km: 8 }, sectors: ['fintech'] }],
     ['several at once', { sectors: ['cleantech'], status: 'active', fundedFrom: 2024, investor: 'lead' }],
   ];
 
   it.each(cases)('the API and the browser agree on %s', async (_name, partial) => {
     const filters = { ...NO_FILTERS, ...partial };
     const all = (await app.inject('/layers/offices.geojson')).json().features;
-    const expected = all.filter((f: any) => matches(f.properties, filters)).map((f: any) => f.properties.office_id);
+    const expected = all
+      .filter((f: any) => matches(f.properties, filters) && inArea(f.geometry.coordinates[0], f.geometry.coordinates[1], filters.area))
+      .map((f: any) => f.properties.office_id);
     const served = (await app.inject(`/layers/offices.geojson?${query(filters)}`)).json().features;
     expect(served.map((f: any) => f.properties.office_id).sort()).toEqual(expected.sort());
+  });
+
+  it('an area keeps some offices and drops others', async () => {
+    const near = { ...NO_FILTERS, area: { type: 'circle' as const, lon: 36.82, lat: -1.29, km: 4 } };
+    const total = (await app.inject('/layers/offices.geojson')).json().features.length;
+    const inside = (await app.inject(`/layers/offices.geojson?${query(near)}`)).json().features.length;
+    expect(inside).toBeGreaterThan(0);
+    expect(inside).toBeLessThan(total);
+    // The figures follow the same area.
+    expect((await app.inject(`/stats?${query(near)}`)).statusCode).toBe(200);
   });
 
   it('are not all trivially empty or full', async () => {
@@ -444,8 +473,8 @@ describe('static layer build', () => {
   it('writes the same data the API serves', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'layers-'));
     const sizes = await buildLayers(sql, dir);
-    expect((await readdir(dir)).sort()).toEqual(['events.geojson', 'manifest.json', 'offices.geojson', 'stats.json']);
-    expect(Object.keys(sizes)).toHaveLength(4);
+    expect((await readdir(dir)).sort()).toEqual(['events.geojson', 'manifest.json', 'offices.geojson', 'rounds.geojson', 'stats.json']);
+    expect(Object.keys(sizes)).toHaveLength(5);
 
     const offices = JSON.parse(await readFile(join(dir, 'offices.geojson'), 'utf8'));
     expect(offices).toEqual((await app.inject('/layers/offices.geojson')).json());
@@ -467,6 +496,7 @@ describe('GET /openapi.json', () => {
       '/graph/top',
       '/layers/events.geojson',
       '/layers/offices.geojson',
+      '/layers/rounds.geojson',
       '/me',
       '/me/saved',
       '/me/saved/{id}',

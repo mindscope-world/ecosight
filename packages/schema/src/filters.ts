@@ -2,6 +2,53 @@
  * Filters over the map's records, shared by the web app, the API and share links.
  * `matches` here and the API's SQL must agree; an API test compares them.
  */
+/** A place drawn on the map: a circle round a point, or a polygon. Longitude and latitude in degrees. */
+export type Area =
+  | { type: 'circle'; lon: number; lat: number; km: number }
+  | { type: 'polygon'; ring: [number, number][] };
+
+export const AREA_MAX_KM = 2000;
+export const AREA_MAX_VERTICES = 40;
+
+const EARTH_KM = 6371.0088;
+const rad = (degrees: number) => (degrees * Math.PI) / 180;
+
+/** Great-circle distance between two places, in kilometres. */
+export function distanceKm(a: [number, number], b: [number, number]): number {
+  const [dLon, dLat] = [rad(b[0] - a[0]), rad(b[1] - a[1])];
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a[1])) * Math.cos(rad(b[1])) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** The outline of a circle on the globe, as a closed ring of points for drawing. */
+export function circleRing(lon: number, lat: number, km: number, steps = 64): [number, number][] {
+  const ring: [number, number][] = [];
+  const angular = km / EARTH_KM;
+  for (let i = 0; i <= steps; i++) {
+    const bearing = (2 * Math.PI * (i % steps)) / steps;
+    const lat2 = Math.asin(Math.sin(rad(lat)) * Math.cos(angular) + Math.cos(rad(lat)) * Math.sin(angular) * Math.cos(bearing));
+    const lon2 =
+      rad(lon) +
+      Math.atan2(Math.sin(bearing) * Math.sin(angular) * Math.cos(rad(lat)), Math.cos(angular) - Math.sin(rad(lat)) * Math.sin(lat2));
+    ring.push([((((lon2 * 180) / Math.PI + 540) % 360) - 180), (lat2 * 180) / Math.PI]);
+  }
+  return ring;
+}
+
+/** True when a place lies inside the area. A polygon is read on the flat longitude and latitude plane. */
+export function inArea(lon: number, lat: number, area: Area | null): boolean {
+  if (area === null) return true;
+  if (area.type === 'circle') return distanceKm([area.lon, area.lat], [lon, lat]) <= area.km;
+  let inside = false;
+  const ring = area.ring;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]!;
+    const [xj, yj] = ring[j]!;
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 export interface Filters {
   sectors: string[];
   stages: string[];
@@ -21,6 +68,8 @@ export interface Filters {
   /** Events starting within these dates (YYYY-MM-DD). Organisations are unaffected. */
   eventFrom: string | null;
   eventTo: string | null;
+  /** Only what lies inside a circle or polygon drawn on the map. */
+  area: Area | null;
 }
 
 export const INVESTOR_FILTERS = ['any', 'active', 'lead', 'portfolio'] as const;
@@ -45,6 +94,7 @@ export const NO_FILTERS: Filters = {
   investor: 'any',
   eventFrom: null,
   eventTo: null,
+  area: null,
 };
 
 /** The facts about an organisation, at one of its offices, that filters look at. */
@@ -81,7 +131,8 @@ export function countActive(filters: Filters): number {
     Number(filters.raisedMin !== null) +
     Number(filters.fundedFrom !== null || filters.fundedTo !== null) +
     Number(filters.investor !== 'any') +
-    Number(filters.eventFrom !== null || filters.eventTo !== null)
+    Number(filters.eventFrom !== null || filters.eventTo !== null) +
+    Number(Boolean(filters.area))
   );
 }
 
@@ -148,13 +199,39 @@ const year = (value: string | undefined) => {
   const n = Number(value);
   return value && Number.isInteger(n) && n >= 1800 && n <= 2100 ? n : null;
 };
+const COORD = (lon: number, lat: number) => Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) <= 180 && Math.abs(lat) <= 90;
+const round = (value: number, places: number) => Number(value.toFixed(places));
+
+/** An area as a URL part: `c:lon,lat,km` for a circle, `p:lon,lat_lon,lat_...` for a polygon. */
+function encodeArea(area: Area): string {
+  if (area.type === 'circle') return `c:${round(area.lon, 5)},${round(area.lat, 5)},${round(area.km, 2)}`;
+  return `p:${area.ring.map(([lon, lat]) => `${round(lon, 5)},${round(lat, 5)}`).join('_')}`;
+}
+
+function decodeArea(value: string | null): Area | null {
+  if (!value) return null;
+  const [kind, body = ''] = [value.slice(0, 1), value.slice(2)];
+  if (value[1] !== ':') return null;
+  if (kind === 'c') {
+    const [lon, lat, km] = body.split(',').map(Number) as [number, number, number];
+    return COORD(lon, lat) && km > 0 && km <= AREA_MAX_KM ? { type: 'circle', lon, lat, km } : null;
+  }
+  if (kind === 'p') {
+    const ring = body.split('_').map((pair) => pair.split(',').map(Number) as [number, number]);
+    if (ring.length < 3 || ring.length > AREA_MAX_VERTICES) return null;
+    return ring.every(([lon, lat]) => COORD(lon!, lat!)) ? { type: 'polygon', ring } : null;
+  }
+  return null;
+}
+
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const date = (value: string | undefined) => (value && DATE.test(value) ? value : null);
 
 /**
  * URL parts for the filters that are set. The same parts are the query string
  * the API accepts: fs sectors, fg stages, fc city, fk country, fa status,
- * fy founded years, fr least raised, fd funded years, fi investor, fe event dates.
+ * fy founded years, fr least raised, fd funded years, fi investor, fe event dates,
+ * fz area (a circle or polygon drawn on the map).
  */
 export function encodeFilters(filters: Filters): string[] {
   const parts: string[] = [];
@@ -171,6 +248,7 @@ export function encodeFilters(filters: Filters): string[] {
   if (filters.investor !== 'any') parts.push(`fi=${filters.investor}`);
   if (filters.eventFrom !== null || filters.eventTo !== null)
     parts.push(`fe=${filters.eventFrom ?? ''}_${filters.eventTo ?? ''}`);
+  if (filters.area) parts.push(`fz=${encodeArea(filters.area)}`);
   return parts;
 }
 
@@ -198,5 +276,6 @@ export function decodeFilters(params: URLSearchParams): Filters {
       : 'any',
     eventFrom: date(eventFrom),
     eventTo: date(eventTo),
+    area: decodeArea(params.get('fz')),
   };
 }

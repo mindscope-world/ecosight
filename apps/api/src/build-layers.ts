@@ -8,6 +8,7 @@ import { connect, type Sql } from './db.js';
 const FILES = {
   'offices.geojson': '/layers/offices.geojson',
   'events.geojson': '/layers/events.geojson',
+  'rounds.geojson': '/layers/rounds.geojson',
   'stats.json': '/stats',
 } as const;
 

@@ -1,9 +1,12 @@
-import type { Camera } from '@atlas/schema';
+import type { Area, Camera } from '@atlas/schema';
 import type { FeatureCollection, Point } from 'geojson';
 import type { Basemap } from '../config';
 import type { HeatRamp, Shape } from '../entities';
 
-export type { Camera };
+export type { Area, Camera };
+
+/** What the user can draw to select a place. */
+export type DrawMode = 'circle' | 'polygon';
 
 export interface PointLayerSpec {
   id: string;
@@ -57,6 +60,16 @@ export interface MapAdapter {
   setHighlight(places: [number, number][]): void;
   /** Draw lines between places, replacing any drawn before. An empty list clears them. */
   setLinks(lines: [number, number][][]): void;
+  /** Outline the selected area on the map. Null clears it. */
+  setArea(area: Area | null): void;
+  /**
+   * Let the user draw an area with the pointer. A circle is a click on its centre and a click on its
+   * edge; a polygon is a click for each corner, finished by a double click, Enter, or a click on the
+   * first corner. The listener gets the area, or null when drawing was cancelled (Escape, or another
+   * call). Clicks on markers do nothing while drawing.
+   */
+  startDraw(mode: DrawMode, listener: (area: Area | null) => void): void;
+  cancelDraw(): void;
   flyTo(camera: Camera): void;
   /** Fit the view to [west, south, east, north]. */
   fitBounds(bounds: [number, number, number, number]): void;

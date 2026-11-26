@@ -215,12 +215,12 @@ Independent of the frontend; can run alongside steps 4 and 5.
 
 | # | Item | Track | Notes |
 |---|------|-------|-------|
-| 7.1 | Polygon and radius selection feeding the filters | Both | Also gives the region and radius filters |
-| 7.2 | Recent activity layer | Both | |
-| 7.3 | Time slider and deal-flow replay | Both | Rounds carry dates and their precision |
+| 7.1 | ~~Polygon and radius selection feeding the filters~~ | Done Nov 26, 2026 | "Draw a radius" and "Draw a polygon" under Geography in the filter panel: click the centre then the edge, or each corner then double-click or Enter; Esc cancels. The area is a filter like the others: it narrows the map, the counts, the panels' figures (`fz` in the API and in share links, `Filters.area`), is outlined on the map, and the radius can be edited in kilometres. A circle is measured on the sphere, a polygon on the flat longitude-latitude plane; at most 40 corners and 2,000 km. Tests: the API and the browser agree on circles and polygons. Not done: an area that crosses the antimeridian; combining several areas; saving an area by name |
+| 7.2 | ~~Recent activity layer~~ | Done Nov 26, 2026 | A "Recent activity" layer, off by default, draws each published funding round at its organisation's main office (`/layers/rounds.geojson`, also built by `pnpm layers:build`), for the 3 months to now. It follows the filters and the area. It is not a kind of organisation, so it is left out of the entity-type filter. **Rounds only:** additions and edits to records are not on it (the plan suggested `audit_log` and `created_at`; every record was added in Oct 2026, so there is nothing to show yet). A round with no office on record is left off |
+| 7.3 | ~~Time slider and deal-flow replay~~ | Done Nov 26, 2026 | Shown when the activity layer is on: a month slider from the first dated round to this month, Play and Pause, and a window of 1, 3 or 12 months ending at the chosen month, with the count and dollars in the window. A round known only to its month is placed in that month; **a round with no date, or dated only to a year, is never placed and the bar says how many were left out.** Not shared in links (the cursor is not in the address) |
 | 7.4 | ~~Lines from an investor to its portfolio, and from headquarters to branches~~ | Done | Selecting an organisation draws arcs to its investors, the companies it has backed, and its branches. Organisations with no location get no line |
-| 7.5 | Satellite style | Frontend + owner | Needs an imagery source with a suitable licence; shown disabled today |
-| 7.6 | Hex aggregates for heatmaps | Backend | Heatmaps are drawn in the browser today; needed only at larger scale |
+| 7.5 | Satellite style | Frontend + owner | **Not done: waiting on the owner.** Needs an imagery source with a suitable licence; shown disabled today |
+| 7.6 | Hex aggregates for heatmaps | Backend | **Not done, on purpose.** Heatmaps are drawn in the browser today, which is right for 332 organisations; needed only at larger scale |
 
 ### Step 8 — Quality and launch (Medium, Critical before launch)
 

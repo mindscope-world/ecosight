@@ -2,6 +2,7 @@ import {
   countActive,
   decodeUrlState,
   encodeUrlState,
+  inArea,
   matches,
   matchesEvent,
   NO_FILTERS,
@@ -19,11 +20,13 @@ import {
   fetchFilteredStats,
   fetchOffices,
   fetchOrg,
+  fetchRounds,
   fetchStats,
   storedAccessKey,
   type CityStat,
   type EventCollection,
   type OfficeCollection,
+  type RoundCollection,
   type Stats,
 } from './api';
 import { AccessGate } from './components/AccessGate';
@@ -36,6 +39,7 @@ import { MapView } from './components/MapView';
 import { SearchCommand, type SearchPick } from './components/SearchCommand';
 import { StackList, type Stack } from './components/StackList';
 import { StatusBar } from './components/StatusBar';
+import { TimeSlider } from './components/TimeSlider';
 import { TopNavigation } from './components/TopNavigation';
 import { Icon, MicroLabel, useMediaQuery, useStored } from './components/ui';
 import { BASEMAPS, DEFAULT_CAMERA } from './config';
@@ -43,7 +47,8 @@ import { HEAT_LAYERS, POINT_LAYERS, VIEW_LAYERS } from './entities';
 import { greatCircle } from './lib/geo';
 import { buildSignals } from './lib/signals';
 import { graphUrlFor } from './pages';
-import type { MapAdapter, PickedRecord } from './map/adapter';
+import { addMonths, roundsIn, span, type Window } from './lib/timeline';
+import type { Area, DrawMode, MapAdapter, PickedRecord } from './map/adapter';
 
 const initial = decodeUrlState(location.hash);
 const CITY_ZOOM = 11;
@@ -130,6 +135,8 @@ export function App() {
 
   const [offices, setOffices] = useState<OfficeCollection | null>(null);
   const [events, setEvents] = useState<EventCollection | null>(null);
+  // Rounds are for the activity layer and the timeline only, so the map works without them.
+  const [rounds, setRounds] = useState<RoundCollection | null>(null);
   // Figures for everything on record, and for what passes the filters when any are set.
   const [allStats, setStats] = useState<Stats | null>(null);
   const [filteredStats, setFilteredStats] = useState<Stats | null>(null);
@@ -155,6 +162,11 @@ export function App() {
   const [rightOpen, setRightOpen] = useStored('ecosight-right', true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // The area being drawn on the map, if one is, and the timeline's cursor: an index into its months, null for the latest.
+  const [drawMode, setDrawMode] = useState<DrawMode | null>(null);
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [windowMonths, setWindowMonths] = useState<Window>(3);
+  const [playing, setPlaying] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
 
   useEffect(() => {
@@ -168,21 +180,60 @@ export function App() {
       if (error instanceof AccessError) setLocked(true);
       else setFailed(true);
     });
+    fetchRounds(controller.signal).then(setRounds).catch(() => {});
     return () => controller.abort();
   }, []);
 
   // Everything on screen that counts or draws organisations starts from this list.
   const visible = useMemo(
-    () => (offices?.features ?? []).filter((feature) => matches(feature.properties, filters)),
+    () =>
+      (offices?.features ?? []).filter(
+        (feature) =>
+          matches(feature.properties, filters) &&
+          inArea(feature.geometry.coordinates[0]!, feature.geometry.coordinates[1]!, filters.area),
+      ),
     [offices, filters],
   );
 
   const visibleEvents = useMemo<EventCollection>(
     () => ({
       type: 'FeatureCollection',
-      features: (events?.features ?? []).filter((feature) => matchesEvent(feature.properties, filters)),
+      features: (events?.features ?? []).filter(
+        (feature) =>
+          matchesEvent(feature.properties, filters) &&
+          inArea(feature.geometry.coordinates[0]!, feature.geometry.coordinates[1]!, filters.area),
+      ),
     }),
     [events, filters],
+  );
+
+  // Rounds of the organisations that pass the filters, placed inside the area when one is drawn.
+  const activityRounds = useMemo(() => {
+    const passing = new Set(visible.map((feature) => feature.properties.org_id));
+    return (rounds?.features ?? []).filter(
+      (feature) =>
+        passing.has(feature.properties.org_id) &&
+        inArea(feature.geometry.coordinates[0]!, feature.geometry.coordinates[1]!, filters.area),
+    );
+  }, [rounds, visible, filters.area]);
+
+  // The timeline runs from the first dated round to this month, so its last stop is always "now".
+  const months = useMemo(() => {
+    const dated = span(activityRounds.map((feature) => feature.properties));
+    const now = new Date().toISOString().slice(0, 7);
+    const first = dated && dated[0] < now ? dated[0] : now;
+    const all: string[] = [];
+    for (let month = first; month <= now; month = addMonths(month, 1)) all.push(month);
+    return all;
+  }, [activityRounds]);
+  const monthIndex = Math.min(cursor ?? months.length - 1, months.length - 1);
+  const inWindow = useMemo(
+    () => roundsIn(activityRounds.map((feature) => ({ feature, ...feature.properties })), months[monthIndex]!, windowMonths),
+    [activityRounds, months, monthIndex, windowMonths],
+  );
+  const activity = useMemo<FeatureCollection<Point>>(
+    () => ({ type: 'FeatureCollection', features: inWindow.shown.map((round) => round.feature) }),
+    [inWindow],
   );
 
   const layerData = useMemo(() => {
@@ -191,14 +242,16 @@ export function App() {
       data[layer.id] =
         layer.id === 'events'
           ? visibleEvents
-          : {
+          : layer.id === 'activity'
+            ? activity
+            : {
               type: 'FeatureCollection',
               features: visible.filter((feature) =>
                 layer.types.some((type) => feature.properties.types.includes(type)),
               ),
             };
     return data;
-  }, [visible, visibleEvents]);
+  }, [visible, visibleEvents, activity]);
 
   const counts = useMemo(() => {
     const result: Record<string, number> = {};
@@ -206,9 +259,11 @@ export function App() {
       result[layer.id] =
         layer.id === 'events'
           ? visibleEvents.features.length
-          : new Set(layerData[layer.id]!.features.map((feature) => feature.properties!.org_id)).size;
+          : layer.id === 'activity'
+            ? activity.features.length
+            : new Set(layerData[layer.id]!.features.map((feature) => feature.properties!.org_id)).size;
     return result;
-  }, [layerData, visibleEvents]);
+  }, [layerData, visibleEvents, activity]);
 
   const orgs = useMemo(() => distinctOrgs(visible), [visible]);
 
@@ -425,6 +480,12 @@ export function App() {
     setFiltersOpen(false);
   }
 
+  /** The map handed back what was drawn, or null when drawing was cancelled. */
+  function onDrawn(area: Area | null) {
+    setDrawMode(null);
+    if (area) setFilters((current) => ({ ...current, area }));
+  }
+
   const toggleLayer = useCallback((id: string, on: boolean) => {
     setEnabled((current) => {
       const next = new Set(current);
@@ -580,7 +641,12 @@ export function App() {
       enabled={enabled}
       onToggleLayer={toggleLayer}
       matching={orgs.length}
-      onClose={() => setFiltersOpen(false)}
+      drawMode={drawMode}
+      onDrawMode={setDrawMode}
+      onClose={() => {
+        setFiltersOpen(false);
+        setDrawMode(null);
+      }}
     />
   );
 
@@ -612,10 +678,36 @@ export function App() {
             data={layerData}
             enabled={enabled}
             selectedPlaces={selectedPlaces}
+            area={filters.area}
+            drawMode={drawMode}
+            onDrawn={onDrawn}
             onPick={pickOnMap}
             onCamera={() => setCamera((tick) => tick + 1)}
             onReady={() => setMapReady(true)}
           />
+          {enabled.has('activity') && months.length > 0 && (
+            <TimeSlider
+              months={months}
+              index={monthIndex}
+              onIndex={setCursor}
+              window={windowMonths}
+              onWindow={setWindowMonths}
+              playing={playing}
+              onPlaying={setPlaying}
+              shown={inWindow.shown.length}
+              raised={inWindow.shown.reduce((sum, round) => sum + (round.amount_usd ?? 0), 0)}
+              unplaced={inWindow.unplaced}
+              phone={!desktop}
+            />
+          )}
+          {drawMode && (
+            <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-accent bg-panel px-4 py-1.5 text-xs shadow-lg shadow-black/50" role="status">
+              {drawMode === 'circle' ? 'Click the centre, then the edge' : 'Click each corner; double-click to finish'}
+              <button type="button" className="text-accent2 hover:underline" onClick={() => setDrawMode(null)}>
+                Cancel
+              </button>
+            </div>
+          )}
           {desktop && layerControl(true)}
           {desktop && <MapLegend heat={HEAT_LAYERS.filter((layer) => enabled.has(layer.id))} />}
           {!desktop && (

@@ -15,7 +15,7 @@ export const spotKey = (lon: number, lat: number) => `${lon.toFixed(6)},${lat.to
 export const recordId = (properties: Record<string, unknown>) => String(properties.org_id ?? properties.event_id ?? '');
 
 /** The marker a record is drawn as: one per office, or per event. */
-export const markerId = (properties: Record<string, unknown>) => String(properties.office_id ?? properties.event_id ?? '');
+export const markerId = (properties: Record<string, unknown>) => String(properties.office_id ?? properties.round_id ?? properties.event_id ?? '');
 
 export interface SpotIndex {
   /** Every record drawn at each spot, across layers. */

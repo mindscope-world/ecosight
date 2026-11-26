@@ -3,7 +3,7 @@ import type { FeatureCollection, Point } from 'geojson';
 import { useEffect, useRef, type RefObject } from 'react';
 import type { Basemap } from '../config';
 import { HEAT_LAYERS, POINT_LAYERS } from '../entities';
-import type { MapAdapter, PickedRecord } from '../map/adapter';
+import type { Area, DrawMode, MapAdapter, PickedRecord } from '../map/adapter';
 import { hoverCard } from '../map/hoverCard';
 import { MapLibreAdapter } from '../map/maplibreAdapter';
 
@@ -18,6 +18,9 @@ export function MapView({
   data,
   enabled,
   selectedPlaces,
+  area,
+  drawMode,
+  onDrawn,
   onPick,
   onCamera,
   onReady,
@@ -31,6 +34,11 @@ export function MapView({
   enabled: ReadonlySet<string>;
   /** Where the selected record is drawn, to ring it. Empty when nothing is selected or it is not in view. */
   selectedPlaces: [number, number][];
+  /** The area the filters are limited to, outlined on the map. */
+  area: Area | null;
+  /** When set, the pointer draws an area of this kind; `onDrawn` gets it, or null if drawing was cancelled. */
+  drawMode: DrawMode | null;
+  onDrawn: (area: Area | null) => void;
   /** Markers were clicked: every record at that spot, on any visible layer. */
   onPick: (records: PickedRecord[]) => void;
   onCamera: () => void;
@@ -39,8 +47,8 @@ export function MapView({
 }) {
   const container = useRef<HTMLDivElement>(null);
   // The map is created once; these keep its listeners pointed at the latest props.
-  const latest = useRef({ onPick, onCamera, onReady, data, enabled, basemap, selectedPlaces });
-  latest.current = { onPick, onCamera, onReady, data, enabled, basemap, selectedPlaces };
+  const latest = useRef({ onPick, onCamera, onReady, data, enabled, basemap, selectedPlaces, area, drawMode, onDrawn });
+  latest.current = { onPick, onCamera, onReady, data, enabled, basemap, selectedPlaces, area, drawMode, onDrawn };
   const applied = useRef(basemap);
 
   useEffect(() => {
@@ -66,6 +74,8 @@ export function MapView({
       }
       push(map, latest.current.data, latest.current.enabled);
       map.setHighlight(latest.current.selectedPlaces);
+      map.setArea(latest.current.area);
+      if (latest.current.drawMode) map.startDraw(latest.current.drawMode, (drawn) => latest.current.onDrawn(drawn));
       map.onCameraChange(() => latest.current.onCamera());
       latest.current.onReady();
     });
@@ -84,6 +94,17 @@ export function MapView({
   useEffect(() => {
     adapter.current?.setHighlight(selectedPlaces);
   }, [adapter, selectedPlaces]);
+
+  useEffect(() => {
+    adapter.current?.setArea(area);
+  }, [adapter, area]);
+
+  useEffect(() => {
+    const map = adapter.current;
+    if (!map) return;
+    if (drawMode) map.startDraw(drawMode, (drawn) => latest.current.onDrawn(drawn));
+    else map.cancelDraw();
+  }, [adapter, drawMode]);
 
   useEffect(() => {
     if (!adapter.current || applied.current === basemap) return;

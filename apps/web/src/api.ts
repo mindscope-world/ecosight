@@ -98,6 +98,25 @@ export interface EventProperties extends FilterableEvent {
 
 export type EventCollection = FeatureCollection<Point, EventProperties>;
 
+/** One published funding round, placed at its organisation's main office. */
+export interface RoundProperties {
+  round_id: string;
+  org_id: string;
+  name: string;
+  types: OrgType[];
+  sector: string | null;
+  stage: string | null;
+  amount_usd: number | null;
+  /** As precise as the source gave it: a month or a year is not made into a day. */
+  announced_on: string | null;
+  announced_precision: 'day' | 'month' | 'year' | null;
+  city: string | null;
+  country: string | null;
+  precision: 'address' | 'area' | 'city' | null;
+}
+
+export type RoundCollection = FeatureCollection<Point, RoundProperties>;
+
 export interface EventDetail {
   id: string;
   name: string;
@@ -261,6 +280,9 @@ export const fetchOffices = (signal?: AbortSignal) =>
 
 export const fetchEvents = (signal?: AbortSignal) =>
   getData<EventCollection>('events.geojson', '/layers/events.geojson', signal);
+
+export const fetchRounds = (signal?: AbortSignal) =>
+  getData<RoundCollection>('rounds.geojson', '/layers/rounds.geojson', signal);
 
 export const fetchOrg = (id: string, signal?: AbortSignal) =>
   getJson<OrgDetail>(`/orgs/${encodeURIComponent(id)}`, signal);

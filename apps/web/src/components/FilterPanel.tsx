@@ -1,7 +1,8 @@
-import { countActive, NO_FILTERS, type Filters, type InvestorFilter } from '@atlas/schema';
+import { AREA_MAX_KM, countActive, NO_FILTERS, type Filters, type InvestorFilter } from '@atlas/schema';
 import type { ReactNode } from 'react';
 import { POINT_LAYERS } from '../entities';
 import { countryName } from '../lib/format';
+import type { DrawMode } from '../map/adapter';
 import { Chip, Icon, MicroLabel, ShapeIcon } from './ui';
 
 const RAISED_STEPS = [
@@ -91,6 +92,8 @@ export function FilterPanel({
   enabled,
   onToggleLayer,
   matching,
+  drawMode,
+  onDrawMode,
   onClose,
 }: {
   filters: Filters;
@@ -101,6 +104,10 @@ export function FilterPanel({
   onToggleLayer: (id: string, on: boolean) => void;
   /** Organisations passing the filters. */
   matching: number;
+  /** The kind of area being drawn on the map, if one is. */
+  drawMode: DrawMode | null;
+  /** Start drawing an area of this kind, or stop drawing with null. */
+  onDrawMode: (mode: DrawMode | null) => void;
   onClose: () => void;
 }) {
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
@@ -125,7 +132,7 @@ export function FilterPanel({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <Group title="Entity type">
           <div className="flex flex-wrap gap-1">
-            {POINT_LAYERS.map((layer) => (
+            {POINT_LAYERS.filter((layer) => !layer.overlay).map((layer) => (
               <Chip key={layer.id} active={enabled.has(layer.id)} onClick={() => onToggleLayer(layer.id, !enabled.has(layer.id))}>
                 <span className="flex items-center gap-1.5">
                   <ShapeIcon shape={layer.shape} color={layer.color} size={10} />
@@ -187,6 +194,54 @@ export function FilterPanel({
               <option key={city}>{city}</option>
             ))}
           </select>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {(
+              [
+                ['circle', 'Draw a radius'],
+                ['polygon', 'Draw a polygon'],
+              ] as const
+            ).map(([mode, label]) => (
+              <Chip key={mode} active={drawMode === mode} onClick={() => onDrawMode(drawMode === mode ? null : mode)}>
+                {label}
+              </Chip>
+            ))}
+          </div>
+          {drawMode && (
+            <p className="m-0 mt-1.5 text-[11px] leading-snug text-accent2" role="status">
+              {drawMode === 'circle'
+                ? 'Click the centre on the map, then click the edge. Esc cancels.'
+                : 'Click each corner on the map, then double-click or press Enter to finish. Esc cancels.'}
+            </p>
+          )}
+          {filters.area && !drawMode && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-mute">
+              {filters.area.type === 'circle' ? (
+                <label className="flex items-center gap-1.5">
+                  Within
+                  <input
+                    type="number"
+                    aria-label="Radius in kilometres"
+                    min={0.1}
+                    max={AREA_MAX_KM}
+                    step={0.5}
+                    value={filters.area.km}
+                    onChange={(event) => {
+                      const km = event.target.valueAsNumber;
+                      if (filters.area?.type === 'circle' && Number.isFinite(km) && km >= 0.1 && km <= AREA_MAX_KM)
+                        set({ area: { ...filters.area, km } });
+                    }}
+                    className="h-7 w-20 rounded border border-line bg-bg px-2 text-ink"
+                  />
+                  km of the point
+                </label>
+              ) : (
+                <span>Inside the polygon ({filters.area.ring.length} corners)</span>
+              )}
+              <button type="button" className="text-xs text-accent2 hover:underline" onClick={() => set({ area: null })}>
+                Remove area
+              </button>
+            </div>
+          )}
         </Group>
         <Group title="Founded">
           <div className="flex gap-3">
